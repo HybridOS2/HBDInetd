@@ -1,38 +1,16 @@
-# The Template of CMake Project for HybridOS
+# HBDInetd
 
-## Usage
+The daemon managing network interfaces for HybridOS.
 
-__Replace all contents in this section.__
+## Dependencies
 
-Run `rename-to-my-project.sh` to rename the project name:
-
-```console
-$ ./rename-to-my-project.sh MyProject
-```
-
-After this, the script will be renamed to `ready-to-remove-this-file.sh`.
-It's safe to remove the script from your repository.
+- [Linux WPA/WPA2/IEEE 802.1X Supplicant]:
+   + Packages on Ubuntu 22.04 LTS: `wpasupplicant` and `libwpa-client-dev`.
+   + Source: <http://w1.fi/wpa_supplicant/>
+- [PurC]: <https://github.com/HVML/PurC>
+- [HBDBus]: <https://github.com/HybridOS2/HBDBus>
 
 ## Copying
-
-## For Libary
-
-Copyright (C) 2020 ~ 2023 [FMSoft Technologies]
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU Lesser General Public License for more details.
-
-You should have received a copy of the GNU Lesser General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-### For Executable
 
 Copyright (C) 2020 ~ 2023 [FMSoft Technologies]
 
