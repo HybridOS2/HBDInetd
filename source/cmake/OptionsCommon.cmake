@@ -6,6 +6,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_definitions(-DBUILDING_WITH_CMAKE=1)
 add_definitions(-DHAVE_CONFIG_H=1)
 
+find_package(PurC 0.9.12 REQUIRED)
+find_package(HBDBus 2.0.0 REQUIRED)
+
 option(USE_THIN_ARCHIVES "Produce all static libraries as thin archives" ON)
 if (USE_THIN_ARCHIVES)
     execute_process(COMMAND ${CMAKE_AR} -V OUTPUT_VARIABLE AR_VERSION)
