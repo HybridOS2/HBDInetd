@@ -199,6 +199,8 @@ int get_key_mgmt(const char *ssid, int key_mgmt_info[])
 
 void *wifi_scan_thread(void *args)
 {
+    (void)args;
+
     int ret = -1, i = 0;
     char cmd[16] = {0}, reply[16] = {0};
     struct timeval now;

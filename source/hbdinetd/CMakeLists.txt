@@ -5,6 +5,7 @@ HBDINETD_EXECUTABLE_DECLARE(hbdinetd)
 list(APPEND hbdinetd_PRIVATE_INCLUDE_DIRECTORIES
     "${CMAKE_BINARY_DIR}"
     "${HBDINETD_DIR}"
+    "${HBDINETD_DIR}/include"
     "${PURC_INCLUDE_DIRS}"
     "${HBDBUS_INCLUDE_DIRS}"
     "${GLIB_INCLUDE_DIRS}"
@@ -16,7 +17,6 @@ list(APPEND hbdinetd_SOURCES
     "${HBDINETD_DIR}/wpa-client/common.c"
     "${HBDINETD_DIR}/wpa-client/network_manager.c"
     "${HBDINETD_DIR}/wpa-client/os_unix.c"
-    "${HBDINETD_DIR}/wpa-client/udhcpc_thread.c"
     "${HBDINETD_DIR}/wpa-client/wifi.c"
     "${HBDINETD_DIR}/wpa-client/wifi_event.c"
     "${HBDINETD_DIR}/wpa-client/wifimanager.c"
@@ -24,6 +24,7 @@ list(APPEND hbdinetd_SOURCES
     "${HBDINETD_DIR}/wpa-client/wpa_ctrl.c"
     "${HBDINETD_DIR}/wpa-client/wpa_debug.c"
     "${HBDINETD_DIR}/wpa-client/wpa_supplicant_conf.c"
+    "${HBDINETD_DIR}/wpa-client/udhcpc_thread.c"
     "${HBDINETD_DIR}/sbin/common-impl.c"
     "${HBDINETD_DIR}/sbin/ethernet-impl.c"
     "${HBDINETD_DIR}/sbin/mobile-impl.c"

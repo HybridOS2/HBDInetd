@@ -17,7 +17,7 @@
 #ifndef _WIFI_H
 #define _WIFI_H
 
-#if __cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -167,7 +167,7 @@ int ensure_entropy_file_exists();
         __result; }))
 #endif
 
-#if __cplusplus
+#ifdef __cplusplus
 };  // extern "C"
 #endif
 

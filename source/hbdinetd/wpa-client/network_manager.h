@@ -1,7 +1,7 @@
 #ifndef __NETWORK_MANAGER_H
 #define __NETWORK_MANAGER_H
 
-#if __cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -19,7 +19,7 @@ int  update_scan_results();
 int  get_scan_results_inner(char *results, int *len);
 int get_key_mgmt(const char *ssid, int key_mgmt_info[]);
 
-#if __cplusplus
+#ifdef __cplusplus
 };  // extern "C"
 #endif
 

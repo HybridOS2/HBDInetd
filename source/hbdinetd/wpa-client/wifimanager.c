@@ -9,7 +9,7 @@
 #include "network_manager.h"
 #include "wpa_supplicant_conf.h"
 #include "wifi_intf.h"
-#include "inetd.h"
+#include "hbdinetd.h"
 
 #define WPA_SSID_LENTH  512
 
@@ -143,14 +143,14 @@ static int ssid_app_to_wpa_scan(const char *app_ssid, char *scan_ssid)
             *(scan_ssid++) = '\\';
             *(scan_ssid++) = 'x';
             h_val = (app_ssid[i] & 0xf0) >> 4;
-            if((h_val >= 0) && (h_val <= 9)){
+            if(h_val <= 9) {
                 *(scan_ssid++) = h_val + '0';
             }else if((h_val >= 0x0a) && (h_val <= 0x0f)){
                 *(scan_ssid++) = h_val + 'a' - 0xa;
             }
 
             l_val = app_ssid[i] & 0x0f;
-            if((l_val >= 0) && (l_val <= 9)){
+            if(l_val <= 9) {
                 *(scan_ssid++) = l_val + '0';
             }else if((l_val >= 0x0a) && (l_val <= 0x0f)){
                 *(scan_ssid++) = l_val + 'a' - 0xa;
@@ -190,14 +190,14 @@ static int ssid_app_to_wpa_conf(const char *app_ssid, char *conf_ssid)
     while(app_ssid[i] != '\0')
     {
         h_val = (app_ssid[i] & 0xf0) >> 4;
-        if((h_val >= 0) && (h_val <= 9)){
+        if ((h_val <= 9)){
             *(conf_ssid++) = h_val + '0';
         }else if((h_val >= 0x0a) && (h_val <= 0x0f)){
             *(conf_ssid++) = h_val + 'a' - 0xa;
         }
 
         l_val = app_ssid[i] & 0x0f;
-        if((l_val >= 0) && (l_val <= 9)){
+        if((l_val <= 9)){
             *(conf_ssid++) = l_val + '0';
         }else if((l_val >= 0x0a) && (l_val <= 0x0f)){
             *(conf_ssid++) = l_val + 'a' - 0xa;
@@ -234,7 +234,7 @@ static int aw_wifi_add_network(const char *ssid, tKEY_MGMT key_mgmt, const char 
         goto end;
     }
 
-	/* pase scan thread */
+    /* pase scan thread */
     pause_wifi_scan_thread();
 
     wifi_machine_state = get_wifi_machine_state();
@@ -277,67 +277,76 @@ static int aw_wifi_add_network(const char *ssid, tKEY_MGMT key_mgmt, const char 
     len = NET_ID_LEN+1;
     is_exist = wpa_conf_is_ap_exist(p_ssid, key_mgmt, netid1, &len);
 
-	/* add network */
-	strncpy(cmd, "ADD_NETWORK", CMD_LEN);
-	cmd[CMD_LEN] = '\0';
-	ret = wifi_command(cmd, netid2, sizeof(netid2));
-	if(ret){
-		printf("do add network results error!\n");
-		ret = -1;
-		event_code = WIFIMG_CMD_OR_PARAMS_ERROR;
-		goto end;
-	}
+    /* add network */
+    strncpy(cmd, "ADD_NETWORK", CMD_LEN);
+    cmd[CMD_LEN] = '\0';
+    ret = wifi_command(cmd, netid2, sizeof(netid2));
+    if(ret){
+        printf("do add network results error!\n");
+        ret = -1;
+        event_code = WIFIMG_CMD_OR_PARAMS_ERROR;
+        goto end;
+    }
 
-	/* set network ssid */
-	if(ssid_contain_chinese == 0){
-		sprintf(cmd, "SET_NETWORK %s ssid \"%s\"", netid2, p_ssid);
-	}else{
-		sprintf(cmd, "SET_NETWORK %s ssid %s", netid2, p_ssid);
-	}
+    /* set network ssid */
+    if (ssid_contain_chinese == 0) {
+        int n = snprintf(cmd, sizeof(cmd), "SET_NETWORK %s ssid \"%s\"",
+                netid2, p_ssid);
+        if (n < 0 || n >= (int)sizeof(cmd)) {
+            printf("Too small buffer!\n");
+        }
+    }
+    else {
+        int n = snprintf(cmd, sizeof(cmd), "SET_NETWORK %s ssid %s",
+                netid2, p_ssid);
+        if (n < 0 || n >= (int)sizeof(cmd)) {
+            printf("Too small buffer!\n");
+        }
+    }
 
     ret = wifi_command(cmd, reply, sizeof(reply));
-	if(ret){
-		printf("do set network ssid error!\n");
-		/* cancel saved in wpa_supplicant.conf */
-		sprintf(cmd, "REMOVE_NETWORK %s", netid2);
-		wifi_command(cmd, reply, sizeof(reply));
-		/* save config */
-		sprintf(cmd, "%s", "SAVE_CONFIG");
-		wifi_command(cmd, reply, sizeof(reply));
-		ret = -1;
-		event_code = WIFIMG_CMD_OR_PARAMS_ERROR;
-		goto end;
-	}
+    if(ret){
+        printf("do set network ssid error!\n");
+        /* cancel saved in wpa_supplicant.conf */
+        sprintf(cmd, "REMOVE_NETWORK %s", netid2);
+        wifi_command(cmd, reply, sizeof(reply));
+        /* save config */
+        sprintf(cmd, "%s", "SAVE_CONFIG");
+        wifi_command(cmd, reply, sizeof(reply));
+        ret = -1;
+        event_code = WIFIMG_CMD_OR_PARAMS_ERROR;
+        goto end;
+    }
 
-	/* no passwd */
-	if (key_mgmt == WIFIMG_NONE){
-		/* set network no passwd */
-		sprintf(cmd, "SET_NETWORK %s key_mgmt NONE", netid2);
-		ret = wifi_command(cmd, reply, sizeof(reply));
+    /* no passwd */
+    if (key_mgmt == WIFIMG_NONE){
+        /* set network no passwd */
+        sprintf(cmd, "SET_NETWORK %s key_mgmt NONE", netid2);
+        ret = wifi_command(cmd, reply, sizeof(reply));
         if(ret){
-		printf("do set network key_mgmt error!\n");
-		/* cancel saved in wpa_supplicant.conf */
-		sprintf(cmd, "REMOVE_NETWORK %s", netid2);
-		wifi_command(cmd, reply, sizeof(reply));
-		/* save config */
-		sprintf(cmd, "%s", "SAVE_CONFIG");
-		wifi_command(cmd, reply, sizeof(reply));
-		ret = -1;
-		event_code = WIFIMG_CMD_OR_PARAMS_ERROR;
-		goto end;
-		}
-	} else if(key_mgmt == WIFIMG_WPA_PSK || key_mgmt == WIFIMG_WPA2_PSK){
-		/* set network psk passwd */
-		sprintf(cmd,"SET_NETWORK %s key_mgmt WPA-PSK", netid2);
-		ret = wifi_command(cmd, reply, sizeof(reply));
+        printf("do set network key_mgmt error!\n");
+        /* cancel saved in wpa_supplicant.conf */
+        sprintf(cmd, "REMOVE_NETWORK %s", netid2);
+        wifi_command(cmd, reply, sizeof(reply));
+        /* save config */
+        sprintf(cmd, "%s", "SAVE_CONFIG");
+        wifi_command(cmd, reply, sizeof(reply));
+        ret = -1;
+        event_code = WIFIMG_CMD_OR_PARAMS_ERROR;
+        goto end;
+        }
+    } else if(key_mgmt == WIFIMG_WPA_PSK || key_mgmt == WIFIMG_WPA2_PSK){
+        /* set network psk passwd */
+        sprintf(cmd,"SET_NETWORK %s key_mgmt WPA-PSK", netid2);
+        ret = wifi_command(cmd, reply, sizeof(reply));
         if(ret){
             printf("do set network key_mgmt WPA-PSK error!\n");
             /* cancel saved in wpa_supplicant.conf */
             sprintf(cmd, "REMOVE_NETWORK %s", netid2);
             wifi_command(cmd, reply, sizeof(reply));
-	        /* save config */
-		    sprintf(cmd, "%s", "SAVE_CONFIG");
-		    wifi_command(cmd, reply, sizeof(reply));
+            /* save config */
+            sprintf(cmd, "%s", "SAVE_CONFIG");
+            wifi_command(cmd, reply, sizeof(reply));
             ret = -1;
             event_code = WIFIMG_CMD_OR_PARAMS_ERROR;
             goto end;
@@ -346,61 +355,61 @@ static int aw_wifi_add_network(const char *ssid, tKEY_MGMT key_mgmt, const char 
         ret = check_wpa_passwd(passwd);
         if(ret == 0){
             printf("check wpa-psk passwd is error!\n");
-		sprintf(cmd, "REMOVE_NETWORK %s", netid2);
+        sprintf(cmd, "REMOVE_NETWORK %s", netid2);
             cmd[CMD_LEN] = '\0';
             wifi_command(cmd, reply, sizeof(reply));
-			sprintf(cmd, "%s", "SAVE_CONFIG");
-			wifi_command(cmd, reply, sizeof(reply));
+            sprintf(cmd, "%s", "SAVE_CONFIG");
+            wifi_command(cmd, reply, sizeof(reply));
             ret = -1;
             event_code = WIFIMG_CMD_OR_PARAMS_ERROR;
             goto end;
         }
 
-	    sprintf(cmd, "SET_NETWORK %s psk \"%s\"", netid2, passwd);
-	    ret = wifi_command(cmd, reply, sizeof(reply));
+        sprintf(cmd, "SET_NETWORK %s psk \"%s\"", netid2, passwd);
+        ret = wifi_command(cmd, reply, sizeof(reply));
         if(ret){
             printf("do set network psk error!\n");
             /* cancel saved in wpa_supplicant.conf */
             sprintf(cmd, "REMOVE_NETWORK %s", netid2);
             wifi_command(cmd, reply, sizeof(reply));
-	        /* save config */
-		    sprintf(cmd, "%s", "SAVE_CONFIG");
-		    wifi_command(cmd, reply, sizeof(reply));
+            /* save config */
+            sprintf(cmd, "%s", "SAVE_CONFIG");
+            wifi_command(cmd, reply, sizeof(reply));
             ret = -1;
             event_code = WIFIMG_CMD_OR_PARAMS_ERROR;
             goto end;
         }
-	  } else if(key_mgmt == WIFIMG_WEP){
+      } else if(key_mgmt == WIFIMG_WEP){
         /* set network  key_mgmt none */
-	  sprintf(cmd, "SET_NETWORK %s key_mgmt NONE", netid2);
-	  ret = wifi_command(cmd, reply, sizeof(reply));
+      sprintf(cmd, "SET_NETWORK %s key_mgmt NONE", netid2);
+      ret = wifi_command(cmd, reply, sizeof(reply));
         if(ret){
             printf("do set network key_mgmt none error!\n");
             /* cancel saved in wpa_supplicant.conf */
             sprintf(cmd, "REMOVE_NETWORK %s", netid2);
             wifi_command(cmd, reply, sizeof(reply));
-	        /* save config */
-		    sprintf(cmd, "%s", "SAVE_CONFIG");
-		    wifi_command(cmd, reply, sizeof(reply));
+            /* save config */
+            sprintf(cmd, "%s", "SAVE_CONFIG");
+            wifi_command(cmd, reply, sizeof(reply));
             ret = -1;
             event_code = WIFIMG_CMD_OR_PARAMS_ERROR;
             goto end;
         }
 
         /* set network wep_key0 */
-	sprintf(cmd, "SET_NETWORK %s wep_key0 %s", netid2, passwd);
-	ret = wifi_command(cmd, reply, sizeof(reply));
+    sprintf(cmd, "SET_NETWORK %s wep_key0 %s", netid2, passwd);
+    ret = wifi_command(cmd, reply, sizeof(reply));
         if(ret){
             sprintf(cmd, "SET_NETWORK %s wep_key0 \"%s\"", netid2, passwd);
             ret = wifi_command(cmd, reply, sizeof(reply));
             if(ret){
                 printf("do set network wep_key0 error!\n");
-				/* cancel saved in wpa_supplicant.conf */
-				sprintf(cmd, "REMOVE_NETWORK %s", netid2);
-				wifi_command(cmd, reply, sizeof(reply));
-				/* save config */
-				sprintf(cmd, "%s", "SAVE_CONFIG");
-				wifi_command(cmd, reply, sizeof(reply));
+                /* cancel saved in wpa_supplicant.conf */
+                sprintf(cmd, "REMOVE_NETWORK %s", netid2);
+                wifi_command(cmd, reply, sizeof(reply));
+                /* save config */
+                sprintf(cmd, "%s", "SAVE_CONFIG");
+                wifi_command(cmd, reply, sizeof(reply));
                 ret = -1;
                 event_code = WIFIMG_CMD_OR_PARAMS_ERROR;
                 goto end;
@@ -408,51 +417,51 @@ static int aw_wifi_add_network(const char *ssid, tKEY_MGMT key_mgmt, const char 
         }
 
         /* set network auth_alg */
-	  sprintf(cmd, "SET_NETWORK %s auth_alg OPEN SHARED", netid2);
-	  ret = wifi_command(cmd, reply, sizeof(reply));
+      sprintf(cmd, "SET_NETWORK %s auth_alg OPEN SHARED", netid2);
+      ret = wifi_command(cmd, reply, sizeof(reply));
         if(ret){
             printf("do set network auth_alg error!\n");
             /* cancel saved in wpa_supplicant.conf */
             sprintf(cmd, "REMOVE_NETWORK %s", netid2);
             wifi_command(cmd, reply, sizeof(reply));
-	        /* save config */
-		    sprintf(cmd, "%s", "SAVE_CONFIG");
-		    wifi_command(cmd, reply, sizeof(reply));
+            /* save config */
+            sprintf(cmd, "%s", "SAVE_CONFIG");
+            wifi_command(cmd, reply, sizeof(reply));
             ret = -1;
             event_code = WIFIMG_CMD_OR_PARAMS_ERROR;
             goto end;
         }
 
-	  } else {
-	      printf("Error: key mgmt not support!\n");
-		  /* cancel saved in wpa_supplicant.conf */
-		  sprintf(cmd, "REMOVE_NETWORK %s", netid2);
-		  wifi_command(cmd, reply, sizeof(reply));
-		  /* save config */
-		  sprintf(cmd, "%s", "SAVE_CONFIG");
-		  wifi_command(cmd, reply, sizeof(reply));
-	      ret = -1;
-	      event_code = WIFIMG_KEY_MGMT_NOT_SUPPORT;
-	      goto end;
-	  }
+      } else {
+          printf("Error: key mgmt not support!\n");
+          /* cancel saved in wpa_supplicant.conf */
+          sprintf(cmd, "REMOVE_NETWORK %s", netid2);
+          wifi_command(cmd, reply, sizeof(reply));
+          /* save config */
+          sprintf(cmd, "%s", "SAVE_CONFIG");
+          wifi_command(cmd, reply, sizeof(reply));
+          ret = -1;
+          event_code = WIFIMG_KEY_MGMT_NOT_SUPPORT;
+          goto end;
+      }
 
-	/* set scan_ssid to 1 for network */
+    /* set scan_ssid to 1 for network */
     sprintf(cmd,"SET_NETWORK %s scan_ssid 1", netid2);
     ret = wifi_command(cmd, reply, sizeof(reply));
     if(ret){
         printf("do set scan_ssid error!\n");
-		/* cancel saved in wpa_supplicant.conf */
-		sprintf(cmd, "REMOVE_NETWORK %s", netid2);
-		wifi_command(cmd, reply, sizeof(reply));
-		/* save config */
-		sprintf(cmd, "%s", "SAVE_CONFIG");
-		wifi_command(cmd, reply, sizeof(reply));
+        /* cancel saved in wpa_supplicant.conf */
+        sprintf(cmd, "REMOVE_NETWORK %s", netid2);
+        wifi_command(cmd, reply, sizeof(reply));
+        /* save config */
+        sprintf(cmd, "%s", "SAVE_CONFIG");
+        wifi_command(cmd, reply, sizeof(reply));
         ret = -1;
         event_code = WIFIMG_CMD_OR_PARAMS_ERROR;
         goto end;
     }
 
-	  /* get max priority in wpa_supplicant.conf */
+      /* get max priority in wpa_supplicant.conf */
     max_prio =  wpa_conf_get_max_priority();
 
     /* set priority for network */
@@ -463,41 +472,41 @@ static int aw_wifi_add_network(const char *ssid, tKEY_MGMT key_mgmt, const char 
         /* cancel saved in wpa_supplicant.conf */
         sprintf(cmd, "REMOVE_NETWORK %s", netid2);
         wifi_command(cmd, reply, sizeof(reply));
-		/* save config */
-		sprintf(cmd, "%s", "SAVE_CONFIG");
-		wifi_command(cmd, reply, sizeof(reply));
+        /* save config */
+        sprintf(cmd, "%s", "SAVE_CONFIG");
+        wifi_command(cmd, reply, sizeof(reply));
         event_code = WIFIMG_CMD_OR_PARAMS_ERROR;
         ret = -1;
         goto end;
     }
 
-	/* select network */
-	sprintf(cmd, "SELECT_NETWORK %s", netid2);
-	ret = wifi_command(cmd, reply, sizeof(reply));
+    /* select network */
+    sprintf(cmd, "SELECT_NETWORK %s", netid2);
+    ret = wifi_command(cmd, reply, sizeof(reply));
     if(ret){
         printf("do select network error!\n");
-		/* cancel saved in wpa_supplicant.conf */
-		sprintf(cmd, "REMOVE_NETWORK %s", netid2);
-		wifi_command(cmd, reply, sizeof(reply));
-		/* save config */
-		sprintf(cmd, "%s", "SAVE_CONFIG");
-		wifi_command(cmd, reply, sizeof(reply));
+        /* cancel saved in wpa_supplicant.conf */
+        sprintf(cmd, "REMOVE_NETWORK %s", netid2);
+        wifi_command(cmd, reply, sizeof(reply));
+        /* save config */
+        sprintf(cmd, "%s", "SAVE_CONFIG");
+        wifi_command(cmd, reply, sizeof(reply));
         ret = -1;
         event_code = WIFIMG_CMD_OR_PARAMS_ERROR;
         goto end;
     }
 
     /* save config */
-	  sprintf(cmd, "%s", "SAVE_CONFIG");
-	  ret = wifi_command(cmd, reply, sizeof(reply));
+      sprintf(cmd, "%s", "SAVE_CONFIG");
+      ret = wifi_command(cmd, reply, sizeof(reply));
     if(ret){
         printf("do save config error!\n");
-		/* cancel saved in wpa_supplicant.conf */
-		sprintf(cmd, "REMOVE_NETWORK %s", netid2);
-		wifi_command(cmd, reply, sizeof(reply));
-		/* save config */
-		sprintf(cmd, "%s", "SAVE_CONFIG");
-		wifi_command(cmd, reply, sizeof(reply));
+        /* cancel saved in wpa_supplicant.conf */
+        sprintf(cmd, "REMOVE_NETWORK %s", netid2);
+        wifi_command(cmd, reply, sizeof(reply));
+        /* save config */
+        sprintf(cmd, "%s", "SAVE_CONFIG");
+        wifi_command(cmd, reply, sizeof(reply));
         ret = -1;
         event_code = WIFIMG_CMD_OR_PARAMS_ERROR;
         goto end;
@@ -516,42 +525,42 @@ static int aw_wifi_add_network(const char *ssid, tKEY_MGMT key_mgmt, const char 
         event = get_cur_wifi_event();
         /* password incorrect*/
         if ((state == DISCONNECTED_STATE) && (event == PASSWORD_INCORRECT)){
-						printf("wifi_connect_ap_inner: password failed!\n");
+                        printf("wifi_connect_ap_inner: password failed!\n");
             break;
         }
 
-		if(get_assoc_reject_count() >= MAX_ASSOC_REJECT_COUNT){
-			reset_assoc_reject_count();
-			printf("wifi_connect_ap_inner: assoc reject %d times\n", MAX_ASSOC_REJECT_COUNT);
-			break;
-		}
+        if(get_assoc_reject_count() >= MAX_ASSOC_REJECT_COUNT){
+            reset_assoc_reject_count();
+            printf("wifi_connect_ap_inner: assoc reject %d times\n", MAX_ASSOC_REJECT_COUNT);
+            break;
+        }
 
         i++;
     } while((state != L2CONNECTED_STATE) && (state != CONNECTED_STATE) && (i < 225));
 
-	if (state == CONNECTING_STATE) { /* It can't connect AP */
-		/* stop connect */
-		sprintf(cmd, "%s", "DISCONNECT");
-		wifi_command(cmd, reply, sizeof(reply));
-		set_wifi_machine_state(DISCONNECTED_STATE);
-		set_cur_wifi_event(CONNECT_AP_TIMEOUT);
+    if (state == CONNECTING_STATE) { /* It can't connect AP */
+        /* stop connect */
+        sprintf(cmd, "%s", "DISCONNECT");
+        wifi_command(cmd, reply, sizeof(reply));
+        set_wifi_machine_state(DISCONNECTED_STATE);
+        set_cur_wifi_event(CONNECT_AP_TIMEOUT);
 
-		/* disable network in wpa_supplicant.conf */
-		sprintf(cmd, "DISABLE_NETWORK %s", netid2);
-		wifi_command(cmd, reply, sizeof(reply));
+        /* disable network in wpa_supplicant.conf */
+        sprintf(cmd, "DISABLE_NETWORK %s", netid2);
+        wifi_command(cmd, reply, sizeof(reply));
 
-		/* cancel saved in wpa_supplicant.conf */
-		sprintf(cmd, "REMOVE_NETWORK %s", netid2);
-		wifi_command(cmd, reply, sizeof(reply));
+        /* cancel saved in wpa_supplicant.conf */
+        sprintf(cmd, "REMOVE_NETWORK %s", netid2);
+        wifi_command(cmd, reply, sizeof(reply));
 
-		/* save config */
-		sprintf(cmd, "%s", "SAVE_CONFIG");
-		wifi_command(cmd, reply, sizeof(reply));
+        /* save config */
+        sprintf(cmd, "%s", "SAVE_CONFIG");
+        wifi_command(cmd, reply, sizeof(reply));
 
-		ret = -1;
-		event_code = WIFIMG_NETWORK_NOT_EXIST;
-		goto end;
-	}else if(state == DISCONNECTED_STATE){ /* Errot when connecting */
+        ret = -1;
+        event_code = WIFIMG_NETWORK_NOT_EXIST;
+        goto end;
+    }else if(state == DISCONNECTED_STATE){ /* Errot when connecting */
         if (event == PASSWORD_INCORRECT) {
             /* disable network in wpa_supplicant.conf */
             sprintf(cmd, "DISABLE_NETWORK %s", netid2);
@@ -561,39 +570,39 @@ static int aw_wifi_add_network(const char *ssid, tKEY_MGMT key_mgmt, const char 
             sprintf(cmd, "REMOVE_NETWORK %s", netid2);
             wifi_command(cmd, reply, sizeof(reply));
 
-	        /* save config */
-		    sprintf(cmd, "%s", "SAVE_CONFIG");
-		    wifi_command(cmd, reply, sizeof(reply));
+            /* save config */
+            sprintf(cmd, "%s", "SAVE_CONFIG");
+            wifi_command(cmd, reply, sizeof(reply));
 
             ret = -1;
             event_code = WIFIMG_PASSWORD_FAILED;
             goto end;
         }else if(event == OBTAINING_IP_TIMEOUT){
             if(is_exist == 1 || is_exist == 3){
-		    //network is exist or connected
-		    sprintf(cmd, "REMOVE_NETWORK %s", netid1);
+            //network is exist or connected
+            sprintf(cmd, "REMOVE_NETWORK %s", netid1);
                 cmd[CMD_LEN] = '\0';
                 wifi_command(cmd, reply, sizeof(reply));
-	        }
+            }
 
             /* save config */
-		    sprintf(cmd, "%s", "SAVE_CONFIG");
-		    wifi_command(cmd, reply, sizeof(reply));
+            sprintf(cmd, "%s", "SAVE_CONFIG");
+            wifi_command(cmd, reply, sizeof(reply));
             ret = 0;
         }else{
             ;
         }
     }else if(state == L2CONNECTED_STATE || state == CONNECTED_STATE){ /* connect ap l2 */
         if(is_exist == 1 || is_exist == 3){
-	    //network is exist or connected
-	    sprintf(cmd, "REMOVE_NETWORK %s", netid1);
+        //network is exist or connected
+        sprintf(cmd, "REMOVE_NETWORK %s", netid1);
             cmd[CMD_LEN] = '\0';
             wifi_command(cmd, reply, sizeof(reply));
         }
 
         /* save config */
-		sprintf(cmd, "%s", "SAVE_CONFIG");
-		wifi_command(cmd, reply, sizeof(reply));
+        sprintf(cmd, "%s", "SAVE_CONFIG");
+        wifi_command(cmd, reply, sizeof(reply));
         ret = 0;
     }else{
         ;
@@ -603,10 +612,10 @@ end:
     //enable all networks in wpa_supplicant.conf
     wpa_conf_enable_all_networks();
 
-	/* resume scan thread */
+    /* resume scan thread */
     resume_wifi_scan_thread();
 
-	//restore state when call wrong
+    //restore state when call wrong
     if(ret != 0){
         set_wifi_machine_state(DISCONNECTED_STATE);
         call_event_callback_function(event_code, NULL, event_label);
@@ -969,23 +978,23 @@ end:
 /* connect visiable network */
 static int aw_wifi_connect_ap_key_mgmt(const char *ssid, tKEY_MGMT key_mgmt, const char *passwd, int event_label)
 {
-	  int ret = -1, key[4] = {0};
-	  tWIFI_MACHINE_STATE  state;
-	  const char *p_ssid = NULL;
+      int ret = -1, key[4] = {0};
+      tWIFI_MACHINE_STATE  state;
+      const char *p_ssid = NULL;
 
-	  if(gwifi_state == WIFIMG_WIFI_DISABLED){
+      if(gwifi_state == WIFIMG_WIFI_DISABLED){
         return -1;
     }
 
-	  if(!ssid || !ssid[0]){
-	      printf("Error: ssid is NULL!\n");
-	      ret = -1;
-	      event_code = WIFIMG_CMD_OR_PARAMS_ERROR;
-	      goto end;
-	  }
+      if(!ssid || !ssid[0]){
+          printf("Error: ssid is NULL!\n");
+          ret = -1;
+          event_code = WIFIMG_CMD_OR_PARAMS_ERROR;
+          goto end;
+      }
 
-	  state = get_wifi_machine_state();
-	  if(state != CONNECTED_STATE && state != DISCONNECTED_STATE){
+      state = get_wifi_machine_state();
+      if(state != CONNECTED_STATE && state != DISCONNECTED_STATE){
         ret = -1;
         event_code = WIFIMG_DEV_BUSING_EVENT;
         goto end;
@@ -1012,10 +1021,10 @@ static int aw_wifi_connect_ap_key_mgmt(const char *ssid, tKEY_MGMT key_mgmt, con
     }
 
     /* checking network exist at first time */
-	  get_key_mgmt(wpa_scan_ssid, key);
+      get_key_mgmt(wpa_scan_ssid, key);
 
-	  /* no password */
-	  if (key_mgmt == WIFIMG_NONE){
+      /* no password */
+      if (key_mgmt == WIFIMG_NONE){
         if(key[0] == 0){
             update_scan_results();
             get_key_mgmt(wpa_scan_ssid, key);
@@ -1025,7 +1034,7 @@ static int aw_wifi_connect_ap_key_mgmt(const char *ssid, tKEY_MGMT key_mgmt, con
                 goto end;
             }
         }
-	  }else if(key_mgmt == WIFIMG_WPA_PSK || key_mgmt == WIFIMG_WPA2_PSK){
+      }else if(key_mgmt == WIFIMG_WPA_PSK || key_mgmt == WIFIMG_WPA2_PSK){
         if(key[1] == 0){
             update_scan_results();
             get_key_mgmt(wpa_scan_ssid, key);
@@ -1338,8 +1347,8 @@ static int aw_wifi_remove_network(char *ssid, tKEY_MGMT key_mgmt)
     }
     else if(!(ret & (0x01<<1) ))
     {
-	 printf("Warning: %s exists in wpa_supplicant.conf, but the key_mgmt is not accordant!\n", ssid);
-	 return 0;
+     printf("Warning: %s exists in wpa_supplicant.conf, but the key_mgmt is not accordant!\n", ssid);
+     return 0;
     }
 
     /* cancel saved in wpa_supplicant.conf */
@@ -1351,8 +1360,8 @@ static int aw_wifi_remove_network(char *ssid, tKEY_MGMT key_mgmt)
     }
 
     /* save config */
-	  sprintf(cmd, "%s", "SAVE_CONFIG");
-	  ret = wifi_command(cmd, reply, sizeof(reply));
+      sprintf(cmd, "%s", "SAVE_CONFIG");
+      ret = wifi_command(cmd, reply, sizeof(reply));
     if(ret){
         printf("do save config error!\n");
         return -1;
@@ -1396,7 +1405,7 @@ static int aw_wifi_connect_ap_auto(int event_label)
         goto end;
     }
 
-	if(wifi_machine_state != DISCONNECTED_STATE){
+    if(wifi_machine_state != DISCONNECTED_STATE){
         ret = -1;
         event_code = WIFIMG_DEV_BUSING_EVENT;
         goto end;
@@ -1412,12 +1421,12 @@ static int aw_wifi_connect_ap_auto(int event_label)
     /* connecting */
     set_wifi_machine_state(CONNECTING_STATE);
 
-	netid_connecting[0] = '\0';
+    netid_connecting[0] = '\0';
     disconnecting = 0;
     connecting_ap_event_label = event_label;
 
     /* reconnected */
-	sprintf(cmd, "%s", "RECONNECT");
+    sprintf(cmd, "%s", "RECONNECT");
     ret = wifi_command(cmd, reply, sizeof(reply));
     if(ret){
         printf("do reconnect error!\n");
@@ -1430,7 +1439,7 @@ static int aw_wifi_connect_ap_auto(int event_label)
 
 end:
     if(ret != 0){
-	  call_event_callback_function(event_code, NULL, event_label);
+      call_event_callback_function(event_code, NULL, event_label);
     }
 
     /* resume scan thread */
@@ -1487,8 +1496,8 @@ static int aw_wifi_disconnect_ap(int event_label)
     disconnect_ap_event_label = event_label;
 
     /* disconnected */
-	  sprintf(cmd, "%s", "DISCONNECT");
-	  ret = wifi_command(cmd, reply, sizeof(reply));
+      sprintf(cmd, "%s", "DISCONNECT");
+      ret = wifi_command(cmd, reply, sizeof(reply));
     if(ret){
         printf("do disconnect network error!\n");
         ret = -1;
@@ -1507,7 +1516,7 @@ static int aw_wifi_disconnect_ap(int event_label)
 
 end:
     if(ret != 0){
-	  call_event_callback_function(event_code, NULL, event_label);
+      call_event_callback_function(event_code, NULL, event_label);
     }
 
     /* resume scan thread */
@@ -1518,20 +1527,20 @@ end:
 
 static int aw_wifi_list_networks(char *reply, size_t reply_len, int event_label)
 {
-	 int ret = -1;
-	char cmd[CMD_LEN+1] = {0};
-	//char reply[REPLY_BUF_SIZE] = {0};
-	//char netid[NET_ID_LEN+1]={0};
-	tWIFI_MACHINE_STATE wifi_machine_state;
+     int ret = -1;
+    char cmd[CMD_LEN+1] = {0};
+    //char reply[REPLY_BUF_SIZE] = {0};
+    //char netid[NET_ID_LEN+1]={0};
+    tWIFI_MACHINE_STATE wifi_machine_state;
 
-	if(gwifi_state == WIFIMG_WIFI_DISABLED){
-		return -1;
-	}
+    if(gwifi_state == WIFIMG_WIFI_DISABLED){
+        return -1;
+    }
 
-	/* pause scan thread */
-	   pause_wifi_scan_thread();
+    /* pause scan thread */
+       pause_wifi_scan_thread();
 
-	/* check network exist in wpa_supplicant.conf */
+    /* check network exist in wpa_supplicant.conf */
 
     wifi_machine_state = get_wifi_machine_state();
     if(wifi_machine_state != CONNECTED_STATE && wifi_machine_state != DISCONNECTED_STATE){
@@ -1540,34 +1549,34 @@ static int aw_wifi_list_networks(char *reply, size_t reply_len, int event_label)
         goto end;
     }
 
-	/*there is no network information in the supplicant.conf file now!*/
-	if(wpa_conf_network_info_exist() == 0){
-		ret = 0;
-		goto end;
-	}
+    /*there is no network information in the supplicant.conf file now!*/
+    if(wpa_conf_network_info_exist() == 0){
+        ret = 0;
+        goto end;
+    }
 
 
 
-	/* list_networks */
-	//sprintf(cmd, "%s", "LIST_NETWORKS");
-	strncpy(cmd, "LIST_NETWORKS", CMD_LEN);
+    /* list_networks */
+    //sprintf(cmd, "%s", "LIST_NETWORKS");
+    strncpy(cmd, "LIST_NETWORKS", CMD_LEN);
        cmd[CMD_LEN] = '\0';
-	ret = wifi_command(cmd, reply, reply_len);
-	if(ret){
-		printf("do list_networks error!\n");
-		ret = -1;
-		event_code = WIFIMG_CMD_OR_PARAMS_ERROR;
-	}
-	printf("do list_networks finished!\n");
+    ret = wifi_command(cmd, reply, reply_len);
+    if(ret){
+        printf("do list_networks error!\n");
+        ret = -1;
+        event_code = WIFIMG_CMD_OR_PARAMS_ERROR;
+    }
+    printf("do list_networks finished!\n");
 end:
-	if(ret != 0){
-	call_event_callback_function(event_code, NULL, event_label);
-	}
+    if(ret != 0){
+    call_event_callback_function(event_code, NULL, event_label);
+    }
 
     /* resume scan thread */
     resume_wifi_scan_thread();
 
-	return ret;
+    return ret;
 
 }
 
@@ -1577,24 +1586,24 @@ end:
 */
 static int aw_wifi_get_netid(const char *ssid, tKEY_MGMT key_mgmt, char *net_id, int *length)
 {
-	int ret = -1, len = NET_ID_LEN+1;
+    int ret = -1, len = NET_ID_LEN+1;
 
-	if(*length > (NET_ID_LEN+1))
-	    len = NET_ID_LEN+1;
-	else
-	    len = *length;
+    if(*length > (NET_ID_LEN+1))
+        len = NET_ID_LEN+1;
+    else
+        len = *length;
 
-	/* pause scan thread */
-	pause_wifi_scan_thread();
-	ret = wpa_conf_is_ap_exist(ssid, key_mgmt, net_id, &len);
-	/* resume scan thread */
-	resume_wifi_scan_thread();
-	if(ret == 1 || ret == 3){
-		*length = len;
-		return 0;
-	}else{
-		return -1;
-	}
+    /* pause scan thread */
+    pause_wifi_scan_thread();
+    ret = wpa_conf_is_ap_exist(ssid, key_mgmt, net_id, &len);
+    /* resume scan thread */
+    resume_wifi_scan_thread();
+    if(ret == 1 || ret == 3){
+        *length = len;
+        return 0;
+    }else{
+        return -1;
+    }
 }
 
 static int aw_set_scan_interval(int interval)
@@ -1612,16 +1621,16 @@ int aw_wifi_get_wifi_state()
 
     /* wpa_supplicant already running not by self process */
     if(gwifi_state == WIFIMG_WIFI_DISABLED){
-	  /* check wifi already on by self process or other process */
+      /* check wifi already on by self process or other process */
         ret = wifi_connect_to_supplicant();
         if(ret){
             printf("WiFi not on\n");
             return WIFIMG_WIFI_DISABLED;
         }
 
-	  /* sync wifi state by wpa_supplicant */
-	len = sizeof(ssid);
-	ret = wpa_conf_is_ap_connected(ssid, &len);
+      /* sync wifi state by wpa_supplicant */
+    len = sizeof(ssid);
+    ret = wpa_conf_is_ap_connected(ssid, &len);
         if(ret >= 4){
             tmp_state = WIFIMG_WIFI_CONNECTED;
         }else{
@@ -1652,9 +1661,9 @@ static int aw_wifi_get_wifi_info(char * reply, int reply_length)
     int  ret_code = 0;
     char cmd[CMD_LEN + 1] = {0};
 
-	strncpy(cmd, "STATUS", CMD_LEN);
-	cmd[CMD_LEN] = '\0';
-	ret_code = wifi_command(cmd, reply, reply_length);
+    strncpy(cmd, "STATUS", CMD_LEN);
+    cmd[CMD_LEN] = '\0';
+    ret_code = wifi_command(cmd, reply, reply_length);
 
     return ret_code;
 }
@@ -1698,13 +1707,13 @@ const aw_wifi_interface_t * aw_wifi_on(tWifi_event_callback pcb, int event_label
         printf("wpa_suppplicant not running!\n");
         wifi_start_supplicant(0);
         do{
-		usleep(300000);
-		ret = wifi_connect_to_supplicant();
-		if(!ret){
-		    printf("Connected to wpa_supplicant!\n");
-		    break;
-		}
-		i++;
+        usleep(300000);
+        ret = wifi_connect_to_supplicant();
+        if(!ret){
+            printf("Connected to wpa_supplicant!\n");
+            break;
+        }
+        i++;
         }while(ret && i<10);
         if(ret < 0){
             if(pcb != NULL){
@@ -1725,12 +1734,12 @@ const aw_wifi_interface_t * aw_wifi_on(tWifi_event_callback pcb, int event_label
     /* check has network info in wpa_supplicant.conf */
     if(wpa_conf_network_info_exist() == 1){
         set_wifi_machine_state(CONNECTING_STATE);
-	  /* wpa_supplicant already run by other process and connected an ap */
+      /* wpa_supplicant already run by other process and connected an ap */
         connected = wpa_conf_is_ap_connected(ssid, &len);
         if(connected >= 4){
             set_wifi_machine_state(CONNECTED_STATE);
-	    set_cur_wifi_event(AP_CONNECTED);
-	    call_event_callback_function(WIFIMG_NETWORK_CONNECTED, NULL, event_label);
+        set_cur_wifi_event(AP_CONNECTED);
+        call_event_callback_function(WIFIMG_NETWORK_CONNECTED, NULL, event_label);
             ret = 0;
         }else{
             connecting_ap_event_label = event_label;
@@ -1759,7 +1768,7 @@ int aw_wifi_off(const aw_wifi_interface_t *p_wifi_interface)
 
     if(p_aw_wifi_intf != p_wifi_interface)
     {
-    	call_event_callback_function(WIFIMG_WIFI_OFF_FAILED, NULL, 0);
+        call_event_callback_function(WIFIMG_WIFI_OFF_FAILED, NULL, 0);
         return -1;
     }
 

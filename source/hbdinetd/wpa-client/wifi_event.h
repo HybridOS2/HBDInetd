@@ -5,7 +5,7 @@
 
 #define EVENT_BUF_SIZE 2048
 
-#if __cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -45,7 +45,7 @@ int  get_assoc_reject_count();
 int add_wifi_event_callback_inner(tWifi_event_callback pcb);
 int call_event_callback_function(tWIFI_EVENT wifi_event, char *buf, int event_label);
 int reset_wifi_event_callback();
-#if __cplusplus
+#ifdef __cplusplus
 };  // extern "C"
 #endif
 

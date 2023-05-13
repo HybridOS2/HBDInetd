@@ -1,9 +1,8 @@
-#include <hbdbus.h>
+#include <hbdbus/hbdbus.h>
 
-#include "wifi_intf.h"
-#include "inetd.h"
+#include "hbdinetd.h"
+#include "common-impl.h"
 #include "tools.h"
-#include "common.h"
 
 const char *op_errors[] = {
     "success",                                  // ERR_NO

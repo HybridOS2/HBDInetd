@@ -22,6 +22,8 @@
 #include <sys/uio.h>
 #include <sys/time.h>
 
+#define CONFIG_CTRL_IFACE_UNIX  1
+
 #ifdef CONFIG_CTRL_IFACE_UNIX
 #include <sys/un.h>
 #include <unistd.h>

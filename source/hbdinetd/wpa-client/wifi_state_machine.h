@@ -1,7 +1,7 @@
 #ifndef __WIFI_STATE_H
 #define __WIFI_STATE_H
 
-#if __cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -16,7 +16,7 @@ typedef enum{
 int set_wifi_machine_state(tWIFI_MACHINE_STATE state);
 tWIFI_MACHINE_STATE get_wifi_machine_state();
 
-#if __cplusplus
+#ifdef __cplusplus
 };  // extern "C"
 #endif
 

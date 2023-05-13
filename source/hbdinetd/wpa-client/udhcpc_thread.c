@@ -18,8 +18,18 @@ extern int disconnecting;
 extern int connecting_ap_event_label;
 extern wifi_callback global_callback_func;
 
+static int my_system(const char *cmd)
+{
+    int retv = system(cmd);
+    if (retv == 0)
+        return 0;
+
+    return retv;
+}
+
 static int get_net_ip(const char *if_name, char *ip, int *len, int *vflag)
 {
+    (void)len;
     struct ifaddrs * ifAddrStruct = NULL, *pifaddr = NULL;
     void * tmpAddrPtr = NULL;
 
@@ -71,6 +81,7 @@ int is_ip_exist()
 
 void *udhcpc_thread(void *args)
 {
+    (void)args;
     int len = 0, vflag = 0, times = 0;
     char ipaddr[INET6_ADDRSTRLEN];
     char cmd[256] = {0}, reply[8] = {0};
@@ -78,7 +89,7 @@ void *udhcpc_thread(void *args)
     // dhcp command
     memset(cmd, 0, 256);
     sprintf(cmd, "%s %s", DHCP_COMMAND_START, global_callback_func.device_name);
-    system(cmd);
+    my_system(cmd);
 
     memset(cmd, 0, 256);
     if(strlen(DHCP_COMMAND_STOP))
@@ -94,7 +105,7 @@ void *udhcpc_thread(void *args)
         if(disconnecting == 1)
         {
             if(cmd[0])
-                system(cmd);
+                my_system(cmd);
             break;
         }
         get_net_ip(global_callback_func.device_name, ipaddr, &len, &vflag);
@@ -112,7 +123,7 @@ void *udhcpc_thread(void *args)
     {
         // stop dhcpc thread
         if(cmd[0])
-            system(cmd);
+            my_system(cmd);
 
 	    // send disconnect
         memset(cmd, 0, 256);

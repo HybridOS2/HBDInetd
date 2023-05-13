@@ -1,7 +1,7 @@
 #ifndef __WPA_SUPPLICANT_CONF_H
 #define __WPA_SUPPLICANT_CONF_H
 
-#if __cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -21,7 +21,7 @@ int wpa_conf_get_ap_connected(char *netid, int *len);
 int wpa_conf_enable_all_networks();
 int wpa_conf_remove_all_networks();
 
-#if __cplusplus
+#ifdef __cplusplus
 };  // extern "C"
 #endif
 

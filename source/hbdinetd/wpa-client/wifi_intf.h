@@ -1,7 +1,7 @@
 #ifndef __WIFI_INTF_H
 #define __WIFI_INTF_H
 
-#if __cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -79,7 +79,7 @@ const aw_wifi_interface_t * aw_wifi_on(tWifi_event_callback pcb, int event_label
 int aw_wifi_get_wifi_state();
 int aw_wifi_off(const aw_wifi_interface_t *p_wifi_interface_t);
 
-#if __cplusplus
+#ifdef __cplusplus
 };  // extern "C"
 #endif
 

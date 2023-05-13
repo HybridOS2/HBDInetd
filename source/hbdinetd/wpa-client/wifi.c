@@ -8,9 +8,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <poll.h>
+#include <unistd.h>
+
 #include "wpa_ctrl.h"
 #include "wifi.h"
-#include <unistd.h>
 
 #define IFACE_VALUE_MAX 32
 
@@ -31,7 +32,7 @@ static unsigned char dummy_key[21] = { 0x02, 0x11, 0xbe, 0x33, 0x43, 0x35,
                                        0xf3, 0xf4, 0xf5 };
 
 static const char IFNAME[]              = "IFNAME=";
-#define IFNAMELEN			(sizeof(IFNAME) - 1)
+#define IFNAMELEN            (sizeof(IFNAME) - 1)
 static const char WPA_EVENT_IGNORE[]    = "CTRL-EVENT-IGNORE ";
 
 extern char socket_path[PATH_MAX];
@@ -215,6 +216,7 @@ int ensure_config_file_exists(const char *config_file)
 
 int wifi_start_supplicant(int p2p_supported)
 {
+    (void)p2p_supported;
 //    char cmd[512] = {0};
 
     /* Before starting the daemon, make sure its config file exists */
@@ -243,8 +245,9 @@ int wifi_start_supplicant(int p2p_supported)
 
 int wifi_stop_supplicant(int p2p_supported)
 {
-//	  system("/etc/wifi/wifi stop");                        // gengyue
-	  return 0;
+    (void)p2p_supported;
+//      system("/etc/wifi/wifi stop");                        // gengyue
+      return 0;
 }
 
 #define SUPPLICANT_TIMEOUT      3000000  // microseconds

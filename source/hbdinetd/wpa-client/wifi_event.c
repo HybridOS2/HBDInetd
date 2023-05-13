@@ -1,8 +1,8 @@
-#include<pthread.h>
-#include<stdio.h>
-#include<stdlib.h>
-#include<string.h>
-#include<unistd.h>
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #include "wifi.h"
 #include "wifi_event.h"
@@ -34,16 +34,16 @@ static void handle_event(int event, char * remainder) {
     switch (event)
     {
         case DISCONNECTED:
-			state = get_wifi_machine_state();
-			if((state == DISCONNECTING_STATE) //call disconnect
-				|| (state == L2CONNECTED_STATE) || (state == CONNECTED_STATE)) //auto disconnect(ap shutdown)
-			{
-				printf("Network disconnected!\n");
-				set_wifi_machine_state(DISCONNECTED_STATE);
-				set_cur_wifi_event(AP_DISCONNECTED);
-				call_event_callback_function(WIFIMG_NETWORK_DISCONNECTED, NULL, disconnect_ap_event_label);
-			}
-			break;
+            state = get_wifi_machine_state();
+            if((state == DISCONNECTING_STATE) //call disconnect
+                || (state == L2CONNECTED_STATE) || (state == CONNECTED_STATE)) //auto disconnect(ap shutdown)
+            {
+                printf("Network disconnected!\n");
+                set_wifi_machine_state(DISCONNECTED_STATE);
+                set_cur_wifi_event(AP_DISCONNECTED);
+                call_event_callback_function(WIFIMG_NETWORK_DISCONNECTED, NULL, disconnect_ap_event_label);
+            }
+            break;
 
         case CONNECTED:
             if(netid_connecting[0] != '\0'){
@@ -78,6 +78,8 @@ static void handle_event(int event, char * remainder) {
 
 static int dispatch_event(const char *event_str, int nread)
 {
+    (void)nread;
+
     int i = 0, event = 0;
     char event_name[16];
     char cmd[255] = {0}, reply[16]={0};
@@ -97,7 +99,7 @@ static int dispatch_event(const char *event_str, int nread)
                     wifi_command(cmd, reply, sizeof(reply));
 
                     set_wifi_machine_state(DISCONNECTED_STATE);
-					set_cur_wifi_event(PASSWORD_INCORRECT);
+                    set_cur_wifi_event(PASSWORD_INCORRECT);
                 }
                 return 0;
             }
@@ -199,8 +201,9 @@ static int dispatch_event(const char *event_str, int nread)
 
 void *event_handle_thread(void* args)
 {
-	char buf[EVENT_BUF_SIZE] = {0};
-	int nread = 0, ret = 0;
+    (void)args;
+    char buf[EVENT_BUF_SIZE] = {0};
+    int nread = 0, ret = 0;
 
     for(;;)
     {
@@ -221,6 +224,7 @@ void *event_handle_thread(void* args)
 
 void wifi_event_loop(tWifi_event_callback pcb)
 {
+    (void)pcb;
     wifi_event_inner = AP_DISCONNECTED;
     pthread_create(&event_thread_id, NULL, event_handle_thread, NULL);
 }
@@ -232,12 +236,13 @@ tWIFI_EVENT_INNER get_cur_wifi_event()
 
 int set_cur_wifi_event(tWIFI_EVENT_INNER event)
 {
-	wifi_event_inner = event;
-	return 0;
+    wifi_event_inner = event;
+    return 0;
 }
 
 void *check_connect_timeout(void *args)
 {
+    (void)args;
     int i = 0;
     tWIFI_MACHINE_STATE  state;
     tWIFI_EVENT_INNER    event;
@@ -287,12 +292,14 @@ void *check_connect_timeout(void *args)
 
 void start_check_connect_timeout(int first)
 {
+    (void)first;
     pthread_t check_timeout_id;
     pthread_create(&check_timeout_id, NULL, check_connect_timeout, NULL);
 }
 
 void *wifi_on_check_connect_timeout(void *args)
 {
+    (void)args;
     int i = 0;
     char cmd[255] = {0}, reply[16]={0};
     tWIFI_MACHINE_STATE state;
@@ -341,12 +348,12 @@ int get_scan_status()
 
 void reset_assoc_reject_count()
 {
-	assoc_reject_count = 0;
+    assoc_reject_count = 0;
 }
 
 int get_assoc_reject_count()
 {
-	return assoc_reject_count;
+    return assoc_reject_count;
 }
 
 int add_wifi_event_callback_inner(tWifi_event_callback pcb)
