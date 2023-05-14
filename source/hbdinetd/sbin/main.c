@@ -1,7 +1,7 @@
 /*
 ** main.c -- The main entry of HBDInetd.
 **
-** Copyright (c) 2023 FMSoft (http://www.fmsoft.cn)
+** Copyright (C) 2023 FMSoft (http://www.fmsoft.cn)
 **
 ** Author: Vincent Wei (https://github.com/VincentWei)
 **
@@ -35,10 +35,8 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 
-#include <purc/purc.h>
-#include <hbdbus/hbdbus.h>
-
 #include "hbdinetd.h"
+#include "internal.h"
 #include "log.h"
 
 struct run_info run_info;
@@ -73,21 +71,21 @@ static void handle_signal_action(int sig_number)
 static int setup_signals(void)
 {
     struct sigaction sa;
-    memset (&sa, 0, sizeof (sa));
+    memset(&sa, 0, sizeof (sa));
     sa.sa_handler = handle_signal_action;
 
-    if (sigaction (SIGINT, &sa, 0) != 0) {
-        LOG_ERR ("Failed to call sigaction for SIGINT: %s\n", strerror (errno));
+    if (sigaction(SIGINT, &sa, 0) != 0) {
+        LOG_ERR("Failed to call sigaction for SIGINT: %s\n", strerror (errno));
         return -1;
     }
 
-    if (sigaction (SIGPIPE, &sa, 0) != 0) {
-        LOG_ERR ("Failed to call sigaction for SIGPIPE: %s\n", strerror (errno));
+    if (sigaction(SIGPIPE, &sa, 0) != 0) {
+        LOG_ERR("Failed to call sigaction for SIGPIPE: %s\n", strerror (errno));
         return -1;
     }
 
-    if (sigaction (SIGCHLD, &sa, 0) != 0) {
-        LOG_ERR ("Failed to call sigaction for SIGCHLD: %s\n", strerror (errno));
+    if (sigaction(SIGCHLD, &sa, 0) != 0) {
+        LOG_ERR("Failed to call sigaction for SIGCHLD: %s\n", strerror (errno));
         return -1;
     }
 
@@ -96,7 +94,7 @@ static int setup_signals(void)
 
 static void print_copying(FILE *fp)
 {
-    fprintf (fp,
+    fprintf(fp,
             "\n"
             "HBDInetd - the network interface manager for HybridOS.\n"
             "\n"
@@ -114,7 +112,7 @@ static void print_copying(FILE *fp)
             "You should have received a copy of the GNU General Public License\n"
             "along with this program.  If not, see http://www.gnu.org/licenses/.\n"
             );
-    fprintf (fp, "\n");
+    fprintf(fp, "\n");
 }
 
 static ssize_t cb_stdio_write(void *ctxt, const void *buf, size_t count)
@@ -139,19 +137,20 @@ void dump_json_object(FILE *fp, purc_variant_t v)
     }
 }
 
-static void format_current_time (char* buff, size_t sz)
+static void format_current_time(char* buff, size_t sz)
 {
     struct tm tm;
-    time_t curr_time = time (NULL);
+    time_t curr_time = time(NULL);
 
-    localtime_r (&curr_time, &tm);
-    strftime (buff, sz, "%H:%M", &tm);
+    localtime_r(&curr_time, &tm);
+    strftime(buff, sz, "%H:%M", &tm);
 }
 
 /* Command line help. */
 static void print_usage(FILE *fp)
 {
-    fprintf(fp, "HBDInetd (%s) - the network interface manager for HybridOS\n\n", HBDBUS_VERSION_STRING);
+    fprintf(fp, "HBDInetd (%s) - the network interface manager for HybridOS\n\n",
+            HBDINETD_VERSION_STRING);
 
     fprintf(fp,
             "Usage: "
@@ -165,7 +164,7 @@ static void print_usage(FILE *fp)
             "  -v --verbose                 - Log verbose messages.\n"
             "  -V --version                 - Display version information and exit.\n"
             "  -C --copying                 - Display copying information and exit.\n"
-            "  -h --help                    - Show thi help.\n"
+            "  -h --help                    - Show this help.\n"
             "\n"
             );
 }
@@ -182,7 +181,7 @@ static struct option long_opts[] = {
     {0, 0, 0, 0}
 };
 
-static int read_option_args (int argc, char **argv)
+static int read_option_args(int argc, char **argv)
 {
     int o, idx = 0;
 
@@ -199,17 +198,17 @@ static int read_option_args (int argc, char **argv)
                 return 1;
 
             case 'V':
-                fprintf (stdout, "HBDInetd: %s\n", HBDBUS_VERSION_STRING);
+                fprintf(stdout, "HBDInetd: %s\n", HBDBUS_VERSION_STRING);
                 return 1;
 
             case 'a':
-                if (strlen (optarg) < PURC_LEN_APP_NAME)
-                    strcpy (run_info.app_name, optarg);
+                if (strlen(optarg) < PURC_LEN_APP_NAME)
+                    strcpy(run_info.app_name, optarg);
                 break;
 
             case 'r':
-                if (strlen (optarg) < PURC_LEN_RUNNER_NAME)
-                    strcpy (run_info.runner_name, optarg);
+                if (strlen(optarg) < PURC_LEN_RUNNER_NAME)
+                    strcpy(run_info.runner_name, optarg);
                 break;
 
             case 'd':
@@ -244,18 +243,18 @@ bad_arg:
 static int
 set_null_stdio(void)
 {
-    int fd = open ("/dev/null", O_RDWR);
+    int fd = open("/dev/null", O_RDWR);
     if (fd < 0)
         return -1;
 
-    if (dup2 (fd, 0) < 0 ||
-            dup2 (fd, 1) < 0 ||
-            dup2 (fd, 2) < 0) {
-        close (fd);
+    if (dup2(fd, 0) < 0 ||
+            dup2(fd, 1) < 0 ||
+            dup2(fd, 2) < 0) {
+        close(fd);
         return -1;
     }
 
-    close (fd);
+    close(fd);
     return 0;
 }
 
@@ -264,20 +263,20 @@ daemonize(void)
 {
     pid_t pid;
 
-    if (chdir ("/") != 0)
+    if (chdir("/") != 0)
         return -1;
 
-    if (set_null_stdio ())
+    if (set_null_stdio())
         return -1;
 
-    pid = fork ();
+    pid = fork();
     if (pid < 0)
         return -1;
 
     if (pid > 0)
         _exit(0);
 
-    if (setsid () < 0)
+    if (setsid() < 0)
         return -1;
 
     return 0;
@@ -291,7 +290,7 @@ int main(int argc, char **argv)
     struct timeval tv;
     char curr_time [16];
 
-    ret = read_option_args (argc, argv);
+    ret = read_option_args(argc, argv);
     if (ret > 0)
         return EXIT_SUCCESS;
     else if (ret < 0)
@@ -316,13 +315,13 @@ int main(int argc, char **argv)
     }
 
     if (!run_info.app_name[0] ||
-            !purc_is_valid_app_name (run_info.app_name)) {
-        strcpy (run_info.app_name, APP_NAME);
+            !purc_is_valid_app_name(run_info.app_name)) {
+        strcpy(run_info.app_name, HBDINETD_APP_NAME);
     }
 
     if (!run_info.runner_name[0] ||
-            !purc_is_valid_runner_name (run_info.runner_name)) {
-        strcpy (run_info.runner_name, RUN_NAME);
+            !purc_is_valid_runner_name(run_info.runner_name)) {
+        strcpy(run_info.runner_name, HBDINETD_RUNNER_NAME);
     }
 
     ret = purc_init_ex(PURC_MODULE_EJSON, run_info.app_name,
@@ -340,20 +339,20 @@ int main(int argc, char **argv)
         purc_enable_log_ex(PURC_LOG_MASK_DEFAULT, facility);
     }
 
-    purc_enable_log_ex(true, false);
-
     run_info.dump_stm = purc_rwstream_new_for_dump(stderr, cb_stdio_write);
 
+    kvlist_init(&run_info.devices, NULL);
+
     run_info.running = true;
-    if (setup_signals () < 0)
+    if (setup_signals() < 0)
         goto failed;
 
-    cnnfd = hbdbus_connect_via_unix_socket (HBDBUS_US_PATH,
+    cnnfd = hbdbus_connect_via_unix_socket(HBDBUS_US_PATH,
             run_info.app_name, run_info.runner_name, &conn);
 
     if (cnnfd < 0) {
-        fprintf (stderr, "Failed to connect to HBDInetd server: %s\n",
-                hbdbus_get_err_message (cnnfd));
+        fprintf(stderr, "Failed to connect to HBDInetd server: %s\n",
+                hbdbus_get_err_message(cnnfd));
         goto failed;
     }
 
@@ -361,21 +360,22 @@ int main(int argc, char **argv)
             run_info.app_name, run_info.runner_name,
             run_info.self_endpoint);
 
-    hbdbus_conn_set_user_data (conn, &run_info);
+    hbdbus_conn_set_user_data(conn, &run_info);
+    enumerate_network_devices(&run_info);
 
-    format_current_time (curr_time, sizeof (curr_time) - 1);
+    format_current_time(curr_time, sizeof(curr_time) - 1);
 
     maxfd = cnnfd;
     do {
         int retval;
         char _new_clock [16];
 
-        FD_ZERO (&rfds);
-        FD_SET (cnnfd, &rfds);
+        FD_ZERO(&rfds);
+        FD_SET(cnnfd, &rfds);
 
         tv.tv_sec = 0;
         tv.tv_usec = 200 * 1000;
-        retval = select (maxfd + 1, &rfds, NULL, NULL, &tv);
+        retval = select(maxfd + 1, &rfds, NULL, NULL, &tv);
 
         if (retval == -1) {
             if (errno == EINTR)
@@ -384,11 +384,11 @@ int main(int argc, char **argv)
                 break;
         }
         else if (retval) {
-            if (FD_ISSET (cnnfd, &rfds)) {
-                int err_code = hbdbus_read_and_dispatch_packet (conn);
+            if (FD_ISSET(cnnfd, &rfds)) {
+                int err_code = hbdbus_read_and_dispatch_packet(conn);
                 if (err_code) {
-                    fprintf (stderr, "Failed to read and dispatch packet: %s\n",
-                            hbdbus_get_err_message (err_code));
+                    fprintf(stderr, "Failed to read and dispatch packet: %s\n",
+                            hbdbus_get_err_message(err_code));
                     if (err_code == HBDBUS_EC_IO)
                         break;
                 }
@@ -396,10 +396,10 @@ int main(int argc, char **argv)
             }
         }
         else {
-            format_current_time (_new_clock, sizeof (_new_clock) - 1);
-            if (strcmp (_new_clock, curr_time)) {
-                hbdbus_fire_event (conn, "clock", _new_clock);
-                strcpy (curr_time, _new_clock);
+            format_current_time(_new_clock, sizeof(_new_clock) - 1);
+            if (strcmp(_new_clock, curr_time)) {
+                hbdbus_fire_event(conn, "clock", _new_clock);
+                strcpy(curr_time, _new_clock);
             }
         }
 
@@ -407,10 +407,12 @@ int main(int argc, char **argv)
 
 failed:
     if (cnnfd >= 0)
-        hbdbus_disconnect (conn);
+        hbdbus_disconnect(conn);
 
     if (run_info.dump_stm)
         purc_rwstream_destroy(run_info.dump_stm);
+
+    cleanup_network_devices(&run_info);
 
     purc_cleanup();
 

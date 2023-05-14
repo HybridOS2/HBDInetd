@@ -134,8 +134,8 @@ set(CMAKE_POSITION_INDEPENDENT_CODE True)
 #------------------------------------------------------------------------------
 include(GlobalCommon)
 
-SET_PROJECT_VERSION(0 0 1)
-set(HBDINETD_API_VERSION 0.0)
+SET_PROJECT_VERSION(2 0 0)
+set(HBDINETD_API_VERSION 2.0)
 
 add_subdirectory(source)
 

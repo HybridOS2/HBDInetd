@@ -14,7 +14,6 @@ set(HEADER_INSTALL_DIR "${CMAKE_INSTALL_INCLUDEDIR}" CACHE PATH "Absolute path t
 set(HBDINETD_HEADER_INSTALL_DIR "${CMAKE_INSTALL_INCLUDEDIR}/hbdinetd" CACHE PATH "Absolute path to HBDInetd header installation directory")
 
 add_definitions(-DBUILDING_LINUX__=1)
-add_definitions(-DHBDINETD_API_VERSION_STRING="${HBDINETD_API_VERSION}")
 
 # Public options specific to the HybridOS port. Do not add any options here unless
 # there is a strong reason we should support changing the value of the option,

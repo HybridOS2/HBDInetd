@@ -1,76 +1,74 @@
+/*
+** hbdinetd.h -- The main header of HBDInetd.
+**
+** Copyright (c) 2023 FMSoft (http://www.fmsoft.cn)
+**
+** Author: Vincent Wei (https://github.com/VincentWei)
+**
+** This file is part of HBDInetd.
+**
+** HBDInetd is free software: you can redistribute it and/or modify
+** it under the terms of the GNU General Public License as published by
+** the Free Software Foundation, either version 3 of the License, or
+** (at your option) any later version.
+**
+** HBDInetd is distributed in the hope that it will be useful,
+** but WITHOUT ANY WARRANTY; without even the implied warranty of
+** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+** GNU General Public License for more details.
+** You should have received a copy of the GNU General Public License
+** along with this program.  If not, see http://www.gnu.org/licenses/.
+*/
+
 #ifndef __hbdinetd_h
 #define __hbdinetd_h
 
-#include <purc/purc.h>
+#define HBDINETD_APP_NAME               "cn.fmsoft.hybridos.inetd"
+#define HBDINETD_RUNNER_NAME            "daemon"
 
-/* Architecture of software layers 
-    runner layer:                           inetd (main.c)
-                                              |
-                      --------------------------------------------------------
-                      |                       |                              |
-    hiBus layer:   mobile.c             wifi.c(src/inted)                ethernet.c
-                                              |
-    control layer:                      wifi.so(src/wifi)
-                                              |
-    tools layer(optional):              wifimanager.so
-                                              |
-    system service layer                wpa_supplicant
-                                              |
-    hardware layer                       WiFi Device
-
-    runner layer: manage each network device and initialize hiBus context.
-    hiBus layer: handle the data from hibus, such as procedure and message.
-    control layer: control the hardware device.
-    tools layer: assistant tools for control if any.
-
-*/
-
-
-#include "user_define.h"
-
-// method for All Network Devices 
+// methods for All Network Devices 
 #define METHOD_NET_OPEN_DEVICE          "openDevice"
 #define METHOD_NET_CLOSE_DEVICE         "closeDevice"
 #define METHOD_NET_GET_DEVICES_STATUS   "getNetworkDevicesStatus"
-// method for WiFi Device
+
+// methods for WiFi Device
 #define METHOD_WIFI_START_SCAN          "wifiStartScanHotspots"
 #define METHOD_WIFI_STOP_SCAN           "wifiStopScanHotspots"
 #define METHOD_WIFI_CONNECT_AP          "wifiConnect"
 #define METHOD_WIFI_DISCONNECT_AP       "wifiDisconnect"
 #define METHOD_WIFI_GET_NETWORK_INFO    "wifiGetNetworkInfo"
+
 // method for Ethernet Device
 // method for Mobile Device
 
-
-// event for All Network Devices
+// events for All Network Devices
 #define NETWORKDEVICECHANGED            "NETWORKDEVICECHANGED"
-// event for WiFi Device
+
+// events for WiFi Device
 #define WIFIHOTSPOTSCHANGED             "WIFIHOTSPOTSCHANGED"
 #define WIFISIGNALSTRENGTHCHANGED       "WIFISIGNALSTRENGTHCHANGED"
-// event for Ethernet Device
-// event for Mobile Device
 
-// parameter for inetd runner
-#define APP_NAME                        "cn.fmsoft.hybridos.inetd"
-#define RUN_NAME                        "daemon"
-
-#define SOCKET_PATH                     "/var/tmp/hibus.sock"
-#define MAX_DEVICE_NUM                  10          // maximize of network devices is 10
-#define DEFAULT_SCAN_TIME               30          // for WiFi scan  period
+// events for Ethernet Device
+// events for Mobile Device
 
 // device type
-#define DEVICE_TYPE_UNKONWN             0
-#define DEVICE_TYPE_ETHERNET            1
-#define DEVICE_TYPE_WIFI                2
-#define DEVICE_TYPE_MOBILE              3
-#define DEVICE_TYPE_LO                  4
-#define DEVICE_TYPE_DEFAULT             DEVICE_TYPE_ETHERNET
+enum {
+    DEVICE_TYPE_UNKONWN = 0,
+    DEVICE_TYPE_LOOPBACK,
+    DEVICE_TYPE_ETHER_WIRED,
+    DEVICE_TYPE_ETHER_WIRELESS,
+    DEVICE_TYPE_MOBILE,
+};
+
+#define DEVICE_TYPE_DEFAULT             DEVICE_TYPE_WIRED
 
 // device status
-#define DEVICE_STATUS_UNCERTAIN         0           // uncertain
-#define DEVICE_STATUS_DOWN              1           // device is unactive
-#define DEVICE_STATUS_UP                2           // device is active, but perhaps do not connect to any network
-#define DEVICE_STATUS_RUNNING           3           // device is active and has ip address
+enum {
+    DEVICE_STATUS_UNCERTAIN = 0,
+    DEVICE_STATUS_DOWN,
+    DEVICE_STATUS_UP,
+    DEVICE_STATUS_RUNNING
+};
 
 // for error
 #define ERR_NO                          0
@@ -113,104 +111,8 @@
 #define NETWORK_CHANGED_SUBNETMASK      ((0x01) << 6)
 
 // for string length
-#define HOTSPOT_STRING_LENGTH           64 
+#define HOTSPOT_STRING_LENGTH           64
 #define NETWORK_DEVICE_NAME_LENGTH      32
 #define NETWORK_ADDRESS_LENGTH          32
-
-struct run_info {
-    bool running;
-    bool daemon;
-    bool verbose;
-
-    char app_name[PURC_LEN_APP_NAME + 1];
-    char runner_name[PURC_LEN_RUNNER_NAME + 1];
-    char self_endpoint[PURC_LEN_ENDPOINT_NAME + 1];
-
-    purc_rwstream_t dump_stm;
-};
-
-/*
-    Architecture of structures
-
-                    |-- type        according to   |-- Ethnet_device (for Ethernet)
-    network_device--|-- * device <-----------------|-- WiFi_device (for WiFi)
-                    |-- ifname      device type    |-- Mobile_device (for Mobile)
-*/
-
-// network device description
-typedef struct _network_device
-{
-    char ifname[NETWORK_DEVICE_NAME_LENGTH];    // device name
-    int type;                                   // device type: DEVICE_TYPE_XXX
-    unsigned int status;                        // device status: DEVICE_STATUS_XXX
-    int priority;                               // device priority
-    void * device;                              // specified structure pointer for a device type. 
-                                                // e.g. WiFi_device structure for WiFi device
-    char mac[NETWORK_ADDRESS_LENGTH];           // MAC address
-    char ip[NETWORK_ADDRESS_LENGTH];            // IP address
-    char broadAddr[NETWORK_ADDRESS_LENGTH];     // broadcast address
-    char subnetMask[NETWORK_ADDRESS_LENGTH];    // subnet mask
-    int speed;                                  // network speed
-    char libpath[HOTSPOT_STRING_LENGTH];        // library path
-    void * lib_handle;                          // handle of library. e.g. for wifi.so
-} network_device;
-
-#if 0
-// WiFi device description
-typedef struct _WiFi_device                     // WiFi device description
-{
-    struct _hiWiFiDeviceOps * wifi_device_Ops;  // the operations for control layer
-    struct _wifi_context * context;             // the context for WiFi control layer 
-    char bssid[HOTSPOT_STRING_LENGTH];          // bssid of current connecting network
-    int signal;                                 // signal strength for current connecting network
-    int scan_time;                              // the internal time for scan network
-    pthread_mutex_t list_mutex;                 // for hotspots list
-    struct _wifi_hotspot *first_hotspot;        // hotspots list
-} WiFi_device;
-
-// WiFi AP description
-typedef struct _wifi_hotspot                    // the information for one AP
-{
-    char bssid[HOTSPOT_STRING_LENGTH];          // bssid
-    unsigned char ssid[HOTSPOT_STRING_LENGTH];  // ssid
-    char frenquency[HOTSPOT_STRING_LENGTH];     // frequency
-    char capabilities[HOTSPOT_STRING_LENGTH];   // encrypt type
-    int  signal_strength;                       // signal strength
-    int isConnect;                              // whether connected
-    struct _wifi_hotspot * next;                // the next node in list
-} wifi_hotspot;
-
-// wifi context of control layer
-typedef struct _wifi_context                    // context get from control layer
-{
-    const aw_wifi_interface_t* p_wifi_interface;// context of tools layer. WiFi is a bit complicated。
-    int event_label;                            // lable code for wifimanager
-} wifi_context;
-
-// interface of libwifi.so
-typedef struct _hiWiFiDeviceOps
-{
-    int (* open) (const char * device_name, wifi_context ** context);           // open wifi device
-    int (* close) (wifi_context * context);                                     // close wifi device
-    int (* connect) (wifi_context * context, const char * ssid, const char *password);
-    int (* disconnect) (wifi_context * context);
-    int (* start_scan) (wifi_context * context);
-    int (* stop_scan) (wifi_context * context);
-    unsigned int (* get_hotspots) (wifi_context * context, wifi_hotspot ** hotspots);       
-    int (*get_cur_net_info)(wifi_context * context, char * reply, int reply_length);
-    int (*set_scan_interval)(wifi_context * context, int interval);
-    void (* report_wifi_scan_info)(char * device_name, int type, void * hotspots, int number);
-} hiWiFiDeviceOps;
-#endif
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-extern struct run_info run_info;
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif  // __hbdinetd__h

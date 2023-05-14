@@ -5,6 +5,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_definitions(-DBUILDING_WITH_CMAKE=1)
 add_definitions(-DHAVE_CONFIG_H=1)
+add_definitions(-DHBDINETD_VERSION_STRING="${PROJECT_VERSION}")
+add_definitions(-DHBDINETD_API_VERSION_STRING="${HBDINETD_API_VERSION}")
 
 find_package(PurC 0.9.12 REQUIRED)
 find_package(HBDBus 2.0.0 REQUIRED)
