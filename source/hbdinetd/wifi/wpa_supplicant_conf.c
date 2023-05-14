@@ -5,7 +5,11 @@
 #include "wpa_supplicant_conf.h"
 #include "wifi.h"
 
-extern int is_ip_exist();
+static int is_ip_exist(void)
+{
+    // TODO
+    return 0;
+}
 
 int wpa_conf_network_info_exist()
 {

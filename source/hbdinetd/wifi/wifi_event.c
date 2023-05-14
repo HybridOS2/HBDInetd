@@ -25,7 +25,10 @@ static int scan_complete = 0;
 static int assoc_reject_count = 0;
 static int authentication_fail_count = 0;
 
-static void handle_event(int event, char * remainder) {
+static void handle_event(int event, char * remainder)
+{
+    (void)remainder;
+
     char netid_connected[NET_ID_LEN+1] = {0};
     char cmd[255] = {0}, reply[16] = {0};
     int len = NET_ID_LEN+1;
@@ -63,7 +66,7 @@ static void handle_event(int event, char * remainder) {
 
             set_wifi_machine_state(L2CONNECTED_STATE);
             /* start udhcpcd */
-            start_udhcpc_thread((void *)remainder);
+            // TODO: start_udhcpc_thread((void *)remainder);
             break;
 
         case SCAN_RESULTS:

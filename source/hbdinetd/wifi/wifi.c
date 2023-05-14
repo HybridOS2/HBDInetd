@@ -10,7 +10,7 @@
 #include <poll.h>
 #include <unistd.h>
 
-#include "wpa_ctrl.h"
+#include "wpa-client/wpa_ctrl.h"
 #include "wifi.h"
 
 #define IFACE_VALUE_MAX 32

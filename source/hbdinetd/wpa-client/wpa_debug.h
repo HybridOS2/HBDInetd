@@ -14,6 +14,7 @@
 extern int wpa_debug_level;
 extern int wpa_debug_show_keys;
 extern int wpa_debug_timestamp;
+extern int wpa_debug_syslog;
 
 /* Debugging function - conditional printf and hex dump. Driver wrappers can
  * use these for debugging purposes. */
@@ -21,6 +22,28 @@ extern int wpa_debug_timestamp;
 enum {
 	MSG_EXCESSIVE, MSG_MSGDUMP, MSG_DEBUG, MSG_INFO, MSG_WARNING, MSG_ERROR
 };
+
+#ifdef CONFIG_NO_STDOUT_DEBUG
+
+#define wpa_debug_print_timestamp() do { } while (0)
+#define wpa_printf(args...) do { } while (0)
+#define wpa_hexdump(l,t,b,le) do { } while (0)
+#define wpa_hexdump_buf(l,t,b) do { } while (0)
+#define wpa_hexdump_key(l,t,b,le) do { } while (0)
+#define wpa_hexdump_buf_key(l,t,b) do { } while (0)
+#define wpa_hexdump_ascii(l,t,b,le) do { } while (0)
+#define wpa_hexdump_ascii_key(l,t,b,le) do { } while (0)
+#define wpa_debug_open_file(p) do { } while (0)
+#define wpa_debug_close_file() do { } while (0)
+#define wpa_debug_setup_stdout() do { } while (0)
+#define wpa_dbg(args...) do { } while (0)
+
+static inline int wpa_debug_reopen_file(void)
+{
+	return 0;
+}
+
+#else /* CONFIG_NO_STDOUT_DEBUG */
 
 int wpa_debug_open_file(const char *path);
 int wpa_debug_reopen_file(void);
@@ -133,6 +156,19 @@ void wpa_hexdump_ascii_key(int level, const char *title, const void *buf,
  */
 #define wpa_dbg(args...) wpa_msg(args)
 
+#endif /* CONFIG_NO_STDOUT_DEBUG */
+
+
+#ifdef CONFIG_NO_WPA_MSG
+#define wpa_msg(args...) do { } while (0)
+#define wpa_msg_ctrl(args...) do { } while (0)
+#define wpa_msg_global(args...) do { } while (0)
+#define wpa_msg_global_ctrl(args...) do { } while (0)
+#define wpa_msg_no_global(args...) do { } while (0)
+#define wpa_msg_global_only(args...) do { } while (0)
+#define wpa_msg_register_cb(f) do { } while (0)
+#define wpa_msg_register_ifname_cb(f) do { } while (0)
+#else /* CONFIG_NO_WPA_MSG */
 /**
  * wpa_msg - Conditional printf for default target and ctrl_iface monitors
  * @ctx: Pointer to context data; this is the ctx variable registered
@@ -242,6 +278,12 @@ void wpa_msg_register_cb(wpa_msg_cb_func func);
 typedef const char * (*wpa_msg_get_ifname_func)(void *ctx);
 void wpa_msg_register_ifname_cb(wpa_msg_get_ifname_func func);
 
+#endif /* CONFIG_NO_WPA_MSG */
+
+#ifdef CONFIG_NO_HOSTAPD_LOGGER
+#define hostapd_logger(args...) do { } while (0)
+#define hostapd_logger_register_cb(f) do { } while (0)
+#else /* CONFIG_NO_HOSTAPD_LOGGER */
 void hostapd_logger(void *ctx, const u8 *addr, unsigned int module, int level,
 		    const char *fmt, ...) PRINTF_FORMAT(5, 6);
 
@@ -254,13 +296,13 @@ typedef void (*hostapd_logger_cb_func)(void *ctx, const u8 *addr,
  * @func: Callback function (%NULL to unregister)
  */
 void hostapd_logger_register_cb(hostapd_logger_cb_func func);
+#endif /* CONFIG_NO_HOSTAPD_LOGGER */
 
 #define HOSTAPD_MODULE_IEEE80211	0x00000001
 #define HOSTAPD_MODULE_IEEE8021X	0x00000002
 #define HOSTAPD_MODULE_RADIUS		0x00000004
 #define HOSTAPD_MODULE_WPA		0x00000008
 #define HOSTAPD_MODULE_DRIVER		0x00000010
-#define HOSTAPD_MODULE_IAPP		0x00000020
 #define HOSTAPD_MODULE_MLME		0x00000040
 
 enum hostapd_logger_level {
@@ -272,6 +314,13 @@ enum hostapd_logger_level {
 };
 
 
+#ifdef CONFIG_DEBUG_SYSLOG
+
+void wpa_debug_open_syslog(void);
+void wpa_debug_close_syslog(void);
+
+#else /* CONFIG_DEBUG_SYSLOG */
+
 static inline void wpa_debug_open_syslog(void)
 {
 }
@@ -279,6 +328,15 @@ static inline void wpa_debug_open_syslog(void)
 static inline void wpa_debug_close_syslog(void)
 {
 }
+
+#endif /* CONFIG_DEBUG_SYSLOG */
+
+#ifdef CONFIG_DEBUG_LINUX_TRACING
+
+int wpa_debug_open_linux_tracing(void);
+void wpa_debug_close_linux_tracing(void);
+
+#else /* CONFIG_DEBUG_LINUX_TRACING */
 
 static inline int wpa_debug_open_linux_tracing(void)
 {
@@ -289,7 +347,22 @@ static inline void wpa_debug_close_linux_tracing(void)
 {
 }
 
+#endif /* CONFIG_DEBUG_LINUX_TRACING */
+
+
+#ifdef EAPOL_TEST
+#define WPA_ASSERT(a)						       \
+	do {							       \
+		if (!(a)) {					       \
+			printf("WPA_ASSERT FAILED '" #a "' "	       \
+			       "%s %s:%d\n",			       \
+			       __FUNCTION__, __FILE__, __LINE__);      \
+			exit(1);				       \
+		}						       \
+	} while (0)
+#else
 #define WPA_ASSERT(a) do { } while (0)
+#endif
 
 const char * debug_level_str(int level);
 int str_to_debug_level(const char *s);

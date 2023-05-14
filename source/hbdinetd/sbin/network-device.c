@@ -27,6 +27,8 @@
 #include <netdb.h>
 #include <ifaddrs.h>
 #include <stdlib.h>
+#include <assert.h>
+#include <errno.h>
 
 #include "hbdinetd.h"
 #include "internal.h"
@@ -63,6 +65,8 @@ void cleanup_network_devices(struct run_info *run_info)
         if (netdev->ipv6.hbdifa_dstaddr) {
             free(netdev->ipv6.hbdifa_dstaddr);
         }
+
+        free(netdev);
     }
 
     kvlist_free(&run_info->devices);
@@ -74,8 +78,8 @@ int enumerate_network_devices(struct run_info *run_info)
 
     struct ifaddrs *addresses = NULL;
     if (getifaddrs(&addresses) == -1) {
-        LOG_ERROR("getifaddrs call failed\n");
-        return -1;
+        LOG_ERROR("Failed getifaddrs(): %s\n", strerror(errno));
+        goto failed;
     }
 
     struct ifaddrs *address = addresses;
@@ -85,9 +89,16 @@ int enumerate_network_devices(struct run_info *run_info)
         data = kvlist_get(&run_info->devices, address->ifa_name);
         if (data == NULL) {
             netdev = calloc(1, sizeof(*netdev));
-            if (kvlist_set_ex(&run_info->devices, address->ifa_name,
-                    &netdev) == NULL)
+            if (netdev == NULL) {
+                LOG_ERROR("Failed calloc()\n");
                 goto failed;
+            }
+
+            if (kvlist_set_ex(&run_info->devices, address->ifa_name,
+                    &netdev) == NULL) {
+                LOG_ERROR("Failed kvlist_set_ex()\n");
+                goto failed;
+            }
 
             if (netdev->flags & IFF_LOOPBACK) {
                 netdev->type = DEVICE_TYPE_LOOPBACK;
@@ -164,6 +175,7 @@ int enumerate_network_devices(struct run_info *run_info)
 
         address = address->ifa_next;
     }
+
     freeifaddrs(addresses);
     return 0;
 
