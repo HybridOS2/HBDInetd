@@ -1,5 +1,7 @@
-#ifndef __INETD__H__
-#define __INETD__H__
+#ifndef __hbdinetd_h
+#define __hbdinetd_h
+
+#include <purc/purc.h>
 
 /* Architecture of software layers 
     runner layer:                           inetd (main.c)
@@ -49,8 +51,9 @@
 // event for Mobile Device
 
 // parameter for inetd runner
-#define APP_NAME_SETTINGS               "cn.fmsoft.hybridos.settings"
-#define RUNNER_NAME_INETD               "inetd"
+#define APP_NAME                        "cn.fmsoft.hybridos.inetd"
+#define RUN_NAME                        "daemon"
+
 #define SOCKET_PATH                     "/var/tmp/hibus.sock"
 #define MAX_DEVICE_NUM                  10          // maximize of network devices is 10
 #define DEFAULT_SCAN_TIME               30          // for WiFi scan  period
@@ -114,6 +117,18 @@
 #define NETWORK_DEVICE_NAME_LENGTH      32
 #define NETWORK_ADDRESS_LENGTH          32
 
+struct run_info {
+    bool running;
+    bool daemon;
+    bool verbose;
+
+    char app_name[PURC_LEN_APP_NAME + 1];
+    char runner_name[PURC_LEN_RUNNER_NAME + 1];
+    char self_endpoint[PURC_LEN_ENDPOINT_NAME + 1];
+
+    purc_rwstream_t dump_stm;
+};
+
 /*
     Architecture of structures
 
@@ -140,6 +155,7 @@ typedef struct _network_device
     void * lib_handle;                          // handle of library. e.g. for wifi.so
 } network_device;
 
+#if 0
 // WiFi device description
 typedef struct _WiFi_device                     // WiFi device description
 {
@@ -185,9 +201,16 @@ typedef struct _hiWiFiDeviceOps
     int (*set_scan_interval)(wifi_context * context, int interval);
     void (* report_wifi_scan_info)(char * device_name, int type, void * hotspots, int number);
 } hiWiFiDeviceOps;
+#endif
 
-// for test
-#define AGENT_NAME          "cn.fmsoft.hybridos.sysmgr"
-#define AGENT_RUNNER_NAME   "gui"
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-#endif  // __INETD__H__
+extern struct run_info run_info;
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif  // __hbdinetd__h

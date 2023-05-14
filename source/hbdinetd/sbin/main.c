@@ -1,241 +1,419 @@
-#include <unistd.h>
+/*
+** main.c -- The main entry of HBDInetd.
+**
+** Copyright (c) 2023 FMSoft (http://www.fmsoft.cn)
+**
+** Author: Vincent Wei (https://github.com/VincentWei)
+**
+** This file is part of HBDInetd.
+**
+** HBDInetd is free software: you can redistribute it and/or modify
+** it under the terms of the GNU General Public License as published by
+** the Free Software Foundation, either version 3 of the License, or
+** (at your option) any later version.
+**
+** HBDInetd is distributed in the hope that it will be useful,
+** but WITHOUT ANY WARRANTY; without even the implied warranty of
+** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+** GNU General Public License for more details.
+** You should have received a copy of the GNU General Public License
+** along with this program.  If not, see http://www.gnu.org/licenses/.
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
-#include <pthread.h>
 #include <fcntl.h>
-#include <dlfcn.h>
-#include <net/if.h>
-#include <sys/timerfd.h>
-#include <sys/param.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <sys/ioctl.h>
-#include <linux/wireless.h>
-#include <arpa/inet.h>
+#include <unistd.h>
 #include <errno.h>
+#include <getopt.h>
+#include <assert.h>
+#include <sys/select.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
 
+#include <purc/purc.h>
 #include <hbdbus/hbdbus.h>
 
-#include "wifi_intf.h"
-#include "inetd.h"
-#include "tools.h"
-#include "wifi.h"
-#include "mobile.h"
-#include "ethernet.h"
-#include "common.h"
+#include "hbdinetd.h"
+#include "log.h"
 
-#undef  DAEMON
-//#define DAEMON
+struct run_info run_info;
 
-hbdbus_conn * hbdbus_context_inetd = NULL;
-
-static int init_from_etc_file(network_device * device, int device_num)
+static void handle_signal_action(int sig_number)
 {
-    int i = 0;
-    int result = 0;
-    int device_index = 0;
-
-    char config_path[MAX_PATH];             // configure file full path
-    char config_item[64];
-    char config_content[64];                // storage path of libraries
-
-    memset(config_path, 0, MAX_PATH);
-    sprintf(config_path, "%s", INETD_CONFIG_FILE);
-
-    memset(config_item, 0, 64);
-    memset(config_content, 0, 64);
-    sprintf(config_item, "device%d_name", i);
-
-    while(GetValueFromEtcFile(config_path, "device", config_item, config_content, 64) == ETC_OK)
-    {
-        // get device index in device array
-        device_index = get_device_index(device, config_content);
-        if(device_index >= 0)
-        {
-            // get device type
-            memcpy(config_item, config_content, 64);
-            memset(config_content, 0, 64);
-            result = DEVICE_TYPE_DEFAULT;
-            
-            if(GetValueFromEtcFile(config_path, config_item, "type", config_content, 64) == ETC_OK)
-            {
-                if(strncasecmp(config_content, "wifi", 4) == 0)
-                   result = DEVICE_TYPE_WIFI; 
-                else if(strncasecmp(config_content, "ethernet", 8) == 0)
-                   result = DEVICE_TYPE_ETHERNET; 
-                else if(strncasecmp(config_content, "mobile", 6) == 0)
-                   result = DEVICE_TYPE_MOBILE; 
-                else if(strncasecmp(config_content, "lo", 2) == 0)
-                   result = DEVICE_TYPE_LO;
-                else
-                    result = DEVICE_TYPE_ETHERNET;
-            }
-
-            if(result == device[device_index].type)
-            {
-                // get library name
-                memset(config_content, 0, 64);
-            
-                if(GetValueFromEtcFile(config_path, config_item, "engine", config_content, 64) == ETC_OK)
-                {
-                    sprintf(device[device_index].libpath, "%s", config_content);
-                    if(result == DEVICE_TYPE_WIFI)
-                    {
-                        WiFi_device * wifi_device = malloc(sizeof(WiFi_device));
-                        memset(wifi_device, 0, sizeof(WiFi_device));
-                        device[device_index].device = (void *)wifi_device;
-
-                        GetIntValueFromEtcFile(config_path, config_item, "priority", &(device[device_index].priority));
-
-                        GetIntValueFromEtcFile(config_path, config_item, "scan_time", &(wifi_device->scan_time));
-                        if(wifi_device->scan_time == 0)
-                            wifi_device->scan_time = DEFAULT_SCAN_TIME;
-#ifdef gengyue
-                        if(GetValueFromEtcFile(config_path, config_item, "start", config_content, 64) == ETC_OK)
-                        {
-                            if(strncasecmp(config_content, "enabled", 7) == 0)
-                                device[device_index].status = DEVICE_STATUS_UP;
-                            else
-                                device[device_index].status = DEVICE_STATUS_DOWN;
-                        }
-                        else
-                            device[device_index].status = DEVICE_STATUS_DOWN;
-#endif
-                        // TODO: up or down the device
-                    }
-                    else if(result == DEVICE_TYPE_ETHERNET)
-                    {
-                    }
-                    else if(result == DEVICE_TYPE_MOBILE)
-                    {
-                    }
-                }
-                else
-                    fprintf(stderr, "WIFI DAEMON: can not get library name for %s.\n", config_item);
-            }
-            else
-                fprintf(stderr, "WIFI DAEMON: can not get device type for %s.\n", config_item);
-        }
-
-        // get the next device
-        i ++;
-        memset(config_item, 0, 64);
-        sprintf(config_item, "device%d_name", i);
+    if (sig_number == SIGINT) {
+        fprintf(stderr, "SIGINT caught, quit...\n");
+        run_info.running = false;
     }
-    
+    else if (sig_number == SIGPIPE) {
+        fprintf(stderr, "SIGPIPE caught; the server might have quitted!\n");
+    }
+    else if (sig_number == SIGCHLD) {
+        pid_t pid;
+        int status;
+
+        while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+            if (WIFEXITED (status)) {
+                if (WEXITSTATUS(status))
+                    fprintf (stderr, "Player (%d) exited: return value: %d\n", 
+                            pid, WEXITSTATUS(status));
+            }
+            else if (WIFSIGNALED(status)) {
+                fprintf(stderr, "Player (%d) exited because of signal %d\n",
+                        pid, WTERMSIG (status));
+            }
+        }
+    }
+}
+
+static int setup_signals(void)
+{
+    struct sigaction sa;
+    memset (&sa, 0, sizeof (sa));
+    sa.sa_handler = handle_signal_action;
+
+    if (sigaction (SIGINT, &sa, 0) != 0) {
+        LOG_ERR ("Failed to call sigaction for SIGINT: %s\n", strerror (errno));
+        return -1;
+    }
+
+    if (sigaction (SIGPIPE, &sa, 0) != 0) {
+        LOG_ERR ("Failed to call sigaction for SIGPIPE: %s\n", strerror (errno));
+        return -1;
+    }
+
+    if (sigaction (SIGCHLD, &sa, 0) != 0) {
+        LOG_ERR ("Failed to call sigaction for SIGCHLD: %s\n", strerror (errno));
+        return -1;
+    }
+
     return 0;
 }
 
-int main(void)
+static void print_copying(FILE *fp)
 {
-    int i = 0;
-
-    // for network interface
-    network_device device[MAX_DEVICE_NUM];
-    int device_num = 0;
-
-    // for hbdbus
-    int fd_hbdbus_inetd = -1;
-    int ret_code = 0;
-
-#ifdef	DAEMON
-    int pid = 0;
-
-    pid = fork();
-    if(pid < 0)    
-        exit(1);  		        // fork error, son process quits
-    else if(pid > 0) 	        // parent process quits
-        exit(0);
-
-    setsid();  
-    pid = fork();
-    if(pid > 0)
-        exit(0); 		        // quits again. close terminal
-    else if(pid < 0)    
-        exit(1);                // fork error, son process quits
-
-    for(i = 0; i < NOFILE; i++) // close all file
-        close(i);
-
-    chdir(DAEMON_WORKING_PATH); // change working directory
-    umask(0);					// reset mask
-#endif
-
-    // step 1: get network device interfaces
-    memset(device, 0, sizeof(network_device) * MAX_DEVICE_NUM);
-    device_num = get_if_name(device);
-    if(device_num == 0)
-    {
-        fprintf(stderr, "WIFI DAEMON: can not find any network interface, exit.\n");
-        exit(1);
-    }
-
-    // step 2: get library setting from configure file
-    init_from_etc_file(device, device_num);
-
-    // step 3: connect to hbdbus server
-    for(i = 0; i < device_num; i++)
-    {
-        if(((device[i].type == DEVICE_TYPE_WIFI) || (device[i].type == DEVICE_TYPE_ETHERNET) || (device[i].type == DEVICE_TYPE_MOBILE))
-                && (fd_hbdbus_inetd == -1))
-        {
-            fd_hbdbus_inetd = hbdbus_connect_via_unix_socket(SOCKET_PATH, APP_NAME_SETTINGS, RUNNER_NAME_INETD, &hbdbus_context_inetd);
-            if(fd_hbdbus_inetd <= 0)
-            {
-                fprintf(stderr, "WIFI DAEMON: inetd runner connects to HIBUS server error, %s.\n", hbdbus_get_err_message(fd_hbdbus_inetd));
-                exit(1);
-            }
-            hbdbus_conn_set_user_data(hbdbus_context_inetd, &device);
-            break;
-        }
-    }
-    if(i >= device_num)
-    {
-        fprintf(stderr, "WIFI DAEMON: No runner connects to HIBUS server.Exit.\n");
-        exit(1);
-    }
-
-    // step 4: register remote invocation
-    common_register(hbdbus_context_inetd);
-    wifi_register(hbdbus_context_inetd);
-    ethernet_register(hbdbus_context_inetd);
-    mobile_register(hbdbus_context_inetd);
-
-    // step 5: check device status periodically
-    while(1)
-    {
-        ret_code = hbdbus_wait_and_dispatch_packet(hbdbus_context_inetd, 1000);
-        if(ret_code)
-            fprintf(stderr, "WIFI DAEMON: WiFi error for hbdbus_wait_and_dispatch_packet, %s.\n", hbdbus_get_err_message(ret_code));
-    }
-
-    // step 6: free the resource
-    mobile_revoke(hbdbus_context_inetd);
-    ethernet_revoke(hbdbus_context_inetd);
-    wifi_revoke(hbdbus_context_inetd);
-    common_revoke(hbdbus_context_inetd);
-
-    hbdbus_disconnect(hbdbus_context_inetd);
-
-    for(int i = 0; i < device_num; i++)
-    {
-        if((device[i].status != DEVICE_STATUS_UNCERTAIN) && (device[i].status != DEVICE_STATUS_UNCERTAIN))
-        {
-            if(device[i].type == DEVICE_TYPE_WIFI)
-            {
-                WiFi_device * wifi_device = (WiFi_device *)device[i].device;
-                wifi_device->wifi_device_Ops->close(wifi_device->context);
-            }
-        }
-
-        if(device[i].device)
-            free(device[i].device);
-
-        if(device[i].lib_handle)
-            dlclose(device[i].lib_handle);
-    }
-
-	return 0;
+    fprintf (fp,
+            "\n"
+            "HBDInetd - the network interface manager for HybridOS.\n"
+            "\n"
+            "Copyright (C) 2023 FMSoft <https://www.fmsoft.cn>\n"
+            "\n"
+            "HBDInetd is free software: you can redistribute it and/or modify\n"
+            "it under the terms of the GNU General Public License as published by\n"
+            "the Free Software Foundation, either version 3 of the License, or\n"
+            "(at your option) any later version.\n"
+            "\n"
+            "HBDInetd is distributed in the hope that it will be useful,\n"
+            "but WITHOUT ANY WARRANTY; without even the implied warranty of\n"
+            "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n"
+            "GNU General Public License for more details.\n"
+            "You should have received a copy of the GNU General Public License\n"
+            "along with this program.  If not, see http://www.gnu.org/licenses/.\n"
+            );
+    fprintf (fp, "\n");
 }
+
+static ssize_t cb_stdio_write(void *ctxt, const void *buf, size_t count)
+{
+    FILE *fp = ctxt;
+    return fwrite(buf, 1, count, fp);
+}
+
+#define MY_VRT_OPTS \
+    (PCVRNT_SERIALIZE_OPT_SPACED | PCVRNT_SERIALIZE_OPT_PRETTY | \
+     PCVRNT_SERIALIZE_OPT_NOSLASHESCAPE)
+
+void dump_json_object(FILE *fp, purc_variant_t v)
+{
+    if (fp == stderr) {
+        purc_variant_serialize(v, run_info.dump_stm, 0, MY_VRT_OPTS, NULL);
+    }
+    else {
+        purc_rwstream_t stm;
+        stm = purc_rwstream_new_for_dump(fp, cb_stdio_write);
+        purc_rwstream_destroy(stm);
+    }
+}
+
+static void format_current_time (char* buff, size_t sz)
+{
+    struct tm tm;
+    time_t curr_time = time (NULL);
+
+    localtime_r (&curr_time, &tm);
+    strftime (buff, sz, "%H:%M", &tm);
+}
+
+/* Command line help. */
+static void print_usage(FILE *fp)
+{
+    fprintf(fp, "HBDInetd (%s) - the network interface manager for HybridOS\n\n", HBDBUS_VERSION_STRING);
+
+    fprintf(fp,
+            "Usage: "
+            "hbdinetd [ options ... ]\n\n"
+            ""
+            "The following options can be supplied to the command:\n\n"
+            ""
+            "  -a --app=<app_name>          - Connect to HBDInetd with the specified app name.\n"
+            "  -r --runner=<runner_name>    - Connect to HBDInetd with the specified runner name.\n"
+            "  -d --daemon                  - Run hbdinetd as a daemon.\n"
+            "  -v --verbose                 - Log verbose messages.\n"
+            "  -V --version                 - Display version information and exit.\n"
+            "  -C --copying                 - Display copying information and exit.\n"
+            "  -h --help                    - Show thi help.\n"
+            "\n"
+            );
+}
+
+static char short_options[] = "a:r:dvVh";
+static struct option long_opts[] = {
+    {"app"            , required_argument , NULL , 'a' } ,
+    {"runner"         , required_argument , NULL , 'r' } ,
+    {"daemon"         , no_argument       , NULL , 'd' } ,
+    {"verbos"         , no_argument       , NULL , 'v' } ,
+    {"version"        , no_argument       , NULL , 'V' } ,
+    {"copying"        , no_argument       , NULL , 'c' } ,
+    {"help"           , no_argument       , NULL , 'h' } ,
+    {0, 0, 0, 0}
+};
+
+static int read_option_args (int argc, char **argv)
+{
+    int o, idx = 0;
+
+    while ((o = getopt_long(argc, argv, short_options, long_opts, &idx)) >= 0) {
+        if (-1 == o || EOF == o)
+            break;
+        switch (o) {
+            case 'h':
+                print_usage(stdout);
+                return 1;
+
+            case 'C':
+                print_copying(stdout);
+                return 1;
+
+            case 'V':
+                fprintf (stdout, "HBDInetd: %s\n", HBDBUS_VERSION_STRING);
+                return 1;
+
+            case 'a':
+                if (strlen (optarg) < PURC_LEN_APP_NAME)
+                    strcpy (run_info.app_name, optarg);
+                break;
+
+            case 'r':
+                if (strlen (optarg) < PURC_LEN_RUNNER_NAME)
+                    strcpy (run_info.runner_name, optarg);
+                break;
+
+            case 'd':
+                run_info.daemon = true;
+                break;
+
+            case 'v':
+                run_info.verbose = true;
+                break;
+
+            case '?':
+                fprintf(stderr, "Run with the option `-h` for usage.\n");
+                return -1;
+
+            default:
+                goto bad_arg;
+        }
+    }
+
+    if (optind < argc) {
+        goto bad_arg;
+    }
+
+    return 0;
+
+bad_arg:
+    fprintf(stderr, "Bad command line option."
+            "Please run with the option `-h` for usage.\n");
+    return -1;
+}
+
+static int
+set_null_stdio(void)
+{
+    int fd = open ("/dev/null", O_RDWR);
+    if (fd < 0)
+        return -1;
+
+    if (dup2 (fd, 0) < 0 ||
+            dup2 (fd, 1) < 0 ||
+            dup2 (fd, 2) < 0) {
+        close (fd);
+        return -1;
+    }
+
+    close (fd);
+    return 0;
+}
+
+static uid_t
+daemonize(void)
+{
+    pid_t pid;
+
+    if (chdir ("/") != 0)
+        return -1;
+
+    if (set_null_stdio ())
+        return -1;
+
+    pid = fork ();
+    if (pid < 0)
+        return -1;
+
+    if (pid > 0)
+        _exit(0);
+
+    if (setsid () < 0)
+        return -1;
+
+    return 0;
+}
+
+int main(int argc, char **argv)
+{
+    int cnnfd = -1, maxfd, ret;
+    hbdbus_conn* conn;
+    fd_set rfds;
+    struct timeval tv;
+    char curr_time [16];
+
+    ret = read_option_args (argc, argv);
+    if (ret > 0)
+        return EXIT_SUCCESS;
+    else if (ret < 0)
+        return EXIT_FAILURE;
+
+    purc_log_facility_k facility = PURC_LOG_FACILITY_STDOUT;
+    if (run_info.daemon) {
+        if (daemonize()) {
+            fprintf(stderr, "Failed to daemonize HBDInetd: %s\n",
+                    strerror(errno));
+            return EXIT_FAILURE;
+        }
+        else {
+            uid_t euid = geteuid();
+            if (euid == 0) {
+                facility = PURC_LOG_FACILITY_SYSLOG;
+            }
+            else {
+                facility = PURC_LOG_FACILITY_FILE;
+            }
+        }
+    }
+
+    if (!run_info.app_name[0] ||
+            !purc_is_valid_app_name (run_info.app_name)) {
+        strcpy (run_info.app_name, APP_NAME);
+    }
+
+    if (!run_info.runner_name[0] ||
+            !purc_is_valid_runner_name (run_info.runner_name)) {
+        strcpy (run_info.runner_name, RUN_NAME);
+    }
+
+    ret = purc_init_ex(PURC_MODULE_EJSON, run_info.app_name,
+            run_info.runner_name, NULL);
+    if (ret != PURC_ERROR_OK) {
+        fprintf(stderr, "Failed to initialize the PurC instance: %s\n",
+            purc_get_error_message(ret));
+        return EXIT_FAILURE;
+    }
+
+    if (run_info.verbose) {
+        purc_enable_log_ex(PURC_LOG_MASK_DEFAULT | PURC_LOG_MASK_INFO, facility);
+    }
+    else {
+        purc_enable_log_ex(PURC_LOG_MASK_DEFAULT, facility);
+    }
+
+    purc_enable_log_ex(true, false);
+
+    run_info.dump_stm = purc_rwstream_new_for_dump(stderr, cb_stdio_write);
+
+    run_info.running = true;
+    if (setup_signals () < 0)
+        goto failed;
+
+    cnnfd = hbdbus_connect_via_unix_socket (HBDBUS_US_PATH,
+            run_info.app_name, run_info.runner_name, &conn);
+
+    if (cnnfd < 0) {
+        fprintf (stderr, "Failed to connect to HBDInetd server: %s\n",
+                hbdbus_get_err_message (cnnfd));
+        goto failed;
+    }
+
+    purc_assemble_endpoint_name(hbdbus_conn_own_host_name(conn),
+            run_info.app_name, run_info.runner_name,
+            run_info.self_endpoint);
+
+    hbdbus_conn_set_user_data (conn, &run_info);
+
+    format_current_time (curr_time, sizeof (curr_time) - 1);
+
+    maxfd = cnnfd;
+    do {
+        int retval;
+        char _new_clock [16];
+
+        FD_ZERO (&rfds);
+        FD_SET (cnnfd, &rfds);
+
+        tv.tv_sec = 0;
+        tv.tv_usec = 200 * 1000;
+        retval = select (maxfd + 1, &rfds, NULL, NULL, &tv);
+
+        if (retval == -1) {
+            if (errno == EINTR)
+                continue;
+            else
+                break;
+        }
+        else if (retval) {
+            if (FD_ISSET (cnnfd, &rfds)) {
+                int err_code = hbdbus_read_and_dispatch_packet (conn);
+                if (err_code) {
+                    fprintf (stderr, "Failed to read and dispatch packet: %s\n",
+                            hbdbus_get_err_message (err_code));
+                    if (err_code == HBDBUS_EC_IO)
+                        break;
+                }
+
+            }
+        }
+        else {
+            format_current_time (_new_clock, sizeof (_new_clock) - 1);
+            if (strcmp (_new_clock, curr_time)) {
+                hbdbus_fire_event (conn, "clock", _new_clock);
+                strcpy (curr_time, _new_clock);
+            }
+        }
+
+    } while (run_info.running);
+
+failed:
+    if (cnnfd >= 0)
+        hbdbus_disconnect (conn);
+
+    if (run_info.dump_stm)
+        purc_rwstream_destroy(run_info.dump_stm);
+
+    purc_cleanup();
+
+    return EXIT_SUCCESS;
+}
+

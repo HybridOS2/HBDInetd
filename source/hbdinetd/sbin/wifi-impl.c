@@ -1,9 +1,10 @@
+#include "hbdinetd.h"
+
 #include <hbdbus/hbdbus.h>
 
-#include "wifi_intf.h"
-#include "inetd.h"
+#include "wifi/wifi_intf.h"
+#include "wifi/wifi.h"
 #include "tools.h"
-#include "wifi.h"
 
 extern const char *op_errors[];
 extern hbdbus_conn * hbdbus_context_inetd;
