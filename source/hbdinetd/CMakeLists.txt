@@ -19,7 +19,6 @@ set(hbdinetd_DEFINITIONS
 HBDINETD_EXECUTABLE(hbdinetd)
 
 list(APPEND hbdinetd_SOURCES
-    "${HBDINETD_DIR}/utils/printbuf.c"
     "${HBDINETD_DIR}/utils/avl.c"
     "${HBDINETD_DIR}/utils/avl-cmp.c"
     "${HBDINETD_DIR}/utils/kvlist.c"

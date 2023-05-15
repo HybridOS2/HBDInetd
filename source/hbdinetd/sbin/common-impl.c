@@ -20,7 +20,6 @@
 ** along with this program.  If not, see http://www.gnu.org/licenses/.
 */
 
-#include "printbuf.h"
 #include "internal.h"
 #include "log.h"
 
@@ -95,14 +94,14 @@ done:
     if (jo)
         purc_variant_unref(jo);
 
-    struct printbuf my_buff, *pb = &my_buff;
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
 
-    if (printbuf_init(pb)) {
+    if (pcutils_printbuf_init(pb)) {
         *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
         return NULL;
     }
 
-    sprintbuf(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", err_code,
+    pcutils_printbuf_format(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", err_code,
             get_error_message(err_code));
     *ret_code = PCRDR_SC_OK;
     return pb->buf;
@@ -174,14 +173,14 @@ done:
     if (jo)
         purc_variant_unref(jo);
 
-    struct printbuf my_buff, *pb = &my_buff;
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
 
-    if (printbuf_init(pb)) {
+    if (pcutils_printbuf_init(pb)) {
         *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
         return NULL;
     }
 
-    sprintbuf(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", err_code,
+    pcutils_printbuf_format(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", err_code,
             get_error_message(err_code));
     *ret_code = PCRDR_SC_OK;
     return pb->buf;
@@ -229,13 +228,13 @@ static char *getDeviceStatus(hbdbus_conn* conn,
         return NULL;
     }
 
-    struct printbuf my_buff, *pb = &my_buff;
-    if (printbuf_init(pb)) {
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
+    if (pcutils_printbuf_init(pb)) {
         *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
         return NULL;
     }
 
-    printbuf_strappend(pb, "{\"data\":[");
+    pcutils_printbuf_strappend(pb, "{\"data\":[");
 
     int nr_devices = 0;
     const char* name;
@@ -284,7 +283,7 @@ static char *getDeviceStatus(hbdbus_conn* conn,
                     break;
             }
 
-            sprintbuf(pb,
+            pcutils_printbuf_format(pb,
                     "{"
                         "\"device\":\"%s\","
                         "\"type\":\"%s\","
@@ -317,11 +316,11 @@ static char *getDeviceStatus(hbdbus_conn* conn,
         }
     }
 
-    if (nr_devices)
-        printbuf_shrink(pb, 1);
+    if (nr_devices > 0)
+        pcutils_printbuf_shrink(pb, 1);
 
 done:
-    sprintbuf(pb, "],\"errCode\":%d, \"errMsg\":\"%s\"}",
+    pcutils_printbuf_format(pb, "],\"errCode\":%d, \"errMsg\":\"%s\"}",
             err_code, get_error_message(err_code));
     *ret_code = PCRDR_SC_OK;
     return pb->buf;
