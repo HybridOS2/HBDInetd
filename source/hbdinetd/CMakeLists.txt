@@ -34,6 +34,8 @@ list(APPEND hbdinetd_SOURCES
     "${HBDINETD_DIR}/wifi/wpa_supplicant_conf.c"
     "${HBDINETD_DIR}/sbin/main.c"
     "${HBDINETD_DIR}/sbin/network-device.c"
+    "${HBDINETD_DIR}/sbin/utils.c"
+    "${HBDINETD_DIR}/sbin/common-impl.c"
 #    "${HBDINETD_DIR}/sbin/wifi-impl.c"
 #    "${HBDINETD_DIR}/sbin/tools.c"
 #    "${HBDINETD_DIR}/sbin/wifi-ops.c"
@@ -42,6 +44,7 @@ list(APPEND hbdinetd_SOURCES
 set(hbdinetd_LIBRARIES
     PurC::PurC
     HBDBus::HBDBus
+    "${GLIB_LIBRARIES}"
 )
 
 set_target_properties(hbdinetd PROPERTIES

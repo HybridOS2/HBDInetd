@@ -26,6 +26,7 @@
 #include <purc/purc.h>
 #include <hbdbus/hbdbus.h>
 
+#include "hbdinetd.h"
 #include "kvlist.h"
 
 #define MAX_DEVICE_NUM                  10          // maximize of network devices is 10
@@ -61,14 +62,19 @@ struct hbd_ifaddr {
 };
 
 typedef struct network_device {
+    /* fixed info */
     int                 type;
+    unsigned int        bitrate;    /* only for ether wireless */
+    char               *hwaddr;     /* only for ether interface */
+    int (*up)(struct run_info *info, struct network_device* netdev);
+    int (*down)(struct run_info *info, struct network_device* netdev);
 
+    /* dynamic info */
+    int                 status;
     unsigned int        flags;
     struct hbd_ifaddr   ipv4;
     struct hbd_ifaddr   ipv6;
 
-    int (*up)(struct run_info *info, struct network_device* netdev);
-    int (*down)(struct run_info *info, struct network_device* netdev);
 } network_device;
 
 #if 0
@@ -126,10 +132,18 @@ extern "C" {
 extern struct run_info run_info;
 
 /* network-device.c */
+bool is_valid_interface_name(const char *ifname);
 int enumerate_network_devices(struct run_info *run_info);
 void cleanup_network_devices(struct run_info *run_info);
 
-/* tools.c */
+struct network_device *get_network_device_fixed_info(const char *ifname,
+    struct network_device *netdev);
+int update_network_device_dynamic_info(const char *ifname,
+    struct network_device *netdev);
+
+int update_network_device_info(struct run_info *info, const char *ifname);
+
+/* utils.c */
 const char *get_error_message(int errcode);
 
 /* common-impl.c */
@@ -143,5 +157,13 @@ void revoke_wifi_interfaces(hbdbus_conn *conn);
 #ifdef __cplusplus
 }
 #endif
+
+static inline struct network_device *
+retrieve_network_device_from_ifname(struct run_info *info, const char *ifname)
+{
+    void *data;
+    data = kvlist_get(&info->devices, ifname);
+    return *(struct network_device **)data;
+}
 
 #endif /* not defined _hbdinetd_internal_h */

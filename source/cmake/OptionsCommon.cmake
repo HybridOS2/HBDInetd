@@ -10,6 +10,7 @@ add_definitions(-DHBDINETD_API_VERSION_STRING="${HBDINETD_API_VERSION}")
 
 find_package(PurC 0.9.12 REQUIRED)
 find_package(HBDBus 2.0.0 REQUIRED)
+find_package(GLIB 2.44.0 REQUIRED)
 
 option(USE_THIN_ARCHIVES "Produce all static libraries as thin archives" ON)
 if (USE_THIN_ARCHIVES)

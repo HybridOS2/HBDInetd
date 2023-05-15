@@ -29,7 +29,7 @@
 // methods for All Network Devices 
 #define METHOD_NET_OPEN_DEVICE          "openDevice"
 #define METHOD_NET_CLOSE_DEVICE         "closeDevice"
-#define METHOD_NET_GET_DEVICES_STATUS   "getNetworkDevicesStatus"
+#define METHOD_NET_GET_DEVICE_STATUS    "getDeviceStatus"
 
 // methods for WiFi Device
 #define METHOD_WIFI_START_SCAN          "wifiStartScanHotspots"
@@ -51,27 +51,36 @@
 // events for Ethernet Device
 // events for Mobile Device
 
+#define DEVICE_TYPE_ETHER_MASK      0x1000
+
 // device type
 enum {
-    DEVICE_TYPE_UNKONWN = 0,
+#define DEVICE_TYPE_NAME_UNKNOWN            "unknown"
+    DEVICE_TYPE_UNKNOWN = 0,
+#define DEVICE_TYPE_NAME_LOOPBACK           "loopback"
     DEVICE_TYPE_LOOPBACK,
-    DEVICE_TYPE_ETHER_WIRED,
-    DEVICE_TYPE_ETHER_WIRELESS,
+#define DEVICE_TYPE_NAME_MOBILE             "mobile"
     DEVICE_TYPE_MOBILE,
+#define DEVICE_TYPE_NAME_ETHER_WIRED        "wired"
+    DEVICE_TYPE_ETHER_WIRED = DEVICE_TYPE_ETHER_MASK | 0x00,
+#define DEVICE_TYPE_NAME_ETHER_WIRELESS     "wifi"
+    DEVICE_TYPE_ETHER_WIRELESS = DEVICE_TYPE_ETHER_MASK | 0x01,
 };
-
-#define DEVICE_TYPE_DEFAULT             DEVICE_TYPE_WIRED
 
 // device status
 enum {
+#define DEVICE_STATUS_NAME_UNCERTAIN        "uncertain"
     DEVICE_STATUS_UNCERTAIN = 0,
+#define DEVICE_STATUS_NAME_DOWN             "down"
     DEVICE_STATUS_DOWN,
+#define DEVICE_STATUS_NAME_UP               "up"
     DEVICE_STATUS_UP,
+#define DEVICE_STATUS_NAME_RUNNING          "running"
     DEVICE_STATUS_RUNNING
 };
 
-// for error
-#define ERR_NO                          0
+// errors
+#define ERR_OK                          0
 #define ERR_LIBRARY_OPERATION           -1
 #define ERR_NONE_DEVICE_LIST            -2
 #define ERR_WRONG_PROCEDURE             -3

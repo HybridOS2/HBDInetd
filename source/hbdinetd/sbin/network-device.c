@@ -24,8 +24,10 @@
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
+#include <linux/wireless.h>
 #include <netdb.h>
 #include <ifaddrs.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <errno.h>
@@ -33,6 +35,232 @@
 #include "hbdinetd.h"
 #include "internal.h"
 #include "log.h"
+
+bool is_valid_interface_name(const char *ifname)
+{
+    return purc_is_valid_token(ifname, IFNAMSIZ - 1);
+}
+
+void cleanup_network_device(struct network_device *netdev)
+{
+    if (netdev->hwaddr) {
+        free(netdev->hwaddr);
+        netdev->hwaddr = NULL;
+    }
+
+    if (netdev->ipv4.addr) {
+        free(netdev->ipv4.addr);
+        netdev->ipv4.addr = NULL;
+    }
+
+    if (netdev->ipv4.netmask) {
+        free(netdev->ipv4.netmask);
+        netdev->ipv4.netmask = NULL;
+    }
+
+    if (netdev->ipv4.hbdifa_dstaddr) {
+        free(netdev->ipv4.hbdifa_dstaddr);
+        netdev->ipv4.hbdifa_dstaddr = NULL;
+    }
+
+    if (netdev->ipv6.addr) {
+        free(netdev->ipv6.addr);
+        netdev->ipv6.addr = NULL;
+    }
+
+    if (netdev->ipv6.netmask) {
+        free(netdev->ipv6.netmask);
+        netdev->ipv6.netmask = NULL;
+    }
+
+    if (netdev->ipv6.hbdifa_dstaddr) {
+        free(netdev->ipv6.hbdifa_dstaddr);
+        netdev->ipv6.hbdifa_dstaddr = NULL;
+    }
+}
+
+struct network_device *get_network_device_fixed_info(const char *ifname,
+        struct network_device *netdev)
+{
+    int fd = -1;
+    if (netdev == NULL) {
+        netdev = calloc(1, sizeof(*netdev));
+        if (netdev == NULL) {
+            LOG_ERROR("Failed calloc()\n");
+            goto failed;
+        }
+    }
+
+    if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
+        goto failed;
+
+    struct ifreq ifr;
+    strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
+    if (ioctl(fd, SIOCGIFFLAGS, &ifr) != 0) {
+        goto failed;
+    }
+
+    netdev->flags = ifr.ifr_flags;
+    if (netdev->flags & IFF_LOOPBACK) {
+        netdev->type = DEVICE_TYPE_LOOPBACK;
+    }
+    else if (ifname[0] == 'e') {
+        netdev->type = DEVICE_TYPE_ETHER_WIRED;
+    }
+    else if (ifname[0] == 'w') {
+        netdev->type = DEVICE_TYPE_ETHER_WIRELESS;
+    }
+    else {
+        /* TODO */
+        netdev->type = DEVICE_TYPE_UNKNOWN;
+    }
+
+    if (netdev->type & DEVICE_TYPE_ETHER_MASK) {
+        // get the mac of this interface
+        if (ioctl(fd, SIOCGIFHWADDR, &ifr)) {
+            LOG_ERROR("Failed ioctl(): %s\n", strerror(errno));
+            goto failed;
+        }
+
+        char ap[100];
+        snprintf(ap, sizeof(ap), "%02x:%02x:%02x:%02x:%02x:%02x",
+                (unsigned char)ifr.ifr_hwaddr.sa_data[0],
+                (unsigned char)ifr.ifr_hwaddr.sa_data[1],
+                (unsigned char)ifr.ifr_hwaddr.sa_data[2],
+                (unsigned char)ifr.ifr_hwaddr.sa_data[3],
+                (unsigned char)ifr.ifr_hwaddr.sa_data[4],
+                (unsigned char)ifr.ifr_hwaddr.sa_data[5]);
+        netdev->hwaddr = strdup(ap);
+    }
+    else if (netdev->type == DEVICE_TYPE_ETHER_WIRELESS) {
+        struct iwreq wrq;
+        strncpy(wrq.ifr_name, ifname, IFNAMSIZ - 1);
+        if (ioctl(fd, SIOCGIWRATE, &wrq)) {
+            LOG_ERROR("Failed ioctl(): %s\n", strerror(errno));
+            goto failed;
+        }
+        netdev->bitrate = wrq.u.bitrate.value;
+    }
+
+    close(fd);
+    fd = -1;
+
+failed:
+    if (fd >= 0)
+        close(fd);
+
+    return netdev;
+}
+
+int update_network_device_dynamic_info(const char *ifname,
+        struct network_device *netdev)
+{
+    struct ifaddrs *addresses = NULL;
+    if (getifaddrs(&addresses) == -1) {
+        LOG_ERROR("Failed getifaddrs(): %s\n", strerror(errno));
+        goto failed;
+    }
+
+    struct ifaddrs *address = addresses;
+    while (address) {
+        if (strcmp(address->ifa_name, ifname) == 0) {
+
+            netdev->flags = address->ifa_flags;
+            netdev->status = DEVICE_STATUS_UNCERTAIN;
+            if (netdev->flags & IFF_UP) {
+                if (netdev->flags & IFF_RUNNING)
+                    netdev->status = DEVICE_STATUS_RUNNING;
+                else
+                    netdev->status = DEVICE_STATUS_UP;
+            }
+            else
+                netdev->status = DEVICE_STATUS_DOWN;
+
+            size_t family_size;
+            int family = address->ifa_addr->sa_family;
+            struct hbd_ifaddr *hbdaddr;
+            if (family == AF_INET) {
+                family_size = sizeof(struct sockaddr_in);
+                hbdaddr = &netdev->ipv4;
+            }
+            else if (family == AF_INET6) {
+                family_size = sizeof(struct sockaddr_in6);
+                hbdaddr = &netdev->ipv6;
+            }
+            else {
+                family_size = 0;
+                hbdaddr = NULL;
+            }
+
+            if (hbdaddr) {
+                char ap[100];
+                getnameinfo(address->ifa_addr, family_size,
+                        ap, sizeof(ap), 0, 0, NI_NUMERICHOST);
+                hbdaddr->addr = strdup(ap);
+
+                getnameinfo(address->ifa_netmask, family_size,
+                        ap, sizeof(ap), 0, 0, NI_NUMERICHOST);
+                hbdaddr->netmask = strdup(ap);
+
+                if (address->ifa_flags & IFF_POINTOPOINT) {
+                    getnameinfo(address->ifa_dstaddr, family_size,
+                            ap, sizeof(ap), 0, 0, NI_NUMERICHOST);
+                    hbdaddr->hbdifa_dstaddr = strdup(ap);
+                }
+                else {
+                    getnameinfo(address->ifa_broadaddr, family_size,
+                            ap, sizeof(ap), 0, 0, NI_NUMERICHOST);
+                    hbdaddr->hbdifa_broadaddr = strdup(ap);
+                }
+            }
+        }
+
+        address = address->ifa_next;
+    }
+
+    freeifaddrs(addresses);
+    return 0;
+
+failed:
+    return -1;
+}
+
+int update_network_device_info(struct run_info *run_info, const char *ifname)
+{
+    void *data;
+    struct network_device *netdev;
+
+    data = kvlist_get(&run_info->devices, ifname);
+    if (data == NULL) {
+        netdev = calloc(1, sizeof(*netdev));
+        if (netdev == NULL) {
+            LOG_ERROR("Failed calloc()\n");
+            goto failed;
+        }
+
+        if (kvlist_set_ex(&run_info->devices, ifname, &netdev) == NULL) {
+            LOG_ERROR("Failed kvlist_set_ex()\n");
+            goto failed;
+        }
+
+        if (get_network_device_fixed_info(ifname, netdev) == NULL) {
+            goto failed;
+        }
+    }
+    else {
+        netdev = *(struct network_device **)data;
+        cleanup_network_device(netdev);
+    }
+
+    if (update_network_device_dynamic_info(ifname, netdev))
+        goto failed;
+
+    return 0;
+
+failed:
+    kvlist_remove(&run_info->devices, ifname);
+    return -1;
+}
 
 void cleanup_network_devices(struct run_info *run_info)
 {
@@ -42,30 +270,7 @@ void cleanup_network_devices(struct run_info *run_info)
         struct network_device *netdev;
         netdev = *(struct network_device **)data;
 
-        if (netdev->ipv4.addr) {
-            free(netdev->ipv4.addr);
-        }
-
-        if (netdev->ipv4.netmask) {
-            free(netdev->ipv4.netmask);
-        }
-
-        if (netdev->ipv4.hbdifa_dstaddr) {
-            free(netdev->ipv4.hbdifa_dstaddr);
-        }
-
-        if (netdev->ipv6.addr) {
-            free(netdev->ipv6.addr);
-        }
-
-        if (netdev->ipv6.netmask) {
-            free(netdev->ipv6.netmask);
-        }
-
-        if (netdev->ipv6.hbdifa_dstaddr) {
-            free(netdev->ipv6.hbdifa_dstaddr);
-        }
-
+        cleanup_network_device(netdev);
         free(netdev);
     }
 
@@ -74,8 +279,6 @@ void cleanup_network_devices(struct run_info *run_info)
 
 int enumerate_network_devices(struct run_info *run_info)
 {
-    (void)run_info;
-
     struct ifaddrs *addresses = NULL;
     if (getifaddrs(&addresses) == -1) {
         LOG_ERROR("Failed getifaddrs(): %s\n", strerror(errno));
@@ -111,7 +314,7 @@ int enumerate_network_devices(struct run_info *run_info)
             }
             else {
                 /* TODO */
-                netdev->type = DEVICE_TYPE_UNKONWN;
+                netdev->type = DEVICE_TYPE_UNKNOWN;
             }
 
             netdev->flags = address->ifa_flags;

@@ -20,369 +20,352 @@
 ** along with this program.  If not, see http://www.gnu.org/licenses/.
 */
 
-#include "hbdinetd.h"
+#include "printbuf.h"
+#include "internal.h"
 #include "log.h"
 
+#include <net/if.h>
+#include <glib.h>
+#include <assert.h>
+#include <errno.h>
+
 static char* openDevice(hbdbus_conn* conn, const char* from_endpoint,
-        const char* to_method, const char* method_param, int *err_code)
+        const char* to_method, const char* method_param, int *ret_code)
 {
+    (void)from_endpoint;
+    (void)to_method;
+
     purc_variant_t jo = NULL;
     purc_variant_t jo_tmp = NULL;
-    const char * device_name = NULL;
-    int index = -1;
-    int ret_code = ERR_NO;
-    char * ret_string = malloc(256);
-    WiFi_device * wifi_device = NULL;
+    const char *ifname = NULL;
+    int err_code = ERR_OK;
 
     // get device array
-    network_device *device = hbdbus_conn_get_user_data(conn);
-    if (device == NULL) {
-        ret_code = ERR_NONE_DEVICE_LIST;
-        goto failed;
-    }
+    struct run_info *info = hbdbus_conn_get_user_data(conn);
+    assert(info);
 
     assert(strcasecmp(to_method, METHOD_NET_OPEN_DEVICE) == 0);
 
-    // analyze json
-    jo = hbdbus_json_object_from_string(method_param, strlen(method_param), 2);
-    if (jo == NULL) {
-        ret_code = ERR_WRONG_JSON;
-        goto failed;
+    jo = purc_variant_make_from_json_string(method_param, strlen(method_param));
+    if (jo == NULL || !purc_variant_is_object(jo)) {
+        err_code = EINVAL;
+        goto done;
     }
 
-    // get device name
-    if (json_object_object_get_ex(jo, "device", &jo_tmp) == 0) {
-        ret_code = ERR_WRONG_JSON;
-        goto failed;
+    if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "device")) == NULL) {
+        err_code = ENOKEY;
+        goto done;
     }
 
-    device_name = json_object_get_string(jo_tmp);
-    if (device_name && strlen(device_name) == 0) {
-        ret_code = ERR_NO_DEVICE_NAME_IN_PARAM;
-        goto failed;
+    ifname = purc_variant_get_string_const(jo_tmp);
+    if (ifname == NULL || !is_valid_interface_name(ifname)) {
+        LOG_ERROR("Bad interface name: %s\n", ifname);
+        err_code = EINVAL;
+        goto done;
     }
 
-    // device does exist?
-    index = get_device_index(device, device_name);
-    if (index == -1) {
-        ret_code = ERR_NO_DEVICE_IN_SYSTEM;
-        goto failed;
+    struct network_device *netdev;
+    netdev = retrieve_network_device_from_ifname(info, ifname);
+    if (netdev == NULL) {
+        LOG_ERROR("Not existed interface name: %s\n", ifname);
+        err_code = ENOENT;
+        goto done;
     }
 
-    // whether openned
-    if (device[index].lib_handle) {
-        ret_code = ERR_NO;
-        goto failed;
+    if (update_network_device_dynamic_info(ifname, netdev)) {
+        LOG_ERROR("Failed to update interface information: %s\n", ifname);
+        err_code = errno;
+        goto done;
     }
 
-    // load the library
-    if (load_device_library(&device[index])) {
-        ret_code = ERR_LOAD_LIBRARY;
-        goto failed;
+    if (netdev->status == DEVICE_STATUS_RUNNING) {
+        err_code = 0;
+        goto done;
     }
 
-    get_if_info(&device[index]);
-
-    if (device[index].type == DEVICE_TYPE_WIFI) {
-        int loop = 0;
-        wifi_device = (WiFi_device *)device[index].device;
-
-        // if the interface is down, up it now
-        if ((device[index].status == DEVICE_STATUS_DOWN) ||
-                (device[index].status == DEVICE_STATUS_UNCERTAIN)) {
-            system("rfkill unblock wifi");
-            ret_code = ERR_OPEN_WIFI_DEVICE;
-            if(ifconfig_helper(device_name, 1))
-                goto failed;
-        }
-
-        get_if_info(&device[index]);
-        while ((device[index].status != DEVICE_STATUS_UP) &&
-                (device[index].status != DEVICE_STATUS_RUNNING)) {
-            if (loop > 200)
-                break;
-            usleep(10000);
-            get_if_info(&device[index]);
-        }
-
-        if ((device[index].status != DEVICE_STATUS_UP) &&
-                (device[index].status != DEVICE_STATUS_RUNNING)) {
-            ret_code = ERR_OPEN_WIFI_DEVICE;
-            goto failed;
-        }
-
-        // if the device is not openned
-        ret_code = ERR_NO;
-        ret_code = wifi_device->wifi_device_Ops->open(device_name, &(wifi_device->context));
-        if(ret_code != 0)
-            goto failed;
-
-        wifi_device->wifi_device_Ops->set_scan_interval(wifi_device->context, wifi_device->scan_time);
+    if (netdev->up == NULL) {
+        err_code = ENOTSUP;
+        goto done;
     }
-    else if (device[index].type == DEVICE_TYPE_ETHERNET) {
-        ret_code = ERR_OPEN_ETHERNET_DEVICE;
-        if (ifconfig_helper(device_name, 1))
-            goto failed;
-        ret_code = ERR_NO;
+    else {
+        err_code = netdev->up(info, netdev);
     }
-    else if (device[index].type == DEVICE_TYPE_MOBILE) {
-        ret_code = ERR_OPEN_MOBILE_DEVICE;
-        if (ifconfig_helper(device_name, 1))
-            goto failed;
-        ret_code = ERR_NO;
-    }
-    else
-        ret_code = ERR_DEVICE_TYPE;
 
-failed:
+done:
     if (jo)
         purc_variant_unref(jo);
 
-    memset(ret_string, 0, 256);
-    sprintf(ret_string, "{\"errCode\":%d, \"errMsg\":\"%s\"}",
-            ret_code, get_error_message(ret_code));
-    return ret_string;
+    struct printbuf my_buff, *pb = &my_buff;
 
+    if (printbuf_init(pb)) {
+        *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
+        return NULL;
+    }
+
+    sprintbuf(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", err_code,
+            get_error_message(err_code));
+    *ret_code = PCRDR_SC_OK;
+    return pb->buf;
 }
 
 static char *closeDevice(hbdbus_conn* conn, const char* from_endpoint,
-        const char* to_method, const char* method_param, int *err_code)
+        const char* to_method, const char* method_param, int *ret_code)
 {
+    (void)from_endpoint;
+    (void)to_method;
+
     purc_variant_t jo = NULL;
     purc_variant_t jo_tmp = NULL;
-    const char * device_name = NULL;
-    int index = -1;
-    int ret_code = 0;
-    char * ret_string = malloc(256);
-    WiFi_device * wifi_device = NULL;
+    const char *ifname = NULL;
+    int err_code = ERR_OK;
 
-    network_device * device = hbdbus_conn_get_user_data(conn);
-    if (device == NULL) {
-        ret_code = ERR_NONE_DEVICE_LIST;
-        goto failed;
-    }
+    // get device array
+    struct run_info *info = hbdbus_conn_get_user_data(conn);
+    assert(info);
 
     assert(strcasecmp(to_method, METHOD_NET_CLOSE_DEVICE) == 0);
 
-    jo = hbdbus_json_object_from_string(method_param, strlen(method_param), 2);
-    if(jo == NULL)
-    {
-        ret_code = ERR_WRONG_JSON;
-        goto failed;
+    jo = purc_variant_make_from_json_string(method_param, strlen(method_param));
+    if (jo == NULL || !purc_variant_is_object(jo)) {
+        err_code = EINVAL;
+        goto done;
     }
 
-    if(json_object_object_get_ex(jo, "device", &jo_tmp) == 0)
-    {
-        ret_code = ERR_WRONG_JSON;
-        goto failed;
+    if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "device")) == NULL) {
+        err_code = ENOKEY;
+        goto done;
     }
 
-    device_name = json_object_get_string(jo_tmp);
-    if(device_name && strlen(device_name) == 0)
-    {
-        ret_code = ERR_NO_DEVICE_NAME_IN_PARAM;
-        goto failed;
+    ifname = purc_variant_get_string_const(jo_tmp);
+    if (ifname == NULL || !is_valid_interface_name(ifname)) {
+        LOG_ERROR("Bad interface name: %s\n", ifname);
+        err_code = EINVAL;
+        goto done;
     }
 
-    index = get_device_index(device, device_name);
-    if(index == -1)
-    {
-        ret_code = ERR_NO_DEVICE_IN_SYSTEM;
-        goto failed;
+    struct network_device *netdev;
+    netdev = retrieve_network_device_from_ifname(info, ifname);
+    if (netdev == NULL) {
+        LOG_ERROR("Not existed interface name: %s\n", ifname);
+        err_code = ENOENT;
+        goto done;
     }
 
-    // whether closed 
-    if(device[index].lib_handle == NULL)
-    {
-        ret_code = ERR_NO;
-        goto failed;
+    if (update_network_device_dynamic_info(ifname, netdev)) {
+        LOG_ERROR("Failed to update interface information: %s\n", ifname);
+        err_code = errno;
+        goto done;
     }
 
-    if(device[index].type == DEVICE_TYPE_WIFI)
-    {
-        // whether library has been loaded
-        wifi_device = (WiFi_device *)device[index].device;
-        if(wifi_device == NULL)
-        {
-            ret_code = ERR_LOAD_LIBRARY;
-            goto failed;
-        }
-        else
-        {
-            // if the device is openned
-            wifi_device->wifi_device_Ops->disconnect(wifi_device->context);
-            wifi_device->wifi_device_Ops->close(wifi_device->context);
-
-            // reset hotspots list
-            wifi_hotspot * node = NULL;
-            wifi_hotspot * tempnode = NULL;
-
-            pthread_mutex_lock(&(wifi_device->list_mutex));
-            node = wifi_device->first_hotspot;
-            while(node)
-            {
-                tempnode = node->next;
-                free(node);
-                node = tempnode;
-            }
-            wifi_device->first_hotspot = NULL;
-            pthread_mutex_unlock(&(wifi_device->list_mutex));
-            wifi_device->context = NULL;
-            wifi_device->wifi_device_Ops = NULL;
-
-            get_if_info(&device[index]);
-        }
-    }
-    else if(device[index].type == DEVICE_TYPE_ETHERNET)
-    {
-        ret_code = ERR_CLOSE_ETHERNET_DEVICE;
-        if(ifconfig_helper(device_name, 0))
-            goto failed;
-        ret_code = ERR_NO;
-        device[index].status = DEVICE_STATUS_DOWN;
-    }
-    else if(device[index].type == DEVICE_TYPE_MOBILE)
-    {
-        ret_code = ERR_CLOSE_MOBILE_DEVICE;
-        if(ifconfig_helper(device_name, 0))
-            goto failed;
-        ret_code = ERR_NO;
-        device[index].status = DEVICE_STATUS_DOWN;
-    }
-    else
-    {
-        ret_code = ERR_DEVICE_TYPE; 
-        device[index].status = DEVICE_STATUS_DOWN;
+    if (netdev->status == DEVICE_STATUS_DOWN) {
+        err_code = 0;
+        goto done;
     }
 
-    dlclose(device[index].lib_handle);
-    device[index].lib_handle = NULL;
-//    ifconfig_helper(device_name, 0);
-failed:
-    if(jo)
+    if (netdev->down == NULL) {
+        err_code = ENOTSUP;
+        goto done;
+    }
+    else {
+        err_code = netdev->down(info, netdev);
+    }
+
+done:
+    if (jo)
         purc_variant_unref(jo);
 
-    memset(ret_string, 0, 256);
-    sprintf(ret_string, "{\"errCode\":%d, \"errMsg\":\"%s\"}",
-            ret_code, get_error_message(ret_code));
-    return ret_string;
-}
+    struct printbuf my_buff, *pb = &my_buff;
 
-static char *getNetworkDevicesStatus(hbdbus_conn* conn,
-        const char* from_endpoint, const char* to_method,
-        const char* method_param, int *err_code)
-{
-    int i = 0;
-    int ret_code = 0;
-    char * ret_string = malloc(4096);
-    char * type = NULL;
-    char * status = NULL;
-    int first = true;
-
-    memset(ret_string, 0, 4096);
-    sprintf(ret_string, "{\"data\":[");
-
-    network_device * device = hbdbus_conn_get_user_data(conn);
-    if (device == NULL) {
-        ret_code = ERR_NONE_DEVICE_LIST;
-        goto failed;
+    if (printbuf_init(pb)) {
+        *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
+        return NULL;
     }
 
-    assert(strcasecmp(to_method, METHOD_NET_GET_DEVICES_STATUS) == 0);
+    sprintbuf(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", err_code,
+            get_error_message(err_code));
+    *ret_code = PCRDR_SC_OK;
+    return pb->buf;
+}
 
-    for (i = 0; i < MAX_DEVICE_NUM; i++) {
-        // get interface information
-        get_if_info(&device[i]);
+static char *getDeviceStatus(hbdbus_conn* conn,
+        const char* from_endpoint, const char* to_method,
+        const char* method_param, int *ret_code)
+{
+    (void)from_endpoint;
+    (void)to_method;
 
-        if (device[i].ifname[0]) {
-            if (device[i].type == DEVICE_TYPE_WIFI)
-                type = "wifi";
-            else if (device[i].type == DEVICE_TYPE_ETHERNET)
-                type = "ethernet";
-            else if (device[i].type == DEVICE_TYPE_MOBILE)
-                type = "mobile";
-            else if (device[i].type == DEVICE_TYPE_LO)
-                type = "lo";
-            else
-                continue;
+    purc_variant_t jo = NULL;
+    purc_variant_t jo_tmp = NULL;
+    const char *ifname = NULL;
+    int err_code = ERR_OK;
 
-            if ((device[i].status == DEVICE_STATUS_UNCERTAIN) ||
-                    (device[i].status == DEVICE_STATUS_DOWN))
-                status = "down";
-            else if (device[i].status == DEVICE_STATUS_UP)
-                status = "up";
-            else if (device[i].status == DEVICE_STATUS_RUNNING)
-                status = "link";
-            else
-                status = "down";
+    // get device array
+    struct run_info *info = hbdbus_conn_get_user_data(conn);
+    assert(info);
 
-            if (!first) {
-                sprintf(ret_string + strlen(ret_string), ",");
+    assert(strcasecmp(to_method, METHOD_NET_GET_DEVICE_STATUS) == 0);
+
+    jo = purc_variant_make_from_json_string(method_param, strlen(method_param));
+    if (jo == NULL || !purc_variant_is_object(jo)) {
+        err_code = EINVAL;
+        goto done;
+    }
+
+    if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "device")) == NULL) {
+        err_code = ENOKEY;
+        goto done;
+    }
+
+    ifname = purc_variant_get_string_const(jo_tmp);
+    if (ifname == NULL || !is_valid_interface_name(ifname)) {
+        LOG_ERROR("Bad interface name: %s\n", ifname);
+        err_code = EINVAL;
+        goto done;
+    }
+
+    GPatternSpec* spec = g_pattern_spec_new(ifname);
+    if (spec == NULL) {
+        *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
+        return NULL;
+    }
+
+    struct printbuf my_buff, *pb = &my_buff;
+    if (printbuf_init(pb)) {
+        *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
+        return NULL;
+    }
+
+    printbuf_strappend(pb, "{\"data\":[");
+
+    int nr_devices = 0;
+    const char* name;
+    void *data;
+    kvlist_for_each(&info->devices, name, data) {
+        struct network_device *netdev;
+        netdev = *(struct network_device **)data;
+
+        if (g_pattern_spec_match_string(spec, name)) {
+            const char *type;
+            const char *status;
+
+            switch (netdev->type) {
+                case DEVICE_TYPE_LOOPBACK:
+                    type = DEVICE_TYPE_NAME_LOOPBACK;
+                    break;
+                case DEVICE_TYPE_MOBILE:
+                    type = DEVICE_TYPE_NAME_MOBILE;
+                    break;
+                case DEVICE_TYPE_ETHER_WIRED:
+                    type = DEVICE_TYPE_NAME_ETHER_WIRED;
+                    break;
+                case DEVICE_TYPE_ETHER_WIRELESS:
+                    type = DEVICE_TYPE_NAME_ETHER_WIRELESS;
+                    break;
+                default:
+                    type = DEVICE_TYPE_NAME_UNKNOWN;
+                    break;
             }
-            first = false;
 
-            sprintf(ret_string + strlen(ret_string),
+            switch (netdev->status) {
+                case DEVICE_STATUS_DOWN:
+                    status = DEVICE_STATUS_NAME_DOWN;
+                    break;
+
+                case DEVICE_STATUS_UP:
+                    status = DEVICE_STATUS_NAME_UP;
+                    break;
+
+                case DEVICE_STATUS_RUNNING:
+                    status = DEVICE_STATUS_NAME_RUNNING;
+                    break;
+
+                default:
+                    status = DEVICE_STATUS_NAME_UNCERTAIN;
+                    break;
+            }
+
+            sprintbuf(pb,
                     "{"
                         "\"device\":\"%s\","
                         "\"type\":\"%s\","
                         "\"status\":\"%s\","
-                        "\"mac\":\"%s\","
-                        "\"ip\":\"%s\","
-                        "\"broadcast\":\"%s\","
-                        "\"subnetmask\":\"%s\""
-                    "}",
-                    device[i].ifname, type, status, device[i].mac,
-                    device[i].ip, device[i].broadAddr, device[i].subnetMask);
+                        "\"hardwareAddr\":\"%s\","
+                        "\"inet\":{\"address\":\"%s\","
+                            "\"netmask\":\"%s\","
+                            "\"broadcastAddr\":\"%s\","
+                            "\"destinationAddr\":\"%s\""
+                        "},"
+                        "\"inet6\":{\"address\":\"%s\","
+                            "\"netmask\":\"%s\","
+                            "\"broadcastAddr\":\"%s\","
+                            "\"destinationAddr\":\"%s\""
+                        "}"
+                    "},",
+                    name,
+                    type,
+                    status,
+                    netdev->hwaddr ? netdev->hwaddr : "",
+                    netdev->ipv4.addr ? netdev->ipv4.addr : "",
+                    netdev->ipv4.netmask ? netdev->ipv4.netmask : "",
+                    (netdev->flags & IFF_POINTOPOINT) ? "" : netdev->ipv4.hbdifa_broadaddr,
+                    (netdev->flags & IFF_POINTOPOINT) ? netdev->ipv4.hbdifa_dstaddr : "",
+                    netdev->ipv6.addr ? netdev->ipv6.addr : "",
+                    netdev->ipv6.netmask ? netdev->ipv6.netmask : "",
+                    (netdev->flags & IFF_POINTOPOINT) ? "" : netdev->ipv6.hbdifa_broadaddr,
+                    (netdev->flags & IFF_POINTOPOINT) ? netdev->ipv6.hbdifa_dstaddr : "");
+            nr_devices++;
         }
-        else
-            break;
-
     }
-failed:
-    sprintf(ret_string + strlen(ret_string), "],\"errCode\":%d, \"errMsg\":\"%s\"}",
-            ret_code, get_error_message(ret_code));
-    return ret_string;
+
+    if (nr_devices)
+        printbuf_shrink(pb, 1);
+
+done:
+    sprintbuf(pb, "],\"errCode\":%d, \"errMsg\":\"%s\"}",
+            err_code, get_error_message(err_code));
+    *ret_code = PCRDR_SC_OK;
+    return pb->buf;
 }
 
 int register_common_interfaces(hbdbus_conn * conn)
 {
-    int ret_code = 0;
+    int err_code = 0;
 
-    ret_code = hbdbus_register_procedure(conn, METHOD_NET_OPEN_DEVICE,
+    err_code = hbdbus_register_procedure(conn, METHOD_NET_OPEN_DEVICE,
             NULL, NULL, openDevice);
-    if (ret_code) {
+    if (err_code) {
         LOG_ERROR("WIFI DAEMON: Error for register procedure %s, %s.\n",
-                METHOD_NET_OPEN_DEVICE, hbdbus_get_err_message(ret_code));
+                METHOD_NET_OPEN_DEVICE, hbdbus_get_err_message(err_code));
         goto failed;
     }
 
-    ret_code = hbdbus_register_procedure(conn, METHOD_NET_CLOSE_DEVICE,
+    err_code = hbdbus_register_procedure(conn, METHOD_NET_CLOSE_DEVICE,
             NULL, NULL, closeDevice);
-    if (ret_code) {
+    if (err_code) {
         LOG_ERROR("WIFI DAEMON: Error for register procedure %s, %s.\n",
-                METHOD_NET_CLOSE_DEVICE, hbdbus_get_err_message(ret_code));
+                METHOD_NET_CLOSE_DEVICE, hbdbus_get_err_message(err_code));
         goto failed;
     }
 
-    ret_code = hbdbus_register_procedure(conn, METHOD_NET_GET_DEVICES_STATUS,
-            NULL, NULL, getNetworkDevicesStatus);
-    if (ret_code) {
+    err_code = hbdbus_register_procedure(conn, METHOD_NET_GET_DEVICE_STATUS,
+            NULL, NULL, getDeviceStatus);
+    if (err_code) {
         LOG_ERROR("WIFI DAEMON: Error for register procedure %s, %s.\n",
-                METHOD_NET_GET_DEVICES_STATUS, hbdbus_get_err_message(ret_code));
+                METHOD_NET_GET_DEVICES_STATUS, hbdbus_get_err_message(err_code));
         goto failed;
     }
 
-    ret_code = hbdbus_register_event(conn, NETWORKDEVICECHANGED, NULL, NULL);
-    if (ret_code) {
+    err_code = hbdbus_register_event(conn, NETWORKDEVICECHANGED, NULL, NULL);
+    if (err_code) {
         LOG_ERROR("WIFI DAEMON: Error for register event %s, %s.\n",
-                NETWORKDEVICECHANGED, hbdbus_get_err_message(ret_code));
+                NETWORKDEVICECHANGED, hbdbus_get_err_message(err_code));
         goto failed;
     }
 
     return 0;
 
 failed:
-    return ret_code;
+    return err_code;
 }
 
 void revoke_common_interfaces(hbdbus_conn *conn)
@@ -390,6 +373,6 @@ void revoke_common_interfaces(hbdbus_conn *conn)
     hbdbus_revoke_event(conn, NETWORKDEVICECHANGED);
     hbdbus_revoke_procedure(conn, METHOD_NET_OPEN_DEVICE);
     hbdbus_revoke_procedure(conn, METHOD_NET_CLOSE_DEVICE);
-    hbdbus_revoke_procedure(conn, METHOD_NET_GET_DEVICES_STATUS);
+    hbdbus_revoke_procedure(conn, METHOD_NET_GET_DEVICE_STATUS);
 }
 
