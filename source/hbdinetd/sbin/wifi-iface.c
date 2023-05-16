@@ -48,7 +48,8 @@ static char *wifiStartScanHotspots(hbdbus_conn* conn,
     }
 
     if (netdev->status == DEVICE_STATUS_DOWN ||
-            netdev->status == DEVICE_STATUS_UNCERTAIN) {
+            netdev->status == DEVICE_STATUS_UNCERTAIN ||
+            netdev->ctxt == NULL) {
         errcode = ENETDOWN;
         goto done;
     }
@@ -83,7 +84,7 @@ static char *wifiGetHotspotList(hbdbus_conn* conn,
     int errcode = ERR_OK;
     struct run_info *info = hbdbus_conn_get_user_data(conn);
     assert(info);
-    assert(strcasecmp(to_method, METHOD_WIFI_START_SCAN) == 0);
+    assert(strcasecmp(to_method, METHOD_WIFI_GET_HOTSPOTS) == 0);
 
     struct pcutils_printbuf my_buff, *pb = &my_buff;
     if (pcutils_printbuf_init(pb)) {
@@ -101,7 +102,8 @@ static char *wifiGetHotspotList(hbdbus_conn* conn,
     }
 
     if (netdev->status == DEVICE_STATUS_DOWN ||
-            netdev->status == DEVICE_STATUS_UNCERTAIN) {
+            netdev->status == DEVICE_STATUS_UNCERTAIN ||
+            netdev->ctxt == NULL) {
         errcode = ENETDOWN;
         goto done;
     }
@@ -169,7 +171,8 @@ static char *wifiStopScanHotspots(hbdbus_conn* conn,
     }
 
     if (netdev->status == DEVICE_STATUS_DOWN ||
-            netdev->status == DEVICE_STATUS_UNCERTAIN) {
+            netdev->status == DEVICE_STATUS_UNCERTAIN ||
+            netdev->ctxt == NULL) {
         errcode = ENETDOWN;
         goto done;
     }
@@ -197,118 +200,88 @@ done:
 static char *wifiConnect(hbdbus_conn* conn, const char* from_endpoint,
         const char* to_method, const char* method_param, int *ret_code)
 {
+    (void)from_endpoint;
+    (void)to_method;
+
+    int errcode = ERR_OK;
+    struct run_info *info = hbdbus_conn_get_user_data(conn);
+    assert(info);
+    assert(strcasecmp(to_method, METHOD_WIFI_CONNECT_AP) == 0);
+
     purc_variant_t jo = NULL;
     purc_variant_t jo_tmp = NULL;
-    const char * device_name = NULL;
-    const char * ssid = NULL;
-    const char * password = NULL;
-    int index = -1;
-    int errcode = ERR_OK;
-    char * ret_string = malloc(4096);
 
-    // get device array
-    network_device * device = hbdbus_conn_get_user_data(conn);
-    if(device == NULL)
-    {
-        errcode = ERR_NONE_DEVICE_LIST;
-        goto failed;
-    }
-
-    // get procedure name
-    if(strncasecmp(to_method, METHOD_WIFI_CONNECT_AP, strlen(METHOD_WIFI_CONNECT_AP)))
-    {
-        errcode = ERR_WRONG_PROCEDURE;
-        goto failed;
-    }
-
-    // analyze json
-    jo = hbdbus_json_object_from_string(method_param, strlen(method_param), 2);
-    if(jo == NULL)
-    {
+    jo = purc_variant_make_from_json_string(method_param, strlen(method_param));
+    if (jo == NULL || !purc_variant_is_object(jo)) {
         errcode = ERR_WRONG_JSON;
-        goto failed;
+        goto done;
     }
 
-    // get device name
-    if(json_object_object_get_ex(jo, "device", &jo_tmp) == 0)
-    {
-        errcode = ERR_WRONG_JSON;
-        goto failed;
+    if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "device")) == NULL) {
+        errcode = ENOKEY;
+        goto done;
     }
 
-    device_name = json_object_get_string(jo_tmp);
-    if(device_name && strlen(device_name) == 0)
-    {
-        errcode = ERR_NO_DEVICE_NAME_IN_PARAM;
-        goto failed;
+    const char *ifname = purc_variant_get_string_const(jo_tmp);
+    if (ifname == NULL || !is_valid_interface_name(ifname)) {
+        LOG_ERROR("Bad interface name: %s\n", ifname);
+        errcode = EINVAL;
+        goto done;
     }
 
-    // device does exist?
-    index = get_device_index(device, device_name);
-    if(index == -1)
-    {
-        errcode = ERR_NO_DEVICE_IN_SYSTEM;
-        goto failed;
+    if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "ssid")) == NULL) {
+        errcode = ENOKEY;
+        goto done;
     }
 
-    if(device[index].type != DEVICE_TYPE_WIFI)
-    {
-        errcode = ERR_NOT_WIFI_DEVICE;
-        goto failed;
-    }
-    
-    // get WiFi ssid 
-    if(json_object_object_get_ex(jo, "ssid", &jo_tmp) == 0)
-    {
-        errcode = ERR_WRONG_JSON;
-        goto failed;
+    const char *ssid = purc_variant_get_string_const(jo_tmp);
+    if (ssid == NULL) {
+        LOG_ERROR("SSID not specified\n");
+        errcode = EINVAL;
+        goto done;
     }
 
-    ssid = json_object_get_string(jo_tmp);
-    if(ssid && strlen(ssid) == 0)
-    {
-        errcode = ERR_NO_DEVICE_NAME_IN_PARAM;
-        goto failed;
+    struct network_device *netdev;
+    netdev = retrieve_network_device_from_ifname(info, ifname);
+    if (netdev == NULL) {
+        LOG_ERROR("Not existed interface name: %s\n", ifname);
+        errcode = ENOENT;
+        goto done;
     }
 
-    // get WiFi password 
-    if(json_object_object_get_ex(jo, "password", &jo_tmp) == 0)
-    {
-        errcode = ERR_WRONG_JSON;
-        goto failed;
+    if (netdev->type != DEVICE_TYPE_ETHER_WIRELESS) {
+        errcode = EINVAL;
+        goto done;
     }
 
-    password = json_object_get_string(jo_tmp);
-    if(password && strlen(password) == 0)
-    {
-        errcode = ERR_NO_DEVICE_NAME_IN_PARAM;
-        goto failed;
+    if (update_network_device_dynamic_info(ifname, netdev)) {
+        LOG_ERROR("Failed to update interface information: %s\n", ifname);
+        errcode = errno;
+        goto done;
     }
 
-    if(device[index].lib_handle == NULL)
-    {
-        errcode = ERR_LOAD_LIBRARY;
-        goto failed;
+    if (netdev->status == DEVICE_STATUS_DOWN ||
+            netdev->status == DEVICE_STATUS_UNCERTAIN ||
+            netdev->ctxt == NULL) {
+        errcode = ENETDOWN;
+        goto done;
     }
 
-    wifi_device = (WiFi_device *)device[index].device;
-    if(wifi_device->context == NULL)
-    {
-        errcode = ERR_DEVICE_NOT_OPENNED;
-        goto failed;
+    if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "password")) == NULL) {
+        errcode = ENOKEY;
+        goto done;
     }
 
-    if((device[index].status == DEVICE_STATUS_DOWN) || (device[index].status == DEVICE_STATUS_UNCERTAIN))
-    {
-        errcode = ERR_OPEN_WIFI_DEVICE;
-        if(ifconfig_helper(device_name, 1))
-            goto failed;
+    const char *password = purc_variant_get_string_const(jo_tmp);
+    if (password == NULL) {
+        LOG_ERROR("Password not specified\n");
+        errcode = EINVAL;
+        goto done;
     }
 
-    errcode = wifi_device->wifi_device_Ops->connect(wifi_device->context, ssid, password);
-
-    if(errcode == 0)
-    {
+    errcode = netdev->wifi_ops->connect(netdev->ctxt, ssid, password);
+    if (errcode == 0) {
+#if 0
         char reply[512];
         int reply_length = 512;
         int i = 0;
@@ -374,121 +347,71 @@ static char *wifiConnect(hbdbus_conn* conn, const char* from_endpoint,
             }
             pthread_mutex_unlock(&(wifi_device->list_mutex));
         }
+#endif
     }
-failed:
-    if(jo)
-        json_object_put (jo);
 
-    memset(ret_string, 0, 4096);
-    sprintf(ret_string, "{\"errCode\":%d, \"errMsg\":\"%s\"}",
+done:
+    if (jo)
+        purc_variant_unref(jo);
+
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
+
+    if (pcutils_printbuf_init(pb)) {
+        *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
+        return NULL;
+    }
+
+    pcutils_printbuf_format(pb,
+            "{\"errCode\":%d, \"errMsg\":\"%s\"}",
             errcode, get_error_message(errcode));
-    return ret_string;
+    *ret_code = PCRDR_SC_OK;
+    return pb->buf;
 }
 
 static char *wifiDisconnect(hbdbus_conn* conn, const char* from_endpoint,
         const char* to_method, const char* method_param, int *ret_code)
 {
-    purc_variant_t jo = NULL;
-    purc_variant_t jo_tmp = NULL;
-    const char * device_name = NULL;
-    int index = -1;
+    (void)from_endpoint;
+    (void)to_method;
+
     int errcode = ERR_OK;
-    char * ret_string = malloc(4096);
-    WiFi_device * wifi_device = NULL;
+    struct run_info *info = hbdbus_conn_get_user_data(conn);
+    assert(info);
+    assert(strcasecmp(to_method, METHOD_WIFI_DISCONNECT_AP) == 0);
 
-    // get device array
-    network_device * device = hbdbus_conn_get_user_data(conn);
-    if(device == NULL)
-    {
-        errcode = ERR_NONE_DEVICE_LIST;
-        goto failed;
+    struct network_device *netdev;
+    netdev = check_network_device(info, method_param,
+            DEVICE_TYPE_ETHER_WIRELESS, &errcode);
+    if (netdev == NULL) {
+        goto done;
     }
 
-    // get procedure name
-    if(strncasecmp(to_method, METHOD_WIFI_DISCONNECT_AP, strlen(METHOD_WIFI_CONNECT_AP)))
-    {
-        errcode = ERR_WRONG_PROCEDURE;
-        goto failed;
+    if (netdev->status == DEVICE_STATUS_RUNNING) {
+        errcode = ENONET;
+        goto done;
     }
 
-    // analyze json
-    jo = hbdbus_json_object_from_string(method_param, strlen(method_param), 2);
-    if(jo == NULL)
-    {
-        errcode = ERR_WRONG_JSON;
-        goto failed;
+    errcode = netdev->wifi_ops->disconnect(netdev->ctxt);
+    if (errcode) {
+        goto done;
     }
 
-    // get device name
-    if(json_object_object_get_ex(jo, "device", &jo_tmp) == 0)
-    {
-        errcode = ERR_WRONG_JSON;
-        goto failed;
+done:
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
+
+    if (pcutils_printbuf_init(pb)) {
+        *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
+        return NULL;
     }
 
-    device_name = json_object_get_string(jo_tmp);
-    if(device_name && strlen(device_name) == 0)
-    {
-        errcode = ERR_NO_DEVICE_NAME_IN_PARAM;
-        goto failed;
-    }
-
-    // device does exist?
-    index = get_device_index(device, device_name);
-    if(index == -1)
-    {
-        errcode = ERR_NO_DEVICE_IN_SYSTEM;
-        goto failed;
-    }
-
-    if(device[index].type != DEVICE_TYPE_WIFI)
-    {
-        errcode = ERR_NOT_WIFI_DEVICE;
-        goto failed;
-    }
-
-    if(device[index].lib_handle == NULL)
-    {
-        errcode = ERR_LOAD_LIBRARY;
-        goto failed;
-    }
-
-    wifi_device = (WiFi_device *)device[index].device;
-    if(wifi_device->context == NULL)
-    {
-        errcode = ERR_DEVICE_NOT_OPENNED;
-        goto failed;
-    }
-
-    wifi_device->wifi_device_Ops->disconnect(wifi_device->context);
-
-    memset(wifi_device->bssid, 0, HOTSPOT_STRING_LENGTH);
-    wifi_device->signal = 0;
-
-    // remove hot spots list
-    wifi_hotspot * node = NULL;
-    wifi_hotspot * tempnode = NULL;
-
-    pthread_mutex_lock(&(wifi_device->list_mutex));
-    node = wifi_device->first_hotspot;
-    while(node)
-    {
-        tempnode = node->next;
-        free(node);
-        node = tempnode;
-    }
-    wifi_device->first_hotspot = NULL;
-    pthread_mutex_unlock(&(wifi_device->list_mutex));
-
-failed:
-    if(jo)
-        json_object_put (jo);
-
-    sprintf(ret_string, "{\"errCode\":%d, \"errMsg\":\"%s\"}", errcode,
-            get_error_message(errcode));
-    return ret_string;
+    pcutils_printbuf_format(pb,
+            "{\"errCode\":%d, \"errMsg\":\"%s\"}",
+            errcode, get_error_message(errcode));
+    *ret_code = PCRDR_SC_OK;
+    return pb->buf;
 }
 
+#if 0
 static char *wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint,
         const char* to_method, const char* method_param, int *ret_code)
 {
@@ -521,7 +444,7 @@ static char *wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint,
     }
 
     // analyze json
-    jo = hbdbus_json_object_from_string(method_param, strlen(method_param), 2);
+    jo = purc_variant_make_from_json_string(method_param, strlen(method_param), 2);
     if(jo == NULL)
     {
         errcode = ERR_WRONG_JSON;
@@ -700,7 +623,7 @@ static char *wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint,
 
 failed:
     if(jo)
-        json_object_put (jo);
+        purc_variant_unref(jo);
 
     sprintf(ret_string + strlen(ret_string), "},");
     sprintf(ret_string + strlen(ret_string),
@@ -710,7 +633,6 @@ failed:
     return ret_string;
 }
 
-#if 0
 void report_wifi_scan_info(char * device_name, int type, void * results, int number)
 {
     wifi_hotspot * node = NULL;
