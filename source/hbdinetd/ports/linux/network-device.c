@@ -109,6 +109,9 @@ struct network_device *get_network_device_fixed_info(const char *ifname,
     }
     else if (ifname[0] == 'w') {
         netdev->type = DEVICE_TYPE_ETHER_WIRELESS;
+        netdev->on = wifi_device_on;
+        netdev->off = wifi_device_off;
+        netdev->check = wifi_device_check;
     }
     else {
         /* TODO */

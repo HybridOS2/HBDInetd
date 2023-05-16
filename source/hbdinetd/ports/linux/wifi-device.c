@@ -38,13 +38,22 @@
 
 int wifi_device_on(struct run_info *info, struct network_device *netdev)
 {
+    (void)info;
+    (void)netdev;
+    return 0;
 }
 
 int wifi_device_off(struct run_info *info, struct network_device *netdev)
 {
+    (void)info;
+    (void)netdev;
+    return 0;
 }
 
 int wifi_device_check(struct run_info *info, struct network_device *netdev)
 {
+    (void)info;
+    (void)netdev;
+    return 0;
 }
 
