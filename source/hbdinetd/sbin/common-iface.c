@@ -1,5 +1,5 @@
 /*
-** common-impl.c -- The implementation of common interfaces.
+** common-iface.c -- The implementation of common interfaces.
 **
 ** Copyright (C) 2023 FMSoft (http://www.fmsoft.cn)
 **
@@ -33,67 +33,33 @@ static char* openDevice(hbdbus_conn* conn, const char* from_endpoint,
 {
     (void)from_endpoint;
     (void)to_method;
-
-    purc_variant_t jo = NULL;
-    purc_variant_t jo_tmp = NULL;
-    const char *ifname = NULL;
-    int err_code = ERR_OK;
-
-    // get device array
+    int errcode = ERR_OK;
     struct run_info *info = hbdbus_conn_get_user_data(conn);
-    assert(info);
 
+    assert(info);
     assert(strcasecmp(to_method, METHOD_NET_OPEN_DEVICE) == 0);
 
-    jo = purc_variant_make_from_json_string(method_param, strlen(method_param));
-    if (jo == NULL || !purc_variant_is_object(jo)) {
-        err_code = EINVAL;
-        goto done;
-    }
-
-    if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "device")) == NULL) {
-        err_code = ENOKEY;
-        goto done;
-    }
-
-    ifname = purc_variant_get_string_const(jo_tmp);
-    if (ifname == NULL || !is_valid_interface_name(ifname)) {
-        LOG_ERROR("Bad interface name: %s\n", ifname);
-        err_code = EINVAL;
-        goto done;
-    }
-
     struct network_device *netdev;
-    netdev = retrieve_network_device_from_ifname(info, ifname);
+    netdev = check_network_device(info, method_param, DEVICE_TYPE_UNKNOWN,
+            &errcode);
     if (netdev == NULL) {
-        LOG_ERROR("Not existed interface name: %s\n", ifname);
-        err_code = ENOENT;
-        goto done;
-    }
-
-    if (update_network_device_dynamic_info(ifname, netdev)) {
-        LOG_ERROR("Failed to update interface information: %s\n", ifname);
-        err_code = errno;
         goto done;
     }
 
     if (netdev->status == DEVICE_STATUS_RUNNING) {
-        err_code = 0;
+        errcode = 0;
         goto done;
     }
 
-    if (netdev->up == NULL) {
-        err_code = ENOTSUP;
+    if (netdev->on == NULL) {
+        errcode = ENOTSUP;
         goto done;
     }
     else {
-        err_code = netdev->up(info, netdev);
+        errcode = netdev->on(info, netdev);
     }
 
 done:
-    if (jo)
-        purc_variant_unref(jo);
-
     struct pcutils_printbuf my_buff, *pb = &my_buff;
 
     if (pcutils_printbuf_init(pb)) {
@@ -101,8 +67,8 @@ done:
         return NULL;
     }
 
-    pcutils_printbuf_format(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", err_code,
-            get_error_message(err_code));
+    pcutils_printbuf_format(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", errcode,
+            get_error_message(errcode));
     *ret_code = PCRDR_SC_OK;
     return pb->buf;
 }
@@ -112,67 +78,33 @@ static char *closeDevice(hbdbus_conn* conn, const char* from_endpoint,
 {
     (void)from_endpoint;
     (void)to_method;
-
-    purc_variant_t jo = NULL;
-    purc_variant_t jo_tmp = NULL;
-    const char *ifname = NULL;
-    int err_code = ERR_OK;
-
-    // get device array
+    int errcode = ERR_OK;
     struct run_info *info = hbdbus_conn_get_user_data(conn);
-    assert(info);
 
+    assert(info);
     assert(strcasecmp(to_method, METHOD_NET_CLOSE_DEVICE) == 0);
 
-    jo = purc_variant_make_from_json_string(method_param, strlen(method_param));
-    if (jo == NULL || !purc_variant_is_object(jo)) {
-        err_code = EINVAL;
-        goto done;
-    }
-
-    if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "device")) == NULL) {
-        err_code = ENOKEY;
-        goto done;
-    }
-
-    ifname = purc_variant_get_string_const(jo_tmp);
-    if (ifname == NULL || !is_valid_interface_name(ifname)) {
-        LOG_ERROR("Bad interface name: %s\n", ifname);
-        err_code = EINVAL;
-        goto done;
-    }
-
     struct network_device *netdev;
-    netdev = retrieve_network_device_from_ifname(info, ifname);
+    netdev = check_network_device(info, method_param, DEVICE_TYPE_UNKNOWN,
+            &errcode);
     if (netdev == NULL) {
-        LOG_ERROR("Not existed interface name: %s\n", ifname);
-        err_code = ENOENT;
-        goto done;
-    }
-
-    if (update_network_device_dynamic_info(ifname, netdev)) {
-        LOG_ERROR("Failed to update interface information: %s\n", ifname);
-        err_code = errno;
         goto done;
     }
 
     if (netdev->status == DEVICE_STATUS_DOWN) {
-        err_code = 0;
+        errcode = 0;
         goto done;
     }
 
-    if (netdev->down == NULL) {
-        err_code = ENOTSUP;
+    if (netdev->off == NULL) {
+        errcode = ENOTSUP;
         goto done;
     }
     else {
-        err_code = netdev->down(info, netdev);
+        errcode = netdev->off(info, netdev);
     }
 
 done:
-    if (jo)
-        purc_variant_unref(jo);
-
     struct pcutils_printbuf my_buff, *pb = &my_buff;
 
     if (pcutils_printbuf_init(pb)) {
@@ -180,8 +112,8 @@ done:
         return NULL;
     }
 
-    pcutils_printbuf_format(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", err_code,
-            get_error_message(err_code));
+    pcutils_printbuf_format(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", errcode,
+            get_error_message(errcode));
     *ret_code = PCRDR_SC_OK;
     return pb->buf;
 }
@@ -196,29 +128,28 @@ static char *getDeviceStatus(hbdbus_conn* conn,
     purc_variant_t jo = NULL;
     purc_variant_t jo_tmp = NULL;
     const char *ifname = NULL;
-    int err_code = ERR_OK;
+    int errcode = ERR_OK;
 
     // get device array
     struct run_info *info = hbdbus_conn_get_user_data(conn);
     assert(info);
-
     assert(strcasecmp(to_method, METHOD_NET_GET_DEVICE_STATUS) == 0);
 
     jo = purc_variant_make_from_json_string(method_param, strlen(method_param));
     if (jo == NULL || !purc_variant_is_object(jo)) {
-        err_code = EINVAL;
+        errcode = EINVAL;
         goto done;
     }
 
     if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "device")) == NULL) {
-        err_code = ENOKEY;
+        errcode = ENOKEY;
         goto done;
     }
 
     ifname = purc_variant_get_string_const(jo_tmp);
     if (ifname == NULL || !is_valid_interface_name(ifname)) {
         LOG_ERROR("Bad interface name: %s\n", ifname);
-        err_code = EINVAL;
+        errcode = EINVAL;
         goto done;
     }
 
@@ -321,50 +252,50 @@ static char *getDeviceStatus(hbdbus_conn* conn,
 
 done:
     pcutils_printbuf_format(pb, "],\"errCode\":%d, \"errMsg\":\"%s\"}",
-            err_code, get_error_message(err_code));
+            errcode, get_error_message(errcode));
     *ret_code = PCRDR_SC_OK;
     return pb->buf;
 }
 
 int register_common_interfaces(hbdbus_conn * conn)
 {
-    int err_code = 0;
+    int errcode = 0;
 
-    err_code = hbdbus_register_procedure(conn, METHOD_NET_OPEN_DEVICE,
+    errcode = hbdbus_register_procedure(conn, METHOD_NET_OPEN_DEVICE,
             NULL, NULL, openDevice);
-    if (err_code) {
+    if (errcode) {
         LOG_ERROR("WIFI DAEMON: Error for register procedure %s, %s.\n",
-                METHOD_NET_OPEN_DEVICE, hbdbus_get_err_message(err_code));
+                METHOD_NET_OPEN_DEVICE, hbdbus_get_err_message(errcode));
         goto failed;
     }
 
-    err_code = hbdbus_register_procedure(conn, METHOD_NET_CLOSE_DEVICE,
+    errcode = hbdbus_register_procedure(conn, METHOD_NET_CLOSE_DEVICE,
             NULL, NULL, closeDevice);
-    if (err_code) {
+    if (errcode) {
         LOG_ERROR("WIFI DAEMON: Error for register procedure %s, %s.\n",
-                METHOD_NET_CLOSE_DEVICE, hbdbus_get_err_message(err_code));
+                METHOD_NET_CLOSE_DEVICE, hbdbus_get_err_message(errcode));
         goto failed;
     }
 
-    err_code = hbdbus_register_procedure(conn, METHOD_NET_GET_DEVICE_STATUS,
+    errcode = hbdbus_register_procedure(conn, METHOD_NET_GET_DEVICE_STATUS,
             NULL, NULL, getDeviceStatus);
-    if (err_code) {
+    if (errcode) {
         LOG_ERROR("WIFI DAEMON: Error for register procedure %s, %s.\n",
-                METHOD_NET_GET_DEVICES_STATUS, hbdbus_get_err_message(err_code));
+                METHOD_NET_GET_DEVICES_STATUS, hbdbus_get_err_message(errcode));
         goto failed;
     }
 
-    err_code = hbdbus_register_event(conn, NETWORKDEVICECHANGED, NULL, NULL);
-    if (err_code) {
+    errcode = hbdbus_register_event(conn, NETWORKDEVICECHANGED, NULL, NULL);
+    if (errcode) {
         LOG_ERROR("WIFI DAEMON: Error for register event %s, %s.\n",
-                NETWORKDEVICECHANGED, hbdbus_get_err_message(err_code));
+                NETWORKDEVICECHANGED, hbdbus_get_err_message(errcode));
         goto failed;
     }
 
     return 0;
 
 failed:
-    return err_code;
+    return errcode;
 }
 
 void revoke_common_interfaces(hbdbus_conn *conn)

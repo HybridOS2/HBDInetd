@@ -1,108 +1,125 @@
+/*
+** wifi-iface.c -- The implementation of WiFi interfaces.
+**
+** Copyright (C) 2023 FMSoft (http://www.fmsoft.cn)
+**
+** Author: Vincent Wei (https://github.com/VincentWei)
+**
+** This file is part of HBDInetd.
+**
+** HBDInetd is free software: you can redistribute it and/or modify
+** it under the terms of the GNU General Public License as published by
+** the Free Software Foundation, either version 3 of the License, or
+** (at your option) any later version.
+**
+** HBDInetd is distributed in the hope that it will be useful,
+** but WITHOUT ANY WARRANTY; without even the implied warranty of
+** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+** GNU General Public License for more details.
+** You should have received a copy of the GNU General Public License
+** along with this program.  If not, see http://www.gnu.org/licenses/.
+*/
+
 #include "hbdinetd.h"
+#include "global.h"
+#include "log.h"
+#include "list.h"
 
-#include <hbdbus/hbdbus.h>
+#include <assert.h>
+#include <errno.h>
 
-#include "wifi/wifi_intf.h"
-#include "wifi/wifi.h"
-#include "tools.h"
-
-extern const char *op_errors[];
-extern hbdbus_conn * hbdbus_context_inetd;
-
-char * wifiStartScanHotspots(hbdbus_conn* conn, const char* from_endpoint, const char* to_method, const char* method_param, int *err_code)
+static char *wifiStartScanHotspots(hbdbus_conn* conn,
+        const char* from_endpoint, const char* to_method,
+        const char* method_param, int *ret_code)
 {
-    hbdbus_json *jo = NULL;
-    hbdbus_json *jo_tmp = NULL;
-    const char * device_name = NULL;
-    int index = -1;
-    int ret_code = ERR_NO;
-    char * ret_string = malloc(8192);
-    WiFi_device * wifi_device = NULL;
+    (void)from_endpoint;
+    (void)to_method;
 
-    memset(ret_string, 0, 8192);
-    sprintf(ret_string, "{\"data\":[");
+    int errcode = ERR_OK;
+    struct run_info *info = hbdbus_conn_get_user_data(conn);
+    assert(info);
+    assert(strcasecmp(to_method, METHOD_WIFI_START_SCAN) == 0);
 
-    // get device array
-    network_device * device = hbdbus_conn_get_user_data(conn);
-    if(device == NULL)
-    {
-        ret_code = ERR_NONE_DEVICE_LIST;
-        goto failed;
+    struct network_device *netdev;
+    netdev = check_network_device(info, method_param,
+            DEVICE_TYPE_ETHER_WIRELESS, &errcode);
+    if (netdev == NULL) {
+        goto done;
     }
 
-    // get procedure name
-    if(strncasecmp(to_method, METHOD_WIFI_START_SCAN, strlen(METHOD_WIFI_START_SCAN)))
-    {
-        ret_code = ERR_WRONG_PROCEDURE;
-        goto failed;
+    if (netdev->status == DEVICE_STATUS_DOWN ||
+            netdev->status == DEVICE_STATUS_UNCERTAIN) {
+        errcode = ENETDOWN;
+        goto done;
     }
 
-    // analyze json
-    jo = hbdbus_json_object_from_string(method_param, strlen(method_param), 2);
-    if(jo == NULL)
-    {
-        ret_code = ERR_WRONG_JSON;
-        goto failed;
+    errcode = netdev->wifi_ops->start_scan(netdev->ctxt);
+    if (errcode) {
+        goto done;
     }
 
-    // get device name
-    if(json_object_object_get_ex(jo, "device", &jo_tmp) == 0)
-    {
-        ret_code = ERR_WRONG_JSON;
-        goto failed;
+done:
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
+
+    if (pcutils_printbuf_init(pb)) {
+        *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
+        return NULL;
     }
 
-    device_name = json_object_get_string(jo_tmp);
-    if(device_name && strlen(device_name) == 0)
-    {
-        ret_code = ERR_NO_DEVICE_NAME_IN_PARAM;
-        goto failed;
+    pcutils_printbuf_format(pb,
+            "{\"errCode\":%d, \"errMsg\":\"%s\"}",
+            errcode, get_error_message(errcode));
+    *ret_code = PCRDR_SC_OK;
+    return pb->buf;
+}
+
+static char *wifiGetHotspotList(hbdbus_conn* conn,
+        const char* from_endpoint, const char* to_method,
+        const char* method_param, int *ret_code)
+{
+    (void)from_endpoint;
+    (void)to_method;
+
+    int errcode = ERR_OK;
+    struct run_info *info = hbdbus_conn_get_user_data(conn);
+    assert(info);
+    assert(strcasecmp(to_method, METHOD_WIFI_START_SCAN) == 0);
+
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
+    if (pcutils_printbuf_init(pb)) {
+        *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
+        return NULL;
     }
 
-    // device does exist?
-    index = get_device_index(device, device_name);
-    if(index == -1)
-    {
-        ret_code = ERR_NO_DEVICE_IN_SYSTEM;
-        goto failed;
+    pcutils_printbuf_strappend(pb, "{\"data\":[");
+
+    struct network_device *netdev;
+    netdev = check_network_device(info, method_param,
+            DEVICE_TYPE_ETHER_WIRELESS, &errcode);
+    if (netdev == NULL) {
+        goto done;
     }
 
-    if(device[index].type != DEVICE_TYPE_WIFI)
-    {
-        ret_code = ERR_NOT_WIFI_DEVICE;
-        goto failed;
-    }
-        
-    // whether library has been loaded
-    if(device[index].lib_handle == NULL)
-    {
-        ret_code = ERR_LOAD_LIBRARY;
-        goto failed;
+    if (netdev->status == DEVICE_STATUS_DOWN ||
+            netdev->status == DEVICE_STATUS_UNCERTAIN) {
+        errcode = ENETDOWN;
+        goto done;
     }
 
-    wifi_device = (WiFi_device *)device[index].device;
-    if(wifi_device->context == NULL)
-    {
-        ret_code = ERR_DEVICE_NOT_OPENNED;
-        goto failed;
+    struct list_head hotspot_list;
+    init_list_head(&hotspot_list);
+    errcode = netdev->wifi_ops->get_hotspots(netdev->ctxt, &hotspot_list);
+    if (errcode) {
+        goto done;
     }
 
-    if((device[index].status == DEVICE_STATUS_DOWN) || (device[index].status == DEVICE_STATUS_UNCERTAIN))
-    {
-        ret_code = ERR_OPEN_WIFI_DEVICE;
-        if(ifconfig_helper(device_name, 1))
-            goto failed;
-    }
+    size_t nr_hotspots = 0;
+    struct list_head *p, *n;
+    list_for_each_safe(p, n, &hotspot_list) {
+        struct wifi_hotspot *hotspot;
+        hotspot = list_entry(p, struct wifi_hotspot, ln);
 
-    ret_code = wifi_device->wifi_device_Ops->start_scan(wifi_device->context);
-
-    pthread_mutex_lock(&(wifi_device->list_mutex));
-    wifi_hotspot * node = wifi_device->first_hotspot;
-    while(node)
-    {
-        if(node != wifi_device->first_hotspot)
-            sprintf(ret_string + strlen(ret_string), ",");
-        sprintf(ret_string + strlen(ret_string), 
+        pcutils_printbuf_format(pb,
                 "{"
                 "\"bssid\":\"%s\","
                 "\"ssid\":\"%s\","
@@ -110,138 +127,97 @@ char * wifiStartScanHotspots(hbdbus_conn* conn, const char* from_endpoint, const
                 "\"capabilities\":\"%s\","
                 "\"signalStrength\":%d,"
                 "\"isConnected\":%s"
-                "}",
-                node->bssid, node->ssid, node->frenquency, node->capabilities, node->signal_strength, node->isConnect ? "true": "false");
+                "},",
+                hotspot->bssid,
+                hotspot->ssid,
+                hotspot->frenquency,
+                hotspot->capabilities,
+                hotspot->signal_strength,
+                hotspot->is_connected ? "true": "false");
 
-        node = node->next;
+        nr_hotspots++;
+        list_del(&hotspot->ln);
+        free(hotspot);
     }
-    pthread_mutex_unlock(&(wifi_device->list_mutex));
 
-failed:
-    if(jo)
-        json_object_put (jo);
+    if (nr_hotspots > 0)
+        pcutils_printbuf_shrink(pb, 1);
 
-    sprintf(ret_string + strlen(ret_string), "],\"errCode\":%d, \"errMsg\":\"%s\"}", ret_code, op_errors[-1 * ret_code]);
-    return ret_string;
-
+done:
+    pcutils_printbuf_format(pb, "],\"errCode\":%d, \"errMsg\":\"%s\"}",
+            errcode, get_error_message(errcode));
+    return pb->buf;
 }
 
-char * wifiStopScanHotspots(hbdbus_conn* conn, const char* from_endpoint, const char* to_method, const char* method_param, int *err_code)
+static char *wifiStopScanHotspots(hbdbus_conn* conn,
+        const char* from_endpoint, const char* to_method,
+        const char* method_param, int *ret_code)
 {
-    hbdbus_json *jo = NULL;
-    hbdbus_json *jo_tmp = NULL;
-    const char * device_name = NULL;
-    int index = -1;
-    int ret_code = ERR_NO;
-    char * ret_string = malloc(4096);
-    WiFi_device * wifi_device = NULL;
+    (void)from_endpoint;
+    (void)to_method;
 
-    // get device array
-    network_device * device = hbdbus_conn_get_user_data(conn);
-    if(device == NULL)
-    {
-        ret_code = ERR_NONE_DEVICE_LIST;
-        goto failed;
+    int errcode = ERR_OK;
+    struct run_info *info = hbdbus_conn_get_user_data(conn);
+    assert(info);
+    assert(strcasecmp(to_method, METHOD_WIFI_START_SCAN) == 0);
+
+    struct network_device *netdev;
+    netdev = check_network_device(info, method_param,
+            DEVICE_TYPE_ETHER_WIRELESS, &errcode);
+    if (netdev == NULL) {
+        goto done;
     }
 
-    // get procedure name
-    if(strncasecmp(to_method, METHOD_WIFI_STOP_SCAN, strlen(METHOD_WIFI_STOP_SCAN)))
-    {
-        ret_code = ERR_WRONG_PROCEDURE;
-        goto failed;
+    if (netdev->status == DEVICE_STATUS_DOWN ||
+            netdev->status == DEVICE_STATUS_UNCERTAIN) {
+        errcode = ENETDOWN;
+        goto done;
     }
 
-    // analyze json
-    jo = hbdbus_json_object_from_string(method_param, strlen(method_param), 2);
-    if(jo == NULL)
-    {
-        ret_code = ERR_WRONG_JSON;
-        goto failed;
+    errcode = netdev->wifi_ops->stop_scan(netdev->ctxt);
+    if (errcode) {
+        goto done;
     }
 
-    // get device name
-    if(json_object_object_get_ex(jo, "device", &jo_tmp) == 0)
-    {
-        ret_code = ERR_WRONG_JSON;
-        goto failed;
+done:
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
+
+    if (pcutils_printbuf_init(pb)) {
+        *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
+        return NULL;
     }
 
-    device_name = json_object_get_string(jo_tmp);
-    if(device_name && strlen(device_name) == 0)
-    {
-        ret_code = ERR_NO_DEVICE_NAME_IN_PARAM;
-        goto failed;
-    }
-
-    // device does exist?
-    index = get_device_index(device, device_name);
-    if(index == -1)
-    {
-        ret_code = ERR_NO_DEVICE_IN_SYSTEM;
-        goto failed;
-    }
-
-    if(device[index].type != DEVICE_TYPE_WIFI)
-    {
-        ret_code = ERR_NOT_WIFI_DEVICE;
-        goto failed;
-    }
-        
-    if(device[index].lib_handle == NULL)
-    {
-        ret_code = ERR_LOAD_LIBRARY;
-        goto failed;
-    }
-
-    wifi_device = (WiFi_device *)device[index].device;
-    if(wifi_device->context == NULL)
-    {
-        ret_code = ERR_DEVICE_NOT_OPENNED;
-        goto failed;
-    }
-
-    if((device[index].status == DEVICE_STATUS_DOWN) || (device[index].status == DEVICE_STATUS_UNCERTAIN))
-    {
-        ret_code = ERR_OPEN_WIFI_DEVICE;
-        if(ifconfig_helper(device_name, 1))
-            goto failed;
-    }
-
-    ret_code = wifi_device->wifi_device_Ops->stop_scan(wifi_device->context);
-
-failed:
-    if(jo)
-        json_object_put (jo);
-
-    memset(ret_string, 0, 4096);
-    sprintf(ret_string, "{\"errCode\":%d, \"errMsg\":\"%s\"}", ret_code, op_errors[-1 * ret_code]);
-    return ret_string;
+    pcutils_printbuf_format(pb,
+            "{\"errCode\":%d, \"errMsg\":\"%s\"}",
+            errcode, get_error_message(errcode));
+    *ret_code = PCRDR_SC_OK;
+    return pb->buf;
 }
 
-char * wifiConnect(hbdbus_conn* conn, const char* from_endpoint, const char* to_method, const char* method_param, int *err_code)
+static char *wifiConnect(hbdbus_conn* conn, const char* from_endpoint,
+        const char* to_method, const char* method_param, int *ret_code)
 {
-    hbdbus_json *jo = NULL;
-    hbdbus_json *jo_tmp = NULL;
+    purc_variant_t jo = NULL;
+    purc_variant_t jo_tmp = NULL;
     const char * device_name = NULL;
     const char * ssid = NULL;
     const char * password = NULL;
     int index = -1;
-    int ret_code = ERR_NO;
+    int errcode = ERR_OK;
     char * ret_string = malloc(4096);
-    WiFi_device * wifi_device = NULL;
 
     // get device array
     network_device * device = hbdbus_conn_get_user_data(conn);
     if(device == NULL)
     {
-        ret_code = ERR_NONE_DEVICE_LIST;
+        errcode = ERR_NONE_DEVICE_LIST;
         goto failed;
     }
 
     // get procedure name
     if(strncasecmp(to_method, METHOD_WIFI_CONNECT_AP, strlen(METHOD_WIFI_CONNECT_AP)))
     {
-        ret_code = ERR_WRONG_PROCEDURE;
+        errcode = ERR_WRONG_PROCEDURE;
         goto failed;
     }
 
@@ -249,21 +225,21 @@ char * wifiConnect(hbdbus_conn* conn, const char* from_endpoint, const char* to_
     jo = hbdbus_json_object_from_string(method_param, strlen(method_param), 2);
     if(jo == NULL)
     {
-        ret_code = ERR_WRONG_JSON;
+        errcode = ERR_WRONG_JSON;
         goto failed;
     }
 
     // get device name
     if(json_object_object_get_ex(jo, "device", &jo_tmp) == 0)
     {
-        ret_code = ERR_WRONG_JSON;
+        errcode = ERR_WRONG_JSON;
         goto failed;
     }
 
     device_name = json_object_get_string(jo_tmp);
     if(device_name && strlen(device_name) == 0)
     {
-        ret_code = ERR_NO_DEVICE_NAME_IN_PARAM;
+        errcode = ERR_NO_DEVICE_NAME_IN_PARAM;
         goto failed;
     }
 
@@ -271,67 +247,67 @@ char * wifiConnect(hbdbus_conn* conn, const char* from_endpoint, const char* to_
     index = get_device_index(device, device_name);
     if(index == -1)
     {
-        ret_code = ERR_NO_DEVICE_IN_SYSTEM;
+        errcode = ERR_NO_DEVICE_IN_SYSTEM;
         goto failed;
     }
 
     if(device[index].type != DEVICE_TYPE_WIFI)
     {
-        ret_code = ERR_NOT_WIFI_DEVICE;
+        errcode = ERR_NOT_WIFI_DEVICE;
         goto failed;
     }
     
     // get WiFi ssid 
     if(json_object_object_get_ex(jo, "ssid", &jo_tmp) == 0)
     {
-        ret_code = ERR_WRONG_JSON;
+        errcode = ERR_WRONG_JSON;
         goto failed;
     }
 
     ssid = json_object_get_string(jo_tmp);
     if(ssid && strlen(ssid) == 0)
     {
-        ret_code = ERR_NO_DEVICE_NAME_IN_PARAM;
+        errcode = ERR_NO_DEVICE_NAME_IN_PARAM;
         goto failed;
     }
 
     // get WiFi password 
     if(json_object_object_get_ex(jo, "password", &jo_tmp) == 0)
     {
-        ret_code = ERR_WRONG_JSON;
+        errcode = ERR_WRONG_JSON;
         goto failed;
     }
 
     password = json_object_get_string(jo_tmp);
     if(password && strlen(password) == 0)
     {
-        ret_code = ERR_NO_DEVICE_NAME_IN_PARAM;
+        errcode = ERR_NO_DEVICE_NAME_IN_PARAM;
         goto failed;
     }
 
     if(device[index].lib_handle == NULL)
     {
-        ret_code = ERR_LOAD_LIBRARY;
+        errcode = ERR_LOAD_LIBRARY;
         goto failed;
     }
 
     wifi_device = (WiFi_device *)device[index].device;
     if(wifi_device->context == NULL)
     {
-        ret_code = ERR_DEVICE_NOT_OPENNED;
+        errcode = ERR_DEVICE_NOT_OPENNED;
         goto failed;
     }
 
     if((device[index].status == DEVICE_STATUS_DOWN) || (device[index].status == DEVICE_STATUS_UNCERTAIN))
     {
-        ret_code = ERR_OPEN_WIFI_DEVICE;
+        errcode = ERR_OPEN_WIFI_DEVICE;
         if(ifconfig_helper(device_name, 1))
             goto failed;
     }
 
-    ret_code = wifi_device->wifi_device_Ops->connect(wifi_device->context, ssid, password);
+    errcode = wifi_device->wifi_device_Ops->connect(wifi_device->context, ssid, password);
 
-    if(ret_code == 0)
+    if(errcode == 0)
     {
         char reply[512];
         int reply_length = 512;
@@ -339,8 +315,8 @@ char * wifiConnect(hbdbus_conn* conn, const char* from_endpoint, const char* to_
 
         memset(wifi_device->bssid, 0, HOTSPOT_STRING_LENGTH);
 
-        ret_code = ERR_LIBRARY_OPERATION;
-        while(ret_code)
+        errcode = ERR_LIBRARY_OPERATION;
+        while(errcode)
         {
             usleep(100000);
 
@@ -349,10 +325,10 @@ char * wifiConnect(hbdbus_conn* conn, const char* from_endpoint, const char* to_
                 goto failed;
 
             memset(reply, 0, 512);
-            ret_code = wifi_device->wifi_device_Ops->get_cur_net_info(wifi_device->context, reply, reply_length);
+            errcode = wifi_device->wifi_device_Ops->get_cur_net_info(wifi_device->context, reply, reply_length);
         }
 
-        if(ret_code == 0)
+        if(errcode == 0)
         {
             char * tempstart = NULL;
             char * tempend = NULL;
@@ -370,7 +346,7 @@ char * wifiConnect(hbdbus_conn* conn, const char* from_endpoint, const char* to_
                     if(strncasecmp(content, "COMPLETED", strlen("COMPLETED")) == 0)
                     {
                         device[index].status = DEVICE_STATUS_RUNNING;
-                        
+
                         // bssid
                         tempstart = strstr(reply, "bssid=");
                         if(tempstart)
@@ -404,17 +380,19 @@ failed:
         json_object_put (jo);
 
     memset(ret_string, 0, 4096);
-    sprintf(ret_string, "{\"errCode\":%d, \"errMsg\":\"%s\"}", ret_code, op_errors[-1 * ret_code]);
+    sprintf(ret_string, "{\"errCode\":%d, \"errMsg\":\"%s\"}",
+            errcode, get_error_message(errcode));
     return ret_string;
 }
 
-char * wifiDisconnect(hbdbus_conn* conn, const char* from_endpoint, const char* to_method, const char* method_param, int *err_code)
+static char *wifiDisconnect(hbdbus_conn* conn, const char* from_endpoint,
+        const char* to_method, const char* method_param, int *ret_code)
 {
-    hbdbus_json *jo = NULL;
-    hbdbus_json *jo_tmp = NULL;
+    purc_variant_t jo = NULL;
+    purc_variant_t jo_tmp = NULL;
     const char * device_name = NULL;
     int index = -1;
-    int ret_code = ERR_NO;
+    int errcode = ERR_OK;
     char * ret_string = malloc(4096);
     WiFi_device * wifi_device = NULL;
 
@@ -422,14 +400,14 @@ char * wifiDisconnect(hbdbus_conn* conn, const char* from_endpoint, const char* 
     network_device * device = hbdbus_conn_get_user_data(conn);
     if(device == NULL)
     {
-        ret_code = ERR_NONE_DEVICE_LIST;
+        errcode = ERR_NONE_DEVICE_LIST;
         goto failed;
     }
 
     // get procedure name
     if(strncasecmp(to_method, METHOD_WIFI_DISCONNECT_AP, strlen(METHOD_WIFI_CONNECT_AP)))
     {
-        ret_code = ERR_WRONG_PROCEDURE;
+        errcode = ERR_WRONG_PROCEDURE;
         goto failed;
     }
 
@@ -437,21 +415,21 @@ char * wifiDisconnect(hbdbus_conn* conn, const char* from_endpoint, const char* 
     jo = hbdbus_json_object_from_string(method_param, strlen(method_param), 2);
     if(jo == NULL)
     {
-        ret_code = ERR_WRONG_JSON;
+        errcode = ERR_WRONG_JSON;
         goto failed;
     }
 
     // get device name
     if(json_object_object_get_ex(jo, "device", &jo_tmp) == 0)
     {
-        ret_code = ERR_WRONG_JSON;
+        errcode = ERR_WRONG_JSON;
         goto failed;
     }
 
     device_name = json_object_get_string(jo_tmp);
     if(device_name && strlen(device_name) == 0)
     {
-        ret_code = ERR_NO_DEVICE_NAME_IN_PARAM;
+        errcode = ERR_NO_DEVICE_NAME_IN_PARAM;
         goto failed;
     }
 
@@ -459,26 +437,26 @@ char * wifiDisconnect(hbdbus_conn* conn, const char* from_endpoint, const char* 
     index = get_device_index(device, device_name);
     if(index == -1)
     {
-        ret_code = ERR_NO_DEVICE_IN_SYSTEM;
+        errcode = ERR_NO_DEVICE_IN_SYSTEM;
         goto failed;
     }
 
     if(device[index].type != DEVICE_TYPE_WIFI)
     {
-        ret_code = ERR_NOT_WIFI_DEVICE;
+        errcode = ERR_NOT_WIFI_DEVICE;
         goto failed;
     }
-    
+
     if(device[index].lib_handle == NULL)
     {
-        ret_code = ERR_LOAD_LIBRARY;
+        errcode = ERR_LOAD_LIBRARY;
         goto failed;
     }
 
     wifi_device = (WiFi_device *)device[index].device;
     if(wifi_device->context == NULL)
     {
-        ret_code = ERR_DEVICE_NOT_OPENNED;
+        errcode = ERR_DEVICE_NOT_OPENNED;
         goto failed;
     }
 
@@ -506,19 +484,21 @@ failed:
     if(jo)
         json_object_put (jo);
 
-    sprintf(ret_string, "{\"errCode\":%d, \"errMsg\":\"%s\"}", ret_code, op_errors[-1 * ret_code]);
+    sprintf(ret_string, "{\"errCode\":%d, \"errMsg\":\"%s\"}", errcode,
+            get_error_message(errcode));
     return ret_string;
 }
 
-char * wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint, const char* to_method, const char* method_param, int *err_code)
+static char *wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint,
+        const char* to_method, const char* method_param, int *ret_code)
 {
-    hbdbus_json *jo = NULL;
-    hbdbus_json *jo_tmp = NULL;
+    purc_variant_t jo = NULL;
+    purc_variant_t jo_tmp = NULL;
     const char * device_name = NULL;
     char reply[512];
     int reply_length = 512;
     int index = -1;
-    int ret_code = ERR_NO;
+    int errcode = ERR_OK;
     char * ret_string = malloc(4096);
     WiFi_device * wifi_device = NULL;
 
@@ -529,14 +509,14 @@ char * wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint, const ch
     network_device * device = hbdbus_conn_get_user_data(conn);
     if(device == NULL)
     {
-        ret_code = ERR_NONE_DEVICE_LIST;
+        errcode = ERR_NONE_DEVICE_LIST;
         goto failed;
     }
 
     // get procedure name
     if(strncasecmp(to_method, METHOD_WIFI_GET_NETWORK_INFO, strlen(METHOD_WIFI_GET_NETWORK_INFO)))
     {
-        ret_code = ERR_WRONG_PROCEDURE;
+        errcode = ERR_WRONG_PROCEDURE;
         goto failed;
     }
 
@@ -544,21 +524,21 @@ char * wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint, const ch
     jo = hbdbus_json_object_from_string(method_param, strlen(method_param), 2);
     if(jo == NULL)
     {
-        ret_code = ERR_WRONG_JSON;
+        errcode = ERR_WRONG_JSON;
         goto failed;
     }
 
     // get device name
     if(json_object_object_get_ex(jo, "device", &jo_tmp) == 0)
     {
-        ret_code = ERR_WRONG_JSON;
+        errcode = ERR_WRONG_JSON;
         goto failed;
     }
 
     device_name = json_object_get_string(jo_tmp);
     if(device_name && strlen(device_name) == 0)
     {
-        ret_code = ERR_NO_DEVICE_NAME_IN_PARAM;
+        errcode = ERR_NO_DEVICE_NAME_IN_PARAM;
         goto failed;
     }
 
@@ -566,33 +546,33 @@ char * wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint, const ch
     index = get_device_index(device, device_name);
     if(index == -1)
     {
-        ret_code = ERR_NO_DEVICE_IN_SYSTEM;
+        errcode = ERR_NO_DEVICE_IN_SYSTEM;
         goto failed;
     }
 
     if(device[index].type != DEVICE_TYPE_WIFI)
     {
-        ret_code = ERR_NOT_WIFI_DEVICE;
+        errcode = ERR_NOT_WIFI_DEVICE;
         goto failed;
     }
     
     if(device[index].lib_handle == NULL)
     {
-        ret_code = ERR_LOAD_LIBRARY;
+        errcode = ERR_LOAD_LIBRARY;
         goto failed;
     }
 
     wifi_device = (WiFi_device *)device[index].device;
     if(wifi_device->context == NULL)
     {
-        ret_code = ERR_DEVICE_NOT_OPENNED;
+        errcode = ERR_DEVICE_NOT_OPENNED;
         goto failed;
     }
 
-    ret_code = wifi_device->wifi_device_Ops->get_cur_net_info(wifi_device->context, reply, reply_length);
+    errcode = wifi_device->wifi_device_Ops->get_cur_net_info(wifi_device->context, reply, reply_length);
 
 
-    if(ret_code == 0)
+    if(errcode == 0)
     {
         char * tempstart = NULL;
         char * tempend = NULL;
@@ -609,19 +589,19 @@ char * wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint, const ch
                 memcpy(content, tempstart, tempend - tempstart);
                 if(strncasecmp(content, "COMPLETED", strlen("COMPLETED")))
                 {
-                    ret_code = ERR_DEVICE_NOT_CONNECT;
+                    errcode = ERR_DEVICE_NOT_CONNECT;
                     goto failed;
                 }
             }
             else
             {
-                ret_code = ERR_DEVICE_NOT_CONNECT;
+                errcode = ERR_DEVICE_NOT_CONNECT;
                 goto failed;
             }
         }
         else
         {
-            ret_code = ERR_DEVICE_NOT_CONNECT;
+            errcode = ERR_DEVICE_NOT_CONNECT;
             goto failed;
         }
         
@@ -723,11 +703,14 @@ failed:
         json_object_put (jo);
 
     sprintf(ret_string + strlen(ret_string), "},");
-    sprintf(ret_string + strlen(ret_string), "\"errCode\":%d, \"errMsg\":\"%s\"}", ret_code, op_errors[-1 * ret_code]);
+    sprintf(ret_string + strlen(ret_string),
+            "\"errCode\":%d, \"errMsg\":\"%s\"}",
+            errcode, get_error_message(errcode));
 
     return ret_string;
 }
 
+#if 0
 void report_wifi_scan_info(char * device_name, int type, void * results, int number)
 {
     wifi_hotspot * node = NULL;
@@ -737,9 +720,9 @@ void report_wifi_scan_info(char * device_name, int type, void * results, int num
     int index = 0;
     WiFi_device * wifi_device = NULL;
 
-    if(hbdbus_context_inetd == NULL)
+    if(conn == NULL)
         return;
-    device_array = hbdbus_conn_get_user_data(hbdbus_context_inetd);
+    device_array = hbdbus_conn_get_user_data(conn);
     if(device_array == NULL)
         return;
 
@@ -838,7 +821,7 @@ void report_wifi_scan_info(char * device_name, int type, void * results, int num
             wifi_device->signal = hotspots->signal_strength;
             memset(signal, 0, 4096);
             sprintf(signal, "{\"bssid\":\"%s\", \"ssid\":\"%s\", \"signalStrength\":%d}", hotspots->bssid, hotspots->ssid, hotspots->signal_strength);
-            hbdbus_fire_event(hbdbus_context_inetd, WIFISIGNALSTRENGTHCHANGED, signal);
+            hbdbus_fire_event(conn, WIFISIGNALSTRENGTHCHANGED, signal);
         }
 
         // if scan ap, send WIFIHOTSPOTSCHANGED message
@@ -970,7 +953,7 @@ void report_wifi_scan_info(char * device_name, int type, void * results, int num
 
         memset(message, 0, 8192);
         sprintf(message, "{%s], %s], %s]}", added, remove, signal);
-        hbdbus_fire_event(hbdbus_context_inetd, WIFIHOTSPOTSCHANGED, message);
+        hbdbus_fire_event(conn, WIFIHOTSPOTSCHANGED, message);
 
         free(signal);
         free(remove);
@@ -993,70 +976,77 @@ void report_wifi_scan_info(char * device_name, int type, void * results, int num
         pthread_mutex_unlock(&(wifi_device->list_mutex));
     }
 }
+#endif
 
-void wifi_register(hbdbus_conn * hbdbus_context_inetd)
+int register_wifi_interfaces(hbdbus_conn * conn)
 {
-    int ret_code = 0;
+    int errcode = 0;
 
-    ret_code = hbdbus_register_procedure(hbdbus_context_inetd, METHOD_WIFI_START_SCAN, NULL, NULL, wifiStartScanHotspots);
-    if(ret_code)
-    {
-        fprintf(stderr, "WIFI DAEMON: Error for register procedure %s, %s.\n", METHOD_WIFI_START_SCAN, hbdbus_get_err_message(ret_code));
-        return;
+    errcode = hbdbus_register_procedure(conn, METHOD_WIFI_START_SCAN,
+            NULL, NULL, wifiStartScanHotspots);
+    if (errcode) {
+        LOG_ERROR("WIFI DAEMON: Error for register procedure %s, %s.\n",
+                METHOD_WIFI_START_SCAN, hbdbus_get_err_message(errcode));
+        goto done;
     }
 
-    ret_code = hbdbus_register_procedure(hbdbus_context_inetd, METHOD_WIFI_STOP_SCAN, NULL, NULL, wifiStopScanHotspots);
-    if(ret_code)
-    {
-        fprintf(stderr, "WIFI DAEMON: Error for register procedure %s, %s.\n", METHOD_WIFI_STOP_SCAN, hbdbus_get_err_message(ret_code));
-        return;
+    errcode = hbdbus_register_procedure(conn, METHOD_WIFI_GET_HOTSPOTS,
+            NULL, NULL, wifiGetHotspotList);
+    if (errcode) {
+        LOG_ERROR("WIFI DAEMON: Error for register procedure %s, %s.\n",
+                METHOD_WIFI_START_SCAN, hbdbus_get_err_message(errcode));
+        goto done;
     }
 
-    ret_code = hbdbus_register_procedure(hbdbus_context_inetd, METHOD_WIFI_CONNECT_AP, NULL, NULL, wifiConnect);
-    if(ret_code)
-    {
-        fprintf(stderr, "WIFI DAEMON: Error for register procedure %s, %s.\n", METHOD_WIFI_CONNECT_AP, hbdbus_get_err_message(ret_code));
-        return;
+    errcode = hbdbus_register_procedure(conn, METHOD_WIFI_STOP_SCAN, NULL, NULL, wifiStopScanHotspots);
+    if (errcode) {
+        LOG_ERROR("WIFI DAEMON: Error for register procedure %s, %s.\n", METHOD_WIFI_STOP_SCAN, hbdbus_get_err_message(errcode));
+        goto done;
     }
 
-    ret_code = hbdbus_register_procedure(hbdbus_context_inetd, METHOD_WIFI_DISCONNECT_AP, NULL, NULL, wifiDisconnect);
-    if(ret_code)
-    {
-        fprintf(stderr, "WIFI DAEMON: Error for register procedure %s, %s.\n", METHOD_WIFI_DISCONNECT_AP, hbdbus_get_err_message(ret_code));
-        return;
+    errcode = hbdbus_register_procedure(conn, METHOD_WIFI_CONNECT_AP, NULL, NULL, wifiConnect);
+    if (errcode) {
+        LOG_ERROR("WIFI DAEMON: Error for register procedure %s, %s.\n", METHOD_WIFI_CONNECT_AP, hbdbus_get_err_message(errcode));
+        goto done;
     }
 
-    ret_code = hbdbus_register_procedure(hbdbus_context_inetd, METHOD_WIFI_GET_NETWORK_INFO, NULL, NULL, wifiGetNetworkInfo);
-    if(ret_code)
-    {
-        fprintf(stderr, "WIFI DAEMON: Error for register procedure %s, %s.\n", METHOD_WIFI_GET_NETWORK_INFO, hbdbus_get_err_message(ret_code));
-        return;
+    errcode = hbdbus_register_procedure(conn, METHOD_WIFI_DISCONNECT_AP, NULL, NULL, wifiDisconnect);
+    if (errcode) {
+        LOG_ERROR("WIFI DAEMON: Error for register procedure %s, %s.\n", METHOD_WIFI_DISCONNECT_AP, hbdbus_get_err_message(errcode));
+        goto done;
     }
 
-    ret_code = hbdbus_register_event(hbdbus_context_inetd, WIFIHOTSPOTSCHANGED, NULL, NULL);
-    if(ret_code)
-    {
-        fprintf(stderr, "WIFI DAEMON: Error for register event %s, %s.\n", WIFIHOTSPOTSCHANGED, hbdbus_get_err_message(ret_code));
-        return;
+    errcode = hbdbus_register_procedure(conn, METHOD_WIFI_GET_NETWORK_INFO, NULL, NULL, wifiGetNetworkInfo);
+    if (errcode) {
+        LOG_ERROR("WIFI DAEMON: Error for register procedure %s, %s.\n", METHOD_WIFI_GET_NETWORK_INFO, hbdbus_get_err_message(errcode));
+        goto done;
     }
 
-    ret_code = hbdbus_register_event(hbdbus_context_inetd, WIFISIGNALSTRENGTHCHANGED, NULL, NULL);
-    if(ret_code)
-    {
-        fprintf(stderr, "WIFI DAEMON: Error for register event %s, %s.\n", WIFISIGNALSTRENGTHCHANGED, hbdbus_get_err_message(ret_code));
-        return;
+    errcode = hbdbus_register_event(conn, WIFIHOTSPOTSCHANGED, NULL, NULL);
+    if (errcode) {
+        LOG_ERROR("WIFI DAEMON: Error for register event %s, %s.\n", WIFIHOTSPOTSCHANGED, hbdbus_get_err_message(errcode));
+        goto done;
     }
+
+    errcode = hbdbus_register_event(conn, WIFISIGNALSTRENGTHCHANGED, NULL, NULL);
+    if (errcode) {
+        LOG_ERROR("WIFI DAEMON: Error for register event %s, %s.\n", WIFISIGNALSTRENGTHCHANGED, hbdbus_get_err_message(errcode));
+        goto done;
+    }
+
+done:
+    return errcode;
 }
 
-void wifi_revoke(hbdbus_conn * hbdbus_context_inetd)
+void revoke_wifi_interfaces(hbdbus_conn *conn)
 {
-    hbdbus_revoke_event(hbdbus_context_inetd, WIFISIGNALSTRENGTHCHANGED);
-    hbdbus_revoke_event(hbdbus_context_inetd, WIFIHOTSPOTSCHANGED);
+    hbdbus_revoke_event(conn, WIFISIGNALSTRENGTHCHANGED);
+    hbdbus_revoke_event(conn, WIFIHOTSPOTSCHANGED);
 
-    hbdbus_revoke_procedure(hbdbus_context_inetd, METHOD_WIFI_START_SCAN);
-    hbdbus_revoke_procedure(hbdbus_context_inetd, METHOD_WIFI_STOP_SCAN);
-    hbdbus_revoke_procedure(hbdbus_context_inetd, METHOD_WIFI_CONNECT_AP);
-    hbdbus_revoke_procedure(hbdbus_context_inetd, METHOD_WIFI_DISCONNECT_AP);
-    hbdbus_revoke_procedure(hbdbus_context_inetd, METHOD_WIFI_GET_NETWORK_INFO);
+    hbdbus_revoke_procedure(conn, METHOD_WIFI_START_SCAN);
+    hbdbus_revoke_procedure(conn, METHOD_WIFI_GET_HOTSPOTS);
+    hbdbus_revoke_procedure(conn, METHOD_WIFI_STOP_SCAN);
+    hbdbus_revoke_procedure(conn, METHOD_WIFI_CONNECT_AP);
+    hbdbus_revoke_procedure(conn, METHOD_WIFI_DISCONNECT_AP);
+    hbdbus_revoke_procedure(conn, METHOD_WIFI_GET_NETWORK_INFO);
 }
-

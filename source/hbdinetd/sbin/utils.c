@@ -23,6 +23,9 @@
 #include "global.h"
 #include "log.h"
 
+#include <assert.h>
+#include <errno.h>
+
 const char *error_messages[] = {
     "Ok",                                       // ERR_OK
     "an error ocures in library operation.",    // ERR_LIBRARY_OPERATION
@@ -66,5 +69,60 @@ const char *get_error_message(int errcode)
         return "Unknow error code.";
 
     return error_messages[errcode];
+}
+
+struct network_device *check_network_device(struct run_info *info,
+        const char *method_param, int expect_type, int *errcode)
+{
+    purc_variant_t jo = NULL, jo_tmp;
+    struct network_device *netdev = NULL;
+
+    jo = purc_variant_make_from_json_string(method_param, strlen(method_param));
+    if (jo == NULL || !purc_variant_is_object(jo)) {
+        *errcode = EINVAL;
+        goto failed;
+    }
+
+    if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "device")) == NULL) {
+        *errcode = ENOKEY;
+        goto failed;
+    }
+
+    const char *ifname = purc_variant_get_string_const(jo_tmp);
+    if (ifname == NULL || !is_valid_interface_name(ifname)) {
+        LOG_ERROR("Bad interface name: %s\n", ifname);
+        *errcode = EINVAL;
+        goto failed;
+    }
+
+    netdev = retrieve_network_device_from_ifname(info, ifname);
+    if (netdev == NULL) {
+        LOG_ERROR("Not existed interface name: %s\n", ifname);
+        *errcode = ENOENT;
+        goto failed;
+    }
+
+    if (expect_type != DEVICE_TYPE_UNKNOWN
+            && netdev->type != expect_type) {
+        *errcode = EINVAL;
+        goto failed;
+    }
+
+    if (update_network_device_dynamic_info(ifname, netdev)) {
+        LOG_ERROR("Failed to update interface information: %s\n", ifname);
+        *errcode = errno;
+        goto failed;
+    }
+
+    if (jo)
+        purc_variant_unref(jo);
+
+    return netdev;
+
+failed:
+    if (jo)
+        purc_variant_unref(jo);
+
+    return NULL;
 }
 

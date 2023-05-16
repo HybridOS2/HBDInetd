@@ -21,5 +21,6 @@ list(APPEND hbdinetd_SOURCES
     "${HBDINETD_DIR}/ports/linux/wifi/wifi_state_machine.c"
     "${HBDINETD_DIR}/ports/linux/wifi/wpa_supplicant_conf.c"
     "${HBDINETD_DIR}/ports/linux/network-device.c"
+    "${HBDINETD_DIR}/ports/linux/wifi-device.c"
 )
 

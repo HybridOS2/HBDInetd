@@ -91,7 +91,7 @@ static void avl_remove(struct avl_tree *tree, struct avl_node *node);
 void
 avl_init(struct avl_tree *tree, avl_tree_comp comp, bool allow_dups, void *ptr)
 {
-  INIT_LIST_HEAD(&tree->list_head);
+  init_list_head(&tree->list_head);
   tree->root = NULL;
   tree->count = 0;
   tree->comp = comp;

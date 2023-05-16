@@ -33,6 +33,7 @@
 
 // methods for WiFi Device
 #define METHOD_WIFI_START_SCAN          "wifiStartScanHotspots"
+#define METHOD_WIFI_GET_HOTSPOTS        "wifiGetHotspotList"
 #define METHOD_WIFI_STOP_SCAN           "wifiStopScanHotspots"
 #define METHOD_WIFI_CONNECT_AP          "wifiConnect"
 #define METHOD_WIFI_DISCONNECT_AP       "wifiDisconnect"

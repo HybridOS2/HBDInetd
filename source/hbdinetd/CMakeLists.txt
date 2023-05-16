@@ -24,8 +24,8 @@ list(APPEND hbdinetd_SOURCES
     "${HBDINETD_DIR}/utils/kvlist.c"
     "${HBDINETD_DIR}/sbin/main.c"
     "${HBDINETD_DIR}/sbin/utils.c"
-    "${HBDINETD_DIR}/sbin/common-impl.c"
-#    "${HBDINETD_DIR}/sbin/wifi-impl.c"
+    "${HBDINETD_DIR}/sbin/common-iface.c"
+    "${HBDINETD_DIR}/sbin/wifi-iface.c"
 #    "${HBDINETD_DIR}/sbin/tools.c"
 #    "${HBDINETD_DIR}/sbin/wifi-ops.c"
 )
