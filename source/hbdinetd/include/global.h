@@ -1,5 +1,5 @@
 /*
-** internal.h -- The internal declarations for HBDInetd.
+** global.h -- The global header for HBDInetd.
 **
 ** Copyright (C) 2023 FMSoft (http://www.fmsoft.cn)
 **
@@ -20,8 +20,8 @@
 ** along with this program.  If not, see http://www.gnu.org/licenses/.
 */
 
-#ifndef _hbdinetd_internal_h
-#define _hbdinetd_internal_h
+#ifndef _hbdinetd_global_h
+#define _hbdinetd_global_h
 
 #include <purc/purc.h>
 #include <hbdbus/hbdbus.h>
@@ -61,20 +61,31 @@ struct hbd_ifaddr {
 #define hbdifa_dstaddr   ifa_ifu.dstaddr
 };
 
+struct netdev_context;
+
 typedef struct network_device {
     /* fixed info */
-    int                 type;
+    int                 type;       /* the type of network device */
     unsigned int        bitrate;    /* only for ether wireless */
+    const char         *ifname;     /* interface name */
     char               *hwaddr;     /* only for ether interface */
-    int (*up)(struct run_info *info, struct network_device* netdev);
-    int (*down)(struct run_info *info, struct network_device* netdev);
 
     /* dynamic info */
     int                 status;
-    unsigned int        flags;
+    unsigned int        flags;      /* copied from kernel */
     struct hbd_ifaddr   ipv4;
     struct hbd_ifaddr   ipv6;
 
+    time_t              time_checked;
+    unsigned int        check_interval;     /* interval to call check() */
+
+    /* context for device engine */
+    struct netdev_context *ctxt;
+
+    /* basic operators for the device engine. */
+    int (*up)(struct run_info *info, struct network_device* netdev);
+    int (*down)(struct run_info *info, struct network_device* netdev);
+    int (*check)(struct run_info *info, struct network_device* netdev);
 } network_device;
 
 #if 0
@@ -85,7 +96,7 @@ typedef struct _WiFi_device                     // WiFi device description
     struct _wifi_context * context;             // the context for WiFi control layer 
     char bssid[HOTSPOT_STRING_LENGTH];          // bssid of current connecting network
     int signal;                                 // signal strength for current connecting network
-    int scan_time;                              // the internal time for scan network
+    int scan_time;                              // the global time for scan network
     pthread_mutex_t list_mutex;                 // for hotspots list
     struct _wifi_hotspot *first_hotspot;        // hotspots list
 } WiFi_device;
@@ -150,6 +161,11 @@ const char *get_error_message(int errcode);
 int register_common_interfaces(hbdbus_conn *conn);
 void revoke_common_interfaces(hbdbus_conn *conn);
 
+/* wifi-ops.c */
+int wifi_op_up(struct run_info *info, struct network_device *netdev);
+int wifi_op_down(struct run_info *info, struct network_device *netdev);
+int wifi_op_check(struct run_info *info, struct network_device *netdev);
+
 /* wifi-impl.c */
 int register_wifi_interfaces(hbdbus_conn *conn);
 void revoke_wifi_interfaces(hbdbus_conn *conn);
@@ -166,4 +182,4 @@ retrieve_network_device_from_ifname(struct run_info *info, const char *ifname)
     return *(struct network_device **)data;
 }
 
-#endif /* not defined _hbdinetd_internal_h */
+#endif /* not defined _hbdinetd_global_h */

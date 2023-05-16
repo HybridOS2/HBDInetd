@@ -36,7 +36,7 @@
 #include <sys/wait.h>
 
 #include "hbdinetd.h"
-#include "internal.h"
+#include "global.h"
 #include "log.h"
 
 struct run_info run_info;

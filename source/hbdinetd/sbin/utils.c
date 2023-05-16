@@ -20,7 +20,7 @@
 ** along with this program.  If not, see http://www.gnu.org/licenses/.
 */
 
-#include "internal.h"
+#include "global.h"
 #include "log.h"
 
 const char *error_messages[] = {

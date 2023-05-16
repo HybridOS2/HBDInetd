@@ -22,23 +22,15 @@ list(APPEND hbdinetd_SOURCES
     "${HBDINETD_DIR}/utils/avl.c"
     "${HBDINETD_DIR}/utils/avl-cmp.c"
     "${HBDINETD_DIR}/utils/kvlist.c"
-    "${HBDINETD_DIR}/wpa-client/common.c"
-    "${HBDINETD_DIR}/wpa-client/os_unix.c"
-    "${HBDINETD_DIR}/wpa-client/wpa_debug.c"
-    "${HBDINETD_DIR}/wpa-client/wpa_ctrl.c"
-    "${HBDINETD_DIR}/wifi/wifi.c"
-    "${HBDINETD_DIR}/wifi/wifi_event.c"
-    "${HBDINETD_DIR}/wifi/wifimanager.c"
-    "${HBDINETD_DIR}/wifi/wifi_state_machine.c"
-    "${HBDINETD_DIR}/wifi/wpa_supplicant_conf.c"
     "${HBDINETD_DIR}/sbin/main.c"
-    "${HBDINETD_DIR}/sbin/network-device.c"
     "${HBDINETD_DIR}/sbin/utils.c"
     "${HBDINETD_DIR}/sbin/common-impl.c"
 #    "${HBDINETD_DIR}/sbin/wifi-impl.c"
 #    "${HBDINETD_DIR}/sbin/tools.c"
 #    "${HBDINETD_DIR}/sbin/wifi-ops.c"
 )
+
+HBDINETD_INCLUDE_CONFIG_FILES_IF_EXISTS()
 
 set(hbdinetd_LIBRARIES
     PurC::PurC
