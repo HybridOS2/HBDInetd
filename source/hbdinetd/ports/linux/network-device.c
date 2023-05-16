@@ -238,7 +238,8 @@ int update_network_device_info(struct run_info *run_info, const char *ifname)
             goto failed;
         }
 
-        if (kvlist_set_ex(&run_info->devices, ifname, &netdev) == NULL) {
+        if ((netdev->ifname = kvlist_set_ex(&run_info->devices,
+                        ifname, &netdev)) == NULL) {
             LOG_ERROR("Failed kvlist_set_ex()\n");
             goto failed;
         }
@@ -297,8 +298,8 @@ int enumerate_network_devices(struct run_info *run_info)
                 goto failed;
             }
 
-            if (kvlist_set_ex(&run_info->devices, address->ifa_name,
-                    &netdev) == NULL) {
+            if ((netdev->ifname = kvlist_set_ex(&run_info->devices,
+                        address->ifa_name, &netdev)) == NULL) {
                 LOG_ERROR("Failed kvlist_set_ex()\n");
                 goto failed;
             }

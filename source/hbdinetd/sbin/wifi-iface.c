@@ -25,6 +25,7 @@
 #include "log.h"
 #include "list.h"
 
+#include <net/if.h>
 #include <assert.h>
 #include <errno.h>
 
@@ -411,228 +412,208 @@ done:
     return pb->buf;
 }
 
-#if 0
 static char *wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint,
         const char* to_method, const char* method_param, int *ret_code)
 {
-    purc_variant_t jo = NULL;
-    purc_variant_t jo_tmp = NULL;
-    const char * device_name = NULL;
-    char reply[512];
-    int reply_length = 512;
-    int index = -1;
+    (void)from_endpoint;
+    (void)to_method;
+
     int errcode = ERR_OK;
-    char * ret_string = malloc(4096);
-    WiFi_device * wifi_device = NULL;
+    struct run_info *info = hbdbus_conn_get_user_data(conn);
+    assert(info);
+    assert(strcasecmp(to_method, METHOD_WIFI_GET_NETWORK_INFO) == 0);
 
-    memset(ret_string, 0, 4096);
-    sprintf(ret_string, "{\"data\":{");
-
-    // get device array
-    network_device * device = hbdbus_conn_get_user_data(conn);
-    if(device == NULL)
-    {
-        errcode = ERR_NONE_DEVICE_LIST;
-        goto failed;
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
+    if (pcutils_printbuf_init(pb)) {
+        *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
+        return NULL;
     }
 
-    // get procedure name
-    if(strncasecmp(to_method, METHOD_WIFI_GET_NETWORK_INFO, strlen(METHOD_WIFI_GET_NETWORK_INFO)))
-    {
-        errcode = ERR_WRONG_PROCEDURE;
-        goto failed;
+    struct network_device *netdev;
+    netdev = check_network_device(info, method_param,
+            DEVICE_TYPE_ETHER_WIRELESS, &errcode);
+    if (netdev == NULL) {
+        goto done;
     }
 
-    // analyze json
-    jo = purc_variant_make_from_json_string(method_param, strlen(method_param), 2);
-    if(jo == NULL)
-    {
-        errcode = ERR_WRONG_JSON;
-        goto failed;
+    if (netdev->status == DEVICE_STATUS_DOWN ||
+            netdev->status == DEVICE_STATUS_UNCERTAIN ||
+            netdev->ctxt == NULL) {
+        errcode = ENETDOWN;
+        goto done;
     }
 
-    // get device name
-    if(json_object_object_get_ex(jo, "device", &jo_tmp) == 0)
-    {
-        errcode = ERR_WRONG_JSON;
-        goto failed;
+    pcutils_printbuf_strappend(pb, "{\"data\":{");
+
+    // device name
+    pcutils_printbuf_format(pb,
+            "\"device\":\"%s\",", netdev->ifname);
+
+    switch (netdev->status) {
+        case DEVICE_STATUS_DOWN:
+            pcutils_printbuf_strappend(pb, "\"status\":\"down\",");
+            break;
+
+        case DEVICE_STATUS_UP:
+            pcutils_printbuf_strappend(pb, "\"status\":\"up\",");
+            break;
+
+        case DEVICE_STATUS_RUNNING:
+            pcutils_printbuf_strappend(pb, "\"status\":\"running\",");
+            break;
+
+        default:
+            pcutils_printbuf_strappend(pb, "\"status\":\"uncertain\",");
+            break;
     }
 
-    device_name = json_object_get_string(jo_tmp);
-    if(device_name && strlen(device_name) == 0)
-    {
-        errcode = ERR_NO_DEVICE_NAME_IN_PARAM;
-        goto failed;
+    if (netdev->status != DEVICE_STATUS_RUNNING) {
+        errcode = ENONET;
+        goto done;
     }
 
-    // device does exist?
-    index = get_device_index(device, device_name);
-    if(index == -1)
-    {
-        errcode = ERR_NO_DEVICE_IN_SYSTEM;
-        goto failed;
+    char *reply;
+    size_t reply_length;
+    reply = netdev->wifi_ops->get_net_info(netdev->ctxt,
+            &reply_length, &errcode);
+    if (errcode) {
+        goto done;
     }
 
-    if(device[index].type != DEVICE_TYPE_WIFI)
-    {
-        errcode = ERR_NOT_WIFI_DEVICE;
-        goto failed;
-    }
-    
-    if(device[index].lib_handle == NULL)
-    {
-        errcode = ERR_LOAD_LIBRARY;
-        goto failed;
-    }
-
-    wifi_device = (WiFi_device *)device[index].device;
-    if(wifi_device->context == NULL)
-    {
-        errcode = ERR_DEVICE_NOT_OPENNED;
-        goto failed;
-    }
-
-    errcode = wifi_device->wifi_device_Ops->get_cur_net_info(wifi_device->context, reply, reply_length);
-
-
-    if(errcode == 0)
-    {
-        char * tempstart = NULL;
-        char * tempend = NULL;
-        char content[64];
-
-        memset(content, 0, 64);
-        tempstart = strstr(reply, "wpa_state=");
-        if(tempstart)
-        {
-            tempstart += strlen("wpa_state=");
-            tempend = strstr(tempstart, "\n");
-            if(tempend)
-            {
-                memcpy(content, tempstart, tempend - tempstart);
-                if(strncasecmp(content, "COMPLETED", strlen("COMPLETED")))
-                {
-                    errcode = ERR_DEVICE_NOT_CONNECT;
-                    goto failed;
-                }
-            }
-            else
-            {
-                errcode = ERR_DEVICE_NOT_CONNECT;
-                goto failed;
+    char *start = NULL;
+    char *end = NULL;
+    start = strstr(reply, "wpa_state=");
+    if (start) {
+        start += strlen("wpa_state=");
+        end = strstr(start, "\n");
+        if (end) {
+            if (strncasecmp(start, "COMPLETED", strlen("COMPLETED"))) {
+                errcode = ENONET;
+                goto done;
             }
         }
-        else
-        {
-            errcode = ERR_DEVICE_NOT_CONNECT;
-            goto failed;
+        else {
+            errcode = ENONET;
+            goto done;
         }
-        
-        device[index].status = DEVICE_STATUS_RUNNING;
-
-        // device name
-        sprintf(ret_string + strlen(ret_string), "\"device\":\"%s\",", device_name);
-
-        // bssid
-        memset(content, 0, 64);
-        tempstart = strstr(reply, "bssid=");
-        if(tempstart)
-        {
-            tempstart += strlen("bssid=");
-            tempend = strstr(tempstart, "\n");
-            if(tempend)
-                memcpy(content, tempstart, tempend - tempstart);
-        }
-        sprintf(ret_string + strlen(ret_string), "\"bssid\":\"%s\",", content);
-        memset(wifi_device->bssid, 0, HOTSPOT_STRING_LENGTH);
-        sprintf(wifi_device->bssid, "%s", content);
-
-        // frenquency 
-        memset(content, 0, 64);
-        tempstart = strstr(tempend, "freq=");
-        if(tempstart)
-        {
-            tempstart += strlen("freq=");
-            tempend = strstr(tempstart, "\n");
-            if(tempend)
-                memcpy(content, tempstart, tempend - tempstart);
-        }
-        sprintf(ret_string + strlen(ret_string), "\"frenquency\":\"%s MHz\",", content);
-
-        // ssid
-        memset(content, 0, 64);
-        tempstart = strstr(tempend, "ssid=");
-        if(tempstart)
-        {
-            tempstart += strlen("ssid=");
-            tempend = strstr(tempstart, "\n");
-            if(tempend)
-                memcpy(content, tempstart, tempend - tempstart);
-        }
-        sprintf(ret_string + strlen(ret_string), "\"ssid\":\"%s\",", content);
-
-
-        // encryptionType
-        memset(content, 0, 64);
-        tempstart = strstr(tempend, "key_mgmt=");
-        if(tempstart)
-        {
-            tempstart += strlen("key_mgmt=");
-            tempend = strstr(tempstart, "\n");
-            if(tempend)
-                memcpy(content, tempstart, tempend - tempstart);
-        }
-        sprintf(ret_string + strlen(ret_string), "\"encryptionType\":\"%s\",", content);
-
-        // ip
-        memset(content, 0, 64);
-        tempstart = strstr(tempend, "ip_address=");
-        if(tempstart)
-        {
-            tempstart += strlen("ip_address=");
-            tempend = strstr(tempstart, "\n");
-            if(tempend)
-                memcpy(content, tempstart, tempend - tempstart);
-        }
-        sprintf(ret_string + strlen(ret_string), "\"ip\":\"%s\",", content);
-        memset(device[index].ip, 0, NETWORK_ADDRESS_LENGTH);
-        sprintf(device[index].ip, "%s", content);
-
-        // mac
-        memset(content, 0, 64);
-        tempstart = strstr(tempend, "address=");
-        if(tempstart)
-        {
-            tempstart += strlen("address=");
-            tempend = strstr(tempstart, "\n");
-            if(tempend)
-                memcpy(content, tempstart, tempend - tempstart);
-        }
-        sprintf(ret_string + strlen(ret_string), "\"mac\":\"%s\",", content);
-        memset(device[index].mac, 0, NETWORK_ADDRESS_LENGTH);
-        sprintf(device[index].mac, "%s", content);
-
-        // speed
-        sprintf(ret_string + strlen(ret_string), "\"speed\":\"%d Mbps\",", device[index].speed);
-
-        // gate way
-
-        // singal
-        sprintf(ret_string + strlen(ret_string), "\"signalStrength\":%d", wifi_device->signal);
+    }
+    else {
+        errcode = ENONET;
+        goto done;
     }
 
-failed:
-    if(jo)
-        purc_variant_unref(jo);
+    // bssid
+    start = strstr(end, "bssid=");
+    if (start) {
+        start += strlen("bssid=");
+        end = strstr(start, "\n");
+        if (end) {
+            size_t len = end - start;
+            pcutils_printbuf_strappend(pb, "\"bssid\":\"");
+            pcutils_printbuf_memappend_fast(pb, start, len);
+            pcutils_printbuf_strappend(pb, "\",");
+        }
+    }
 
-    sprintf(ret_string + strlen(ret_string), "},");
-    sprintf(ret_string + strlen(ret_string),
-            "\"errCode\":%d, \"errMsg\":\"%s\"}",
+    if (start == NULL || end == NULL) {
+        pcutils_printbuf_strappend(pb, "\"bssid\":null,");
+        goto done;
+    }
+
+    // frenquency
+    start = strstr(end, "freq=");
+    if (start) {
+        start += strlen("freq=");
+        end = strstr(start, "\n");
+        if (end) {
+            size_t len = end - start;
+            pcutils_printbuf_strappend(pb, "\"frenquency\":\"");
+            pcutils_printbuf_memappend_fast(pb, start, len);
+            pcutils_printbuf_strappend(pb, " MHz\",");
+        }
+    }
+
+    if (start == NULL || end == NULL) {
+        pcutils_printbuf_strappend(pb, "\"frenquency\":null,");
+        goto done;
+    }
+
+    // ssid
+    start = strstr(end, "ssid=");
+    if (start) {
+        start += strlen("ssid=");
+        end = strstr(start, "\n");
+        if (end) {
+            size_t len = end - start;
+            pcutils_printbuf_strappend(pb, "\"ssid\":\"");
+            pcutils_printbuf_memappend_fast(pb, start, len);
+            pcutils_printbuf_strappend(pb, "\",");
+        }
+    }
+
+    if (start == NULL || end == NULL) {
+        pcutils_printbuf_strappend(pb, "\"ssid\":null,");
+        goto done;
+    }
+
+    // encryptionType
+    start = strstr(end, "key_mgmt=");
+    if (start) {
+        start += strlen("key_mgmt=");
+        end = strstr(start, "\n");
+        if (end) {
+            size_t len = end - start;
+            pcutils_printbuf_strappend(pb, "\"encryptionType\":\"");
+            pcutils_printbuf_memappend_fast(pb, start, len);
+            pcutils_printbuf_strappend(pb, "\",");
+        }
+    }
+
+    if (start == NULL || end == NULL) {
+        pcutils_printbuf_strappend(pb, "\"encryptionType\":null,");
+        goto done;
+    }
+
+    // speed
+    pcutils_printbuf_format(pb,
+            "\"bitRate\":\"%d Mbps\",", netdev->bitrate / 1000000);
+
+
+    // singal
+    pcutils_printbuf_format(pb,
+            "\"signalStrength\":%d", netdev->signal);
+
+    pcutils_printbuf_format(pb,
+            "\"hardwareAddr\":\"%s\","
+            "\"inet\":{\"address\":\"%s\","
+                "\"netmask\":\"%s\","
+                "\"broadcastAddr\":\"%s\","
+                "\"destinationAddr\":\"%s\""
+            "},"
+            "\"inet6\":{\"address\":\"%s\","
+                "\"netmask\":\"%s\","
+                "\"broadcastAddr\":\"%s\","
+                "\"destinationAddr\":\"%s\""
+            "},",
+            netdev->hwaddr ? netdev->hwaddr : "",
+            netdev->ipv4.addr ? netdev->ipv4.addr : "",
+            netdev->ipv4.netmask ? netdev->ipv4.netmask : "",
+            (netdev->flags & IFF_POINTOPOINT) ? "" : netdev->ipv4.hbdifa_broadaddr,
+            (netdev->flags & IFF_POINTOPOINT) ? netdev->ipv4.hbdifa_dstaddr : "",
+            netdev->ipv6.addr ? netdev->ipv6.addr : "",
+            netdev->ipv6.netmask ? netdev->ipv6.netmask : "",
+            (netdev->flags & IFF_POINTOPOINT) ? "" : netdev->ipv6.hbdifa_broadaddr,
+            (netdev->flags & IFF_POINTOPOINT) ? netdev->ipv6.hbdifa_dstaddr : "");
+
+done:
+    pcutils_printbuf_format(pb,
+            "},\"errCode\":%d, \"errMsg\":\"%s\"}",
             errcode, get_error_message(errcode));
-
-    return ret_string;
+    *ret_code = PCRDR_SC_OK;
+    return pb->buf;
 }
 
+#if 0
 void report_wifi_scan_info(char * device_name, int type, void * results, int number)
 {
     wifi_hotspot * node = NULL;
@@ -905,54 +886,72 @@ int register_wifi_interfaces(hbdbus_conn * conn)
     int errcode = 0;
 
     errcode = hbdbus_register_procedure(conn, METHOD_WIFI_START_SCAN,
-            NULL, NULL, wifiStartScanHotspots);
+            HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS,
+            wifiStartScanHotspots);
     if (errcode) {
-        LOG_ERROR("WIFI DAEMON: Error for register procedure %s, %s.\n",
+        LOG_ERROR("Error for register procedure %s: %s.\n",
                 METHOD_WIFI_START_SCAN, hbdbus_get_err_message(errcode));
         goto done;
     }
 
     errcode = hbdbus_register_procedure(conn, METHOD_WIFI_GET_HOTSPOTS,
-            NULL, NULL, wifiGetHotspotList);
+            HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS,
+            wifiGetHotspotList);
     if (errcode) {
-        LOG_ERROR("WIFI DAEMON: Error for register procedure %s, %s.\n",
+        LOG_ERROR("Error for register procedure %s: %s.\n",
                 METHOD_WIFI_START_SCAN, hbdbus_get_err_message(errcode));
         goto done;
     }
 
-    errcode = hbdbus_register_procedure(conn, METHOD_WIFI_STOP_SCAN, NULL, NULL, wifiStopScanHotspots);
+    errcode = hbdbus_register_procedure(conn, METHOD_WIFI_STOP_SCAN,
+            HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS,
+            wifiStopScanHotspots);
     if (errcode) {
-        LOG_ERROR("WIFI DAEMON: Error for register procedure %s, %s.\n", METHOD_WIFI_STOP_SCAN, hbdbus_get_err_message(errcode));
+        LOG_ERROR("Error for register procedure %s: %s.\n",
+                METHOD_WIFI_STOP_SCAN, hbdbus_get_err_message(errcode));
         goto done;
     }
 
-    errcode = hbdbus_register_procedure(conn, METHOD_WIFI_CONNECT_AP, NULL, NULL, wifiConnect);
+    errcode = hbdbus_register_procedure(conn, METHOD_WIFI_CONNECT_AP,
+            HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS,
+            wifiConnect);
     if (errcode) {
-        LOG_ERROR("WIFI DAEMON: Error for register procedure %s, %s.\n", METHOD_WIFI_CONNECT_AP, hbdbus_get_err_message(errcode));
+        LOG_ERROR("Error for register procedure %s: %s.\n",
+                METHOD_WIFI_CONNECT_AP, hbdbus_get_err_message(errcode));
         goto done;
     }
 
-    errcode = hbdbus_register_procedure(conn, METHOD_WIFI_DISCONNECT_AP, NULL, NULL, wifiDisconnect);
+    errcode = hbdbus_register_procedure(conn, METHOD_WIFI_DISCONNECT_AP,
+            HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS,
+            wifiDisconnect);
     if (errcode) {
-        LOG_ERROR("WIFI DAEMON: Error for register procedure %s, %s.\n", METHOD_WIFI_DISCONNECT_AP, hbdbus_get_err_message(errcode));
+        LOG_ERROR("Error for register procedure %s: %s.\n",
+                METHOD_WIFI_DISCONNECT_AP, hbdbus_get_err_message(errcode));
         goto done;
     }
 
-    errcode = hbdbus_register_procedure(conn, METHOD_WIFI_GET_NETWORK_INFO, NULL, NULL, wifiGetNetworkInfo);
+    errcode = hbdbus_register_procedure(conn, METHOD_WIFI_GET_NETWORK_INFO,
+            HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS,
+            wifiGetNetworkInfo);
     if (errcode) {
-        LOG_ERROR("WIFI DAEMON: Error for register procedure %s, %s.\n", METHOD_WIFI_GET_NETWORK_INFO, hbdbus_get_err_message(errcode));
+        LOG_ERROR("Error for register procedure %s: %s.\n",
+                METHOD_WIFI_GET_NETWORK_INFO, hbdbus_get_err_message(errcode));
         goto done;
     }
 
-    errcode = hbdbus_register_event(conn, WIFIHOTSPOTSCHANGED, NULL, NULL);
+    errcode = hbdbus_register_event(conn, WIFIHOTSPOTSCHANGED,
+            HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS);
     if (errcode) {
-        LOG_ERROR("WIFI DAEMON: Error for register event %s, %s.\n", WIFIHOTSPOTSCHANGED, hbdbus_get_err_message(errcode));
+        LOG_ERROR("Error for register event %s: %s.\n",
+                WIFIHOTSPOTSCHANGED, hbdbus_get_err_message(errcode));
         goto done;
     }
 
-    errcode = hbdbus_register_event(conn, WIFISIGNALSTRENGTHCHANGED, NULL, NULL);
+    errcode = hbdbus_register_event(conn, WIFISIGNALSTRENGTHCHANGED,
+            HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS);
     if (errcode) {
-        LOG_ERROR("WIFI DAEMON: Error for register event %s, %s.\n", WIFISIGNALSTRENGTHCHANGED, hbdbus_get_err_message(errcode));
+        LOG_ERROR("Error for register event %s: %s.\n",
+                WIFISIGNALSTRENGTHCHANGED, hbdbus_get_err_message(errcode));
         goto done;
     }
 
@@ -972,3 +971,4 @@ void revoke_wifi_interfaces(hbdbus_conn *conn)
     hbdbus_revoke_procedure(conn, METHOD_WIFI_DISCONNECT_AP);
     hbdbus_revoke_procedure(conn, METHOD_WIFI_GET_NETWORK_INFO);
 }
+

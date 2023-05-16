@@ -79,10 +79,8 @@ struct wifi_device_ops {
     int (*start_scan)(struct netdev_context *);
     int (*stop_scan)(struct netdev_context *);
     size_t (*get_hotspots)(struct netdev_context *, struct list_head *head);
-    int (*get_cur_net_info)(struct netdev_context *,
-            char *reply, int reply_length);
-    void (*report_wifi_scan_info)(char * device_name,
-            int type, void * hotspots, int number);
+    char* (*get_net_info)(struct netdev_context *,
+            size_t *len, int *errcode);
 };
 
 typedef struct network_device {
@@ -93,7 +91,8 @@ typedef struct network_device {
     char               *hwaddr;     /* only for ether interface */
 
     /* dynamic info */
-    int                 status;
+    unsigned short      status;
+    unsigned short      signal;
     unsigned int        flags;      /* copied from kernel */
     struct hbd_ifaddr   ipv4;
     struct hbd_ifaddr   ipv6;

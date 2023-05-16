@@ -26,12 +26,16 @@
 #define HBDINETD_APP_NAME               "cn.fmsoft.hybridos.inetd"
 #define HBDINETD_RUNNER_NAME            "daemon"
 
-// methods for All Network Devices 
+#define HBDINETD_ALLOWED_HOSTS          "localhost"
+#define HBDINETD_PRIVILEGED_APPS        "cn.fmsoft.hybridos.*"
+#define HBDINETD_ANY_APPS               "*"
+
+// methods for all network devices
 #define METHOD_NET_OPEN_DEVICE          "openDevice"
 #define METHOD_NET_CLOSE_DEVICE         "closeDevice"
 #define METHOD_NET_GET_DEVICE_STATUS    "getDeviceStatus"
 
-// methods for WiFi Device
+// methods for WiFi device
 #define METHOD_WIFI_START_SCAN          "wifiStartScanHotspots"
 #define METHOD_WIFI_GET_HOTSPOTS        "wifiGetHotspotList"
 #define METHOD_WIFI_STOP_SCAN           "wifiStopScanHotspots"
@@ -39,8 +43,8 @@
 #define METHOD_WIFI_DISCONNECT_AP       "wifiDisconnect"
 #define METHOD_WIFI_GET_NETWORK_INFO    "wifiGetNetworkInfo"
 
-// method for Ethernet Device
-// method for Mobile Device
+// method for wired device
+// method for mobile device
 
 // events for All Network Devices
 #define NETWORKDEVICECHANGED            "NETWORKDEVICECHANGED"

@@ -262,32 +262,33 @@ int register_common_interfaces(hbdbus_conn * conn)
     int errcode = 0;
 
     errcode = hbdbus_register_procedure(conn, METHOD_NET_OPEN_DEVICE,
-            NULL, NULL, openDevice);
+            HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS, openDevice);
     if (errcode) {
-        LOG_ERROR("WIFI DAEMON: Error for register procedure %s, %s.\n",
+        LOG_ERROR("Error for register procedure %s: %s.\n",
                 METHOD_NET_OPEN_DEVICE, hbdbus_get_err_message(errcode));
         goto failed;
     }
 
     errcode = hbdbus_register_procedure(conn, METHOD_NET_CLOSE_DEVICE,
-            NULL, NULL, closeDevice);
+            HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS, closeDevice);
     if (errcode) {
-        LOG_ERROR("WIFI DAEMON: Error for register procedure %s, %s.\n",
+        LOG_ERROR("Error for register procedure %s: %s.\n",
                 METHOD_NET_CLOSE_DEVICE, hbdbus_get_err_message(errcode));
         goto failed;
     }
 
     errcode = hbdbus_register_procedure(conn, METHOD_NET_GET_DEVICE_STATUS,
-            NULL, NULL, getDeviceStatus);
+            HBDINETD_ALLOWED_HOSTS, HBDINETD_ANY_APPS, getDeviceStatus);
     if (errcode) {
-        LOG_ERROR("WIFI DAEMON: Error for register procedure %s, %s.\n",
+        LOG_ERROR("Error for register procedure %s: %s.\n",
                 METHOD_NET_GET_DEVICES_STATUS, hbdbus_get_err_message(errcode));
         goto failed;
     }
 
-    errcode = hbdbus_register_event(conn, NETWORKDEVICECHANGED, NULL, NULL);
+    errcode = hbdbus_register_event(conn, NETWORKDEVICECHANGED,
+            HBDINETD_ALLOWED_HOSTS, HBDINETD_ANY_APPS);
     if (errcode) {
-        LOG_ERROR("WIFI DAEMON: Error for register event %s, %s.\n",
+        LOG_ERROR("Error for register event %s: %s.\n",
                 NETWORKDEVICECHANGED, hbdbus_get_err_message(errcode));
         goto failed;
     }
