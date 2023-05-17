@@ -25,6 +25,10 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <stdarg.h>
+
+#include <sys/types.h>
+#include <unistd.h>
 
 const char *error_messages[] = {
     "Ok",                                       // ERR_OK
@@ -125,4 +129,69 @@ failed:
 
     return NULL;
 }
+
+#define SZ_IN_STACK_ARGS    16
+
+#ifndef __clang__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wclobbered"
+#endif
+
+int start_daemon(const char *pathname, const char *arg, ...)
+{
+    char **argv = NULL;
+    char *argv_in_stack[SZ_IN_STACK_ARGS];
+    va_list ap, ap1;
+
+    va_start(ap, arg);
+    va_copy(ap1, ap);
+
+    size_t nr_args = 0;
+    char *p = (char *)arg;
+    while (p) {
+        nr_args++;
+        p = va_arg(ap1, char *);
+    }
+    va_end(ap1);
+
+    if (nr_args < 1) {
+        LOG_ERROR("Bad arg: %s\n", arg);
+        return -1;
+    }
+
+    if (nr_args <= SZ_IN_STACK_ARGS) {
+        argv = argv_in_stack;
+    }
+    else {
+        argv = calloc(nr_args, sizeof(char *));
+        if (argv == NULL)
+            return -1;
+    }
+
+    p = (char *)arg;
+    size_t i = 0;
+    while (p) {
+        argv[i] = p;
+        i++;
+        p = va_arg(ap, char *);
+    }
+    va_end(ap);
+
+    pid_t cpid = vfork();
+    if (cpid == -1) {
+        return -1;
+    }
+    else if (cpid == 0) {
+        execv(pathname, argv);
+    }
+
+    if (argv != argv_in_stack)
+        free(argv);
+
+    return 0;
+}
+
+#ifndef __clang__
+#pragma GCC diagnostic pop
+#endif
 

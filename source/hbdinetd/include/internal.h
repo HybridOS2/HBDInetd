@@ -136,6 +136,7 @@ int wifi_device_check(struct run_info *info, struct network_device *netdev);
 const char *get_error_message(int errcode);
 struct network_device *check_network_device(struct run_info *info,
         const char *method_param, int expect_type, int *errcode);
+int start_daemon(const char *pathname, const char *arg, ...);
 
 /* common-iface.c */
 int register_common_interfaces(hbdbus_conn *conn);
