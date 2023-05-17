@@ -16,7 +16,7 @@ list(APPEND hbdinetd_SOURCES
     "${HBDINETD_DIR}/port/linux/wpa-client/os_unix.c"
     "${HBDINETD_DIR}/port/linux/wpa-client/wpa_debug.c"
     "${HBDINETD_DIR}/port/linux/wpa-client/wpa_ctrl.c"
-    "${HBDINETD_DIR}/port/linux/wifi/wifi-device.c"
+    "${HBDINETD_DIR}/port/linux/wifi/wifi-ops.c"
     "${HBDINETD_DIR}/port/linux/wifi/wifi.c"
     "${HBDINETD_DIR}/port/linux/wifi/wpa_supplicant_conf.c"
 #    "${HBDINETD_DIR}/port/linux/wifi/wifi_event.c"
