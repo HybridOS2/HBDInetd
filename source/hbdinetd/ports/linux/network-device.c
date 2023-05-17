@@ -41,6 +41,61 @@ bool is_valid_interface_name(const char *ifname)
     return purc_is_valid_token(ifname, IFNAMSIZ - 1);
 }
 
+#if 0
+    if (ifname[0] == 'e') {
+        netdev->type = DEVICE_TYPE_ETHER_WIRED;
+    }
+    else if (ifname[0] == 'w') {
+        netdev->type = DEVICE_TYPE_ETHER_WIRELESS;
+        netdev->on = wifi_device_on;
+        netdev->off = wifi_device_off;
+        netdev->check = wifi_device_check;
+    }
+    else {
+        /* TODO */
+        netdev->type = DEVICE_TYPE_UNKNOWN;
+    }
+#endif
+
+static int get_device_type(struct network_device * netdev,
+        const char *ifname, int fd)
+{
+    bool opened = false;
+    int type = DEVICE_TYPE_UNKNOWN;
+
+    if (fd < 0) {
+        fd = socket(AF_INET, SOCK_DGRAM, 0);
+        if (fd < 0) {
+            return -1;
+        }
+
+        opened = true;
+    }
+
+    struct iwreq wrq;
+    strncpy(wrq.ifr_name, ifname, IFNAMSIZ - 1);
+    int ret = ioctl(fd, SIOCGIWNAME, &wrq);
+    if (ret == 0) {
+        type = DEVICE_TYPE_ETHER_WIRELESS;
+        goto done;
+
+    }
+    else {
+        struct ifreq ifr;
+        strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
+        ret = ioctl(fd, SIOCGIFHWADDR, &ifr);
+        if (ret == 0) {
+            type = DEVICE_TYPE_ETHER_WIRED;
+        }
+    }
+
+done:
+    if (opened)
+        close(fd);
+    netdev->type = type;
+    return 0;
+}
+
 void cleanup_network_device(struct network_device *netdev)
 {
     if (netdev->hwaddr) {
@@ -104,22 +159,12 @@ struct network_device *get_network_device_fixed_info(const char *ifname,
     if (netdev->flags & IFF_LOOPBACK) {
         netdev->type = DEVICE_TYPE_LOOPBACK;
     }
-    else if (ifname[0] == 'e') {
-        netdev->type = DEVICE_TYPE_ETHER_WIRED;
-    }
-    else if (ifname[0] == 'w') {
-        netdev->type = DEVICE_TYPE_ETHER_WIRELESS;
-        netdev->on = wifi_device_on;
-        netdev->off = wifi_device_off;
-        netdev->check = wifi_device_check;
-    }
-    else {
-        /* TODO */
-        netdev->type = DEVICE_TYPE_UNKNOWN;
+    else if (get_device_type(netdev, ifname, fd)) {
+        goto failed;
     }
 
     if (netdev->type & DEVICE_TYPE_ETHER_MASK) {
-        // get the mac of this interface
+        // get the hardware address of this interface
         if (ioctl(fd, SIOCGIFHWADDR, &ifr)) {
             LOG_ERROR("Failed ioctl(): %s\n", strerror(errno));
             goto failed;
@@ -307,21 +352,15 @@ int enumerate_network_devices(struct run_info *run_info)
                 goto failed;
             }
 
+            netdev->flags = address->ifa_flags;
+
             if (netdev->flags & IFF_LOOPBACK) {
                 netdev->type = DEVICE_TYPE_LOOPBACK;
             }
-            else if (address->ifa_name[0] == 'e') {
-                netdev->type = DEVICE_TYPE_ETHER_WIRED;
+            else if (get_device_type(netdev, address->ifa_name, -1)) {
+                LOG_ERROR("Failed get_device_type(): %s\n", strerror(errno));
+                goto failed;
             }
-            else if (address->ifa_name[0] == 'w') {
-                netdev->type = DEVICE_TYPE_ETHER_WIRELESS;
-            }
-            else {
-                /* TODO */
-                netdev->type = DEVICE_TYPE_UNKNOWN;
-            }
-
-            netdev->flags = address->ifa_flags;
         }
         else {
             netdev = *(struct network_device **)data;
