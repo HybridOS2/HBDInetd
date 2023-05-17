@@ -143,6 +143,11 @@ int start_daemon(const char *pathname, const char *arg, ...)
     char *argv_in_stack[SZ_IN_STACK_ARGS];
     va_list ap, ap1;
 
+    if (access(pathname, F_OK | R_OK | X_OK)) {
+        HLOG_ERR("Bad executable: %s\n", pathname);
+        return -1;
+    }
+
     va_start(ap, arg);
     va_copy(ap1, ap);
 

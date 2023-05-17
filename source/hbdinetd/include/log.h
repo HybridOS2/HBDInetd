@@ -21,21 +21,10 @@
  * along with this program.  If not, see http://www.gnu.org/licenses/.
  */
 
-#ifndef __log_h
-#define __log_h
+#ifndef __log_h_
+#define __log_h_
 
 #include <purc/purc-helpers.h>
-
-#ifdef NDEBUG
-#   define HLOG_DEBUG(x, ...)
-#   define HLOG_INFO(x, ...)
-#else
-#   define HLOG_DEBUG(x, ...)   \
-    purc_log_debug("%s: " x, __func__, ##__VA_ARGS__)
-
-#   define HLOG_INFO(x, ...)    \
-    purc_log_info("%s: " x, __func__, ##__VA_ARGS__)
-#endif /* not defined NDEBUG */
 
 #define HLOG_ERR(x, ...)   \
     purc_log_error("%s: " x, __func__, ##__VA_ARGS__)
@@ -46,5 +35,11 @@
 #define HLOG_NOTE(x, ...)    \
     purc_log_notice("%s: " x, __func__, ##__VA_ARGS__)
 
-#endif /* not defined __log_h */
+#define HLOG_DEBUG(x, ...)   \
+    purc_log_debug("%s: " x, __func__, ##__VA_ARGS__)
+
+#define HLOG_INFO(x, ...)    \
+    purc_log_info("%s: " x, __func__, ##__VA_ARGS__)
+
+#endif /* not defined __log_h_ */
 
