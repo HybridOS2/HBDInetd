@@ -61,7 +61,6 @@ static int get_device_type(struct network_device * netdev,
         const char *ifname, int fd)
 {
     bool opened = false;
-    int type = DEVICE_TYPE_UNKNOWN;
 
     if (fd < 0) {
         fd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -76,23 +75,28 @@ static int get_device_type(struct network_device * netdev,
     strncpy(wrq.ifr_name, ifname, IFNAMSIZ - 1);
     int ret = ioctl(fd, SIOCGIWNAME, &wrq);
     if (ret == 0) {
-        type = DEVICE_TYPE_ETHER_WIRELESS;
+        netdev->type = DEVICE_TYPE_ETHER_WIRELESS;
+        netdev->on = wifi_device_on;
+        netdev->off = wifi_device_off;
+        netdev->check = wifi_device_check;
         goto done;
-
     }
     else {
         struct ifreq ifr;
         strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
         ret = ioctl(fd, SIOCGIFHWADDR, &ifr);
         if (ret == 0) {
-            type = DEVICE_TYPE_ETHER_WIRED;
+            netdev->type = DEVICE_TYPE_ETHER_WIRED;
+            goto done;
         }
+
+        /* TODO: other types */
+        netdev->type = DEVICE_TYPE_UNKNOWN;
     }
 
 done:
     if (opened)
         close(fd);
-    netdev->type = type;
     return 0;
 }
 
