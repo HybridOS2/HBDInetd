@@ -1,5 +1,5 @@
-#ifndef __vasprintf_compat_h
-#define __vasprintf_compat_h
+#ifndef __vasprintf_compat_h_
+#define __vasprintf_compat_h_
 
 /**
  * @file
@@ -63,4 +63,4 @@ static int vasprintf(char **buf, const char *fmt, va_list ap)
 }
 #endif /* !HAVE_VASPRINTF */
 
-#endif /* __vasprintf_compat_h */
+#endif /* __vasprintf_compat_h_ */

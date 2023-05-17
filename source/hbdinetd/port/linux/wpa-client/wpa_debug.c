@@ -47,7 +47,7 @@ static FILE *out_file = NULL;
 static int wpa_to_android_level(int level)
 {
 	if (level == MSG_ERROR)
-		return ANDROID_LOG_ERROR;
+		return ANDROID_LOG_ERR;
 	if (level == MSG_WARNING)
 		return ANDROID_LOG_WARN;
 	if (level == MSG_INFO)

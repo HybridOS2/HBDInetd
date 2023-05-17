@@ -15,8 +15,8 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#ifndef _HBDBUS_INTERNAL_KVLIST_H_
-#define _HBDBUS_INTERNAL_KVLIST_H_
+#ifndef __kvlist_h_
+#define __kvlist_h_
 
 #include "config.h"
 #include "avl.h"
@@ -86,4 +86,4 @@ int kvlist_strlen(struct kvlist *kv, const void *data) WTF_INTERNAL;
 }
 #endif
 
-#endif  /* _HBDBUS_INTERNAL_KVLIST_H_ */
+#endif  /* __kvlist_h_ */

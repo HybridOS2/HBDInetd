@@ -80,19 +80,19 @@ int ensure_entropy_file_exists(void)
     if ((ret == 0) || (errno == EACCES)) {
         if ((ret != 0) &&
             (chmod(SUPP_ENTROPY_FILE, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP) != 0)) {
-            LOG_ERR("Cannot set RW to \"%s\": %s\n", SUPP_ENTROPY_FILE, strerror(errno));
+            HLOG_ERR("Cannot set RW to \"%s\": %s\n", SUPP_ENTROPY_FILE, strerror(errno));
             return -1;
         }
         return 0;
     }
     destfd = TEMP_FAILURE_RETRY(open(SUPP_ENTROPY_FILE, O_CREAT|O_RDWR, 0660));
     if (destfd < 0) {
-        LOG_ERR("Cannot create \"%s\": %s\n", SUPP_ENTROPY_FILE, strerror(errno));
+        HLOG_ERR("Cannot create \"%s\": %s\n", SUPP_ENTROPY_FILE, strerror(errno));
         return -1;
     }
 
     if (TEMP_FAILURE_RETRY(write(destfd, dummy_key, sizeof(dummy_key))) != sizeof(dummy_key)) {
-        LOG_ERR("Error writing \"%s\": %s\n", SUPP_ENTROPY_FILE, strerror(errno));
+        HLOG_ERR("Error writing \"%s\": %s\n", SUPP_ENTROPY_FILE, strerror(errno));
         close(destfd);
         return -1;
     }
@@ -100,7 +100,7 @@ int ensure_entropy_file_exists(void)
 
     /* chmod is needed because open() didn't set permisions properly */
     if (chmod(SUPP_ENTROPY_FILE, 0660) < 0) {
-        LOG_ERR("Error changing permissions of %s to 0660: %s\n",
+        HLOG_ERR("Error changing permissions of %s to 0660: %s\n",
              SUPP_ENTROPY_FILE, strerror(errno));
         unlink(SUPP_ENTROPY_FILE);
         return -1;
@@ -129,14 +129,14 @@ static int update_ctrl_interface(struct netdev_context *ctxt,
         return 0;
     srcfd = TEMP_FAILURE_RETRY(open(config_file, O_RDONLY));
     if (srcfd < 0) {
-        LOG_ERR("Cannot open \"%s\": %s\n", config_file, strerror(errno));
+        HLOG_ERR("Cannot open \"%s\": %s\n", config_file, strerror(errno));
         free(pbuf);
         return 0;
     }
     nread = TEMP_FAILURE_RETRY(read(srcfd, pbuf, sb.st_size));
     close(srcfd);
     if (nread < 0) {
-        LOG_ERR("Cannot read \"%s\": %s\n", config_file, strerror(errno));
+        HLOG_ERR("Cannot read \"%s\": %s\n", config_file, strerror(errno));
         free(pbuf);
         return 0;
     }
@@ -163,7 +163,7 @@ static int update_ctrl_interface(struct netdev_context *ctxt,
             int ilen = 0;
             int mlen = strlen(ifc);
             if (strncmp(ifc, iptr, mlen) != 0) {
-                LOG_ERR("ctrl_interface != %s\n", ifc);
+                HLOG_ERR("ctrl_interface != %s\n", ifc);
                 while (((ilen + (iptr - pbuf)) < nread) && (iptr[ilen] != '\n'))
                     ilen++;
                 mlen = ((ilen >= mlen) ? ilen : mlen) + 1;
@@ -172,7 +172,7 @@ static int update_ctrl_interface(struct netdev_context *ctxt,
                 memcpy(iptr, ifc, strlen(ifc));
                 destfd = TEMP_FAILURE_RETRY(open(config_file, O_RDWR, 0660));
                 if (destfd < 0) {
-                    LOG_ERR("Cannot update \"%s\": %s\n", config_file, strerror(errno));
+                    HLOG_ERR("Cannot update \"%s\": %s\n", config_file, strerror(errno));
                     free(pbuf);
                     return -1;
                 }
@@ -197,7 +197,7 @@ static int ensure_config_file_exists(struct netdev_context *ctxt,
     if ((ret == 0) || (errno == EACCES)) {
         if ((ret != 0) &&
             (chmod(config_file, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP) != 0)) {
-            LOG_ERR("Cannot set RW to \"%s\": %s\n", config_file, strerror(errno));
+            HLOG_ERR("Cannot set RW to \"%s\": %s\n", config_file, strerror(errno));
             return -1;
         }
         /* return if we were able to update control interface properly */
@@ -209,26 +209,26 @@ static int ensure_config_file_exists(struct netdev_context *ctxt,
              */
         }
     } else if (errno != ENOENT) {
-        LOG_ERR("Cannot access \"%s\": %s\n", config_file, strerror(errno));
+        HLOG_ERR("Cannot access \"%s\": %s\n", config_file, strerror(errno));
         return -1;
     }
 
     srcfd = TEMP_FAILURE_RETRY(open(SUPP_CONFIG_TEMPLATE, O_RDONLY));
     if (srcfd < 0) {
-        LOG_ERR("Cannot open \"%s\": %s\n", SUPP_CONFIG_TEMPLATE, strerror(errno));
+        HLOG_ERR("Cannot open \"%s\": %s\n", SUPP_CONFIG_TEMPLATE, strerror(errno));
         return -1;
     }
 
     destfd = TEMP_FAILURE_RETRY(open(config_file, O_CREAT|O_RDWR, 0660));
     if (destfd < 0) {
         close(srcfd);
-        LOG_ERR("Cannot create \"%s\": %s\n", config_file, strerror(errno));
+        HLOG_ERR("Cannot create \"%s\": %s\n", config_file, strerror(errno));
         return -1;
     }
 
     while ((nread = TEMP_FAILURE_RETRY(read(srcfd, buf, sizeof(buf)))) != 0) {
         if (nread < 0) {
-            LOG_ERR("Error reading \"%s\": %s\n", SUPP_CONFIG_TEMPLATE, strerror(errno));
+            HLOG_ERR("Error reading \"%s\": %s\n", SUPP_CONFIG_TEMPLATE, strerror(errno));
             close(srcfd);
             close(destfd);
             unlink(config_file);
@@ -242,7 +242,7 @@ static int ensure_config_file_exists(struct netdev_context *ctxt,
 
     /* chmod is needed because open() didn't set permisions properly */
     if (chmod(config_file, 0660) < 0) {
-        LOG_ERR("Error changing permissions of %s to 0660: %s\n",
+        HLOG_ERR("Error changing permissions of %s to 0660: %s\n",
              config_file, strerror(errno));
         unlink(config_file);
         return -1;
@@ -258,12 +258,12 @@ int wifi_start_supplicant(struct netdev_context *ctxt, int p2p_supported)
 
     /* Before starting the daemon, make sure its config file exists */
     if (ensure_config_file_exists(ctxt, SUPP_CONFIG_FILE) < 0) {
-        LOG_ERR("Wi-Fi will not be enabled\n");
+        HLOG_ERR("Wi-Fi will not be enabled\n");
         return -1;
     }
 
     if (ensure_entropy_file_exists() < 0) {
-        LOG_ERR("Wi-Fi entropy file was not created\n");
+        HLOG_ERR("Wi-Fi entropy file was not created\n");
     }
 
     /* Clear out any stale socket files that might be left over. */
@@ -302,7 +302,7 @@ wifi_connect_on_socket_path(struct netdev_context *ctxt, const char *path)
     }
 
     if (ctxt->ctrl_conn == NULL) {
-        LOG_ERR("Unable to open connection to supplicant on \"%s\": %s\n",
+        HLOG_ERR("Unable to open connection to supplicant on \"%s\": %s\n",
              path, strerror(errno));
         return -1;
     }
@@ -358,13 +358,13 @@ int wifi_send_command(struct netdev_context *ctxt,
     int ret;
 
     if (ctxt->ctrl_conn == NULL) {
-        LOG_ERR("Not connected to wpa_supplicant - \"%s\" command dropped.\n", cmd);
+        HLOG_ERR("Not connected to wpa_supplicant - \"%s\" command dropped.\n", cmd);
         return -1;
     }
 
     ret = wpa_ctrl_request(ctxt->ctrl_conn, cmd, strlen(cmd), reply, reply_len, NULL);
     if (ret == -2) {
-        LOG_ERR("'%s' command timed out.\n", cmd);
+        HLOG_ERR("'%s' command timed out.\n", cmd);
         /* unblocks the monitor receive socket for termination */
         TEMP_FAILURE_RETRY(write(ctxt->exit_sockets[0], "T", 1));
         return -2;
@@ -391,7 +391,7 @@ wifi_ctrl_recv(struct netdev_context *ctxt, char *reply, size_t *reply_len)
     rfds[1].events |= POLLIN;
     res = TEMP_FAILURE_RETRY(poll(rfds, 2, -1));
     if (res < 0) {
-        LOG_ERR("Error poll = %d\n", res);
+        HLOG_ERR("Error poll = %d\n", res);
         return res;
     }
     if (rfds[0].revents & POLLIN) {
@@ -423,17 +423,17 @@ wifi_wait_on_socket(struct netdev_context *ctxt, char *buf, size_t buflen)
     }
 
     if (result < 0) {
-        LOG_ERR("wifi_ctrl_recv failed: %s\n", strerror(errno));
+        HLOG_ERR("wifi_ctrl_recv failed: %s\n", strerror(errno));
         return snprintf(buf, buflen, WPA_EVENT_TERMINATING " - recv error");
     }
     buf[nread] = '\0';
 
-    LOG_INFO("read from wpa: %s\n", buf);
+    HLOG_INFO("read from wpa: %s\n", buf);
 
     /* Check for EOF on the socket */
     if (result == 0 && nread == 0) {
         /* Fabricate an event to pass up */
-        LOG_ERR("Received EOF on supplicant socket\n");
+        HLOG_ERR("Received EOF on supplicant socket\n");
         return snprintf(buf, buflen, WPA_EVENT_TERMINATING " - signal 0 received");
     }
     /*
@@ -466,12 +466,12 @@ wifi_wait_on_socket(struct netdev_context *ctxt, char *buf, size_t buflen)
         if (match != NULL) {
             nread -= (match + 1 - buf);
             memmove(buf, match + 1, nread + 1);
-            LOG_ERR("supplicant generated an event without interface - %s\n",
+            HLOG_ERR("supplicant generated an event without interface - %s\n",
                     buf);
         }
     } else {
         /* let the event go as is! */
-        LOG_ERR("supplicant generated an event without "
+        HLOG_ERR("supplicant generated an event without "
                 "interface or message level - %s\n", buf);
     }
 
@@ -529,7 +529,7 @@ int wifi_command(struct netdev_context *ctxt,
     if (strncmp(cmd, "SAVE_CONFIG", strlen("SAVE_CONFIG")) == 0)
         return 0;
 
-    LOG_INFO("do cmd %s\n", cmd);
+    HLOG_INFO("do cmd %s\n", cmd);
 
     --reply_len; // Ensure we have room to add NUL termination.
     if (wifi_send_command(ctxt, cmd, reply, &reply_len) != 0) {

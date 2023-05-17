@@ -148,7 +148,7 @@ static char *getDeviceStatus(hbdbus_conn* conn,
 
     ifname = purc_variant_get_string_const(jo_tmp);
     if (ifname == NULL || !is_valid_interface_name(ifname)) {
-        LOG_ERROR("Bad interface name: %s\n", ifname);
+        HLOG_ERR("Bad interface name: %s\n", ifname);
         errcode = EINVAL;
         goto done;
     }
@@ -264,7 +264,7 @@ int register_common_interfaces(hbdbus_conn * conn)
     errcode = hbdbus_register_procedure(conn, METHOD_NET_OPEN_DEVICE,
             HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS, openDevice);
     if (errcode) {
-        LOG_ERROR("Error for register procedure %s: %s.\n",
+        HLOG_ERR("Error for register procedure %s: %s.\n",
                 METHOD_NET_OPEN_DEVICE, hbdbus_get_err_message(errcode));
         goto failed;
     }
@@ -272,7 +272,7 @@ int register_common_interfaces(hbdbus_conn * conn)
     errcode = hbdbus_register_procedure(conn, METHOD_NET_CLOSE_DEVICE,
             HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS, closeDevice);
     if (errcode) {
-        LOG_ERROR("Error for register procedure %s: %s.\n",
+        HLOG_ERR("Error for register procedure %s: %s.\n",
                 METHOD_NET_CLOSE_DEVICE, hbdbus_get_err_message(errcode));
         goto failed;
     }
@@ -280,15 +280,15 @@ int register_common_interfaces(hbdbus_conn * conn)
     errcode = hbdbus_register_procedure(conn, METHOD_NET_GET_DEVICE_STATUS,
             HBDINETD_ALLOWED_HOSTS, HBDINETD_ANY_APPS, getDeviceStatus);
     if (errcode) {
-        LOG_ERROR("Error for register procedure %s: %s.\n",
-                METHOD_NET_GET_DEVICES_STATUS, hbdbus_get_err_message(errcode));
+        HLOG_ERR("Error for register procedure %s: %s.\n",
+                METHOD_NET_GET_DEVICE_STATUS, hbdbus_get_err_message(errcode));
         goto failed;
     }
 
     errcode = hbdbus_register_event(conn, NETWORKDEVICECHANGED,
             HBDINETD_ALLOWED_HOSTS, HBDINETD_ANY_APPS);
     if (errcode) {
-        LOG_ERROR("Error for register event %s: %s.\n",
+        HLOG_ERR("Error for register event %s: %s.\n",
                 NETWORKDEVICECHANGED, hbdbus_get_err_message(errcode));
         goto failed;
     }

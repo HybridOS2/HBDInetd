@@ -233,7 +233,7 @@ int wifi_device_on(struct run_info *info, struct network_device *netdev)
 
     netdev->ctxt = netdev_context_new();
     if (netdev->ctxt == NULL) {
-        LOG_ERR("Failed to allocate memory for WiFi device context!\n");
+        HLOG_ERR("Failed to allocate memory for WiFi device context!\n");
         return ENOMEM;
     }
 
@@ -242,7 +242,7 @@ int wifi_device_on(struct run_info *info, struct network_device *netdev)
     if (netdev->status < DEVICE_STATUS_UP) {
         ret = netdev_config_iface_up(netdev->ifname, netdev);
         if (ret) {
-            LOG_ERR("Failed to make WiFi device up!\n");
+            HLOG_ERR("Failed to make WiFi device up!\n");
             return errno;
         }
     }
@@ -258,7 +258,7 @@ int wifi_device_on(struct run_info *info, struct network_device *netdev)
             TEMP_FAILURE_RETRY(usleep(US_100MS * 2));
             ret = wifi_connect_to_supplicant(netdev->ctxt);
             if (ret == 0) {
-                LOG_INFO("Connected to wpa_supplicant!\n");
+                HLOG_INFO("Connected to wpa_supplicant!\n");
                 break;
             }
             nr_tries++;
@@ -267,7 +267,7 @@ int wifi_device_on(struct run_info *info, struct network_device *netdev)
         if (ret) {
             netdev_context_delete(netdev->ctxt);
             netdev->ctxt = NULL;
-            LOG_ERR("Give up after 10 retries to connect to wpa_supplicant!\n");
+            HLOG_ERR("Give up after 10 retries to connect to wpa_supplicant!\n");
             return ERR_DEVICE_CONTROLLER;
         }
     }
@@ -289,7 +289,7 @@ int wifi_device_off(struct run_info *info, struct network_device *netdev)
 
     ret = netdev_config_iface_down(netdev->ifname, netdev);
     if (ret) {
-        LOG_ERR("Failed to make WiFi device down!\n");
+        HLOG_ERR("Failed to make WiFi device down!\n");
         return errno;
     }
 

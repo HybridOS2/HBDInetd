@@ -38,8 +38,8 @@
  * the copyright holders.
  */
 
-#ifndef _HBDBUS_INTERNAL_AVL_H_
-#define _HBDBUS_INTERNAL_AVL_H_
+#ifndef __avl_h_
+#define __avl_h_
 
 #include "config.h"
 
@@ -560,7 +560,7 @@ __avl_find_element(const struct avl_tree *tree, const void *key, size_t offset, 
        (tree)->count > 0; \
        element = ptr, ptr = avl_next_element(ptr, node_member), (tree)->count--)
 
-#endif /* _HBDBUS_INTERNAL_AVL_H_ */
+#endif /* __avl_h_ */
 
 /*
  * Local Variables:

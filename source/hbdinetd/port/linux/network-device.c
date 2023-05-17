@@ -145,7 +145,7 @@ struct network_device *get_network_device_fixed_info(const char *ifname,
     if (netdev == NULL) {
         netdev = calloc(1, sizeof(*netdev));
         if (netdev == NULL) {
-            LOG_ERROR("Failed calloc()\n");
+            HLOG_ERR("Failed calloc()\n");
             goto failed;
         }
     }
@@ -170,7 +170,7 @@ struct network_device *get_network_device_fixed_info(const char *ifname,
     if (netdev->type & DEVICE_TYPE_ETHER_MASK) {
         // get the hardware address of this interface
         if (ioctl(fd, SIOCGIFHWADDR, &ifr)) {
-            LOG_ERROR("Failed ioctl(): %s\n", strerror(errno));
+            HLOG_ERR("Failed ioctl(): %s\n", strerror(errno));
             goto failed;
         }
 
@@ -188,7 +188,7 @@ struct network_device *get_network_device_fixed_info(const char *ifname,
         struct iwreq wrq;
         strncpy(wrq.ifr_name, ifname, IFNAMSIZ - 1);
         if (ioctl(fd, SIOCGIWRATE, &wrq)) {
-            LOG_ERROR("Failed ioctl(): %s\n", strerror(errno));
+            HLOG_ERR("Failed ioctl(): %s\n", strerror(errno));
             goto failed;
         }
         netdev->bitrate = wrq.u.bitrate.value;
@@ -209,7 +209,7 @@ int update_network_device_dynamic_info(const char *ifname,
 {
     struct ifaddrs *addresses = NULL;
     if (getifaddrs(&addresses) == -1) {
-        LOG_ERROR("Failed getifaddrs(): %s\n", strerror(errno));
+        HLOG_ERR("Failed getifaddrs(): %s\n", strerror(errno));
         goto failed;
     }
 
@@ -286,13 +286,13 @@ int update_network_device_info(struct run_info *run_info, const char *ifname)
     if (data == NULL) {
         netdev = calloc(1, sizeof(*netdev));
         if (netdev == NULL) {
-            LOG_ERROR("Failed calloc()\n");
+            HLOG_ERR("Failed calloc()\n");
             goto failed;
         }
 
         if ((netdev->ifname = kvlist_set_ex(&run_info->devices,
                         ifname, &netdev)) == NULL) {
-            LOG_ERROR("Failed kvlist_set_ex()\n");
+            HLOG_ERR("Failed kvlist_set_ex()\n");
             goto failed;
         }
 
@@ -334,7 +334,7 @@ int enumerate_network_devices(struct run_info *run_info)
 {
     struct ifaddrs *addresses = NULL;
     if (getifaddrs(&addresses) == -1) {
-        LOG_ERROR("Failed getifaddrs(): %s\n", strerror(errno));
+        HLOG_ERR("Failed getifaddrs(): %s\n", strerror(errno));
         goto failed;
     }
 
@@ -346,13 +346,13 @@ int enumerate_network_devices(struct run_info *run_info)
         if (data == NULL) {
             netdev = calloc(1, sizeof(*netdev));
             if (netdev == NULL) {
-                LOG_ERROR("Failed calloc()\n");
+                HLOG_ERR("Failed calloc()\n");
                 goto failed;
             }
 
             if ((netdev->ifname = kvlist_set_ex(&run_info->devices,
                         address->ifa_name, &netdev)) == NULL) {
-                LOG_ERROR("Failed kvlist_set_ex()\n");
+                HLOG_ERR("Failed kvlist_set_ex()\n");
                 goto failed;
             }
 
@@ -362,7 +362,7 @@ int enumerate_network_devices(struct run_info *run_info)
                 netdev->type = DEVICE_TYPE_LOOPBACK;
             }
             else if (get_device_type(netdev, address->ifa_name, -1)) {
-                LOG_ERROR("Failed get_device_type(): %s\n", strerror(errno));
+                HLOG_ERR("Failed get_device_type(): %s\n", strerror(errno));
                 goto failed;
             }
         }

@@ -163,7 +163,7 @@ int wifi_event_handle_message(struct run_info *info,
             left -= event_len;
             void *data = kvlist_get(&ctxt->event_handlers, event_name);
             if (data == NULL) {
-                LOG_WARN("Unknown event name: %s\n", event_name);
+                HLOG_WARN("Unknown event name: %s\n", event_name);
             }
             else {
                 event_handler handler;
@@ -173,13 +173,13 @@ int wifi_event_handle_message(struct run_info *info,
                     return handler(info, ctxt, event_end + 1, left);
                 }
                 else {
-                    LOG_WARN("Ignore event: %s\n", event_name);
+                    HLOG_WARN("Ignore event: %s\n", event_name);
                 }
             }
             free(event_name);
         }
         else {
-            LOG_WARN("Bad event message: %s\n", msg);
+            HLOG_WARN("Bad event message: %s\n", msg);
         }
     }
 

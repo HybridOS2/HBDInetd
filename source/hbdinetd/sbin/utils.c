@@ -94,14 +94,14 @@ struct network_device *check_network_device(struct run_info *info,
 
     const char *ifname = purc_variant_get_string_const(jo_tmp);
     if (ifname == NULL || !is_valid_interface_name(ifname)) {
-        LOG_ERROR("Bad interface name: %s\n", ifname);
+        HLOG_ERR("Bad interface name: %s\n", ifname);
         *errcode = EINVAL;
         goto failed;
     }
 
     netdev = retrieve_network_device_from_ifname(info, ifname);
     if (netdev == NULL) {
-        LOG_ERROR("Not existed interface name: %s\n", ifname);
+        HLOG_ERR("Not existed interface name: %s\n", ifname);
         *errcode = ENOENT;
         goto failed;
     }
@@ -113,7 +113,7 @@ struct network_device *check_network_device(struct run_info *info,
     }
 
     if (update_network_device_dynamic_info(ifname, netdev)) {
-        LOG_ERROR("Failed to update interface information: %s\n", ifname);
+        HLOG_ERR("Failed to update interface information: %s\n", ifname);
         *errcode = errno;
         goto failed;
     }
@@ -155,7 +155,7 @@ int start_daemon(const char *pathname, const char *arg, ...)
     va_end(ap1);
 
     if (nr_args < 1) {
-        LOG_ERROR("Bad arg: %s\n", arg);
+        HLOG_ERR("Bad arg: %s\n", arg);
         return -1;
     }
 
@@ -164,8 +164,11 @@ int start_daemon(const char *pathname, const char *arg, ...)
     }
     else {
         argv = calloc(nr_args, sizeof(char *));
-        if (argv == NULL)
+        if (argv == NULL) {
+            HLOG_ERR("Failed to allocate argv for %u args!\n",
+                    (unsigned)nr_args);
             return -1;
+        }
     }
 
     p = (char *)arg;
@@ -179,6 +182,7 @@ int start_daemon(const char *pathname, const char *arg, ...)
 
     pid_t cpid = vfork();
     if (cpid == -1) {
+        HLOG_ERR("Failed vfork(): %s.\n", strerror(errno));
         return -1;
     }
     else if (cpid == 0) {

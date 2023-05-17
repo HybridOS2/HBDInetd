@@ -222,7 +222,7 @@ static char *wifiConnect(hbdbus_conn* conn, const char* from_endpoint,
 
     const char *ifname = purc_variant_get_string_const(jo_tmp);
     if (ifname == NULL || !is_valid_interface_name(ifname)) {
-        LOG_ERROR("Bad interface name: %s\n", ifname);
+        HLOG_ERR("Bad interface name: %s\n", ifname);
         errcode = EINVAL;
         goto done;
     }
@@ -234,7 +234,7 @@ static char *wifiConnect(hbdbus_conn* conn, const char* from_endpoint,
 
     const char *ssid = purc_variant_get_string_const(jo_tmp);
     if (ssid == NULL) {
-        LOG_ERROR("SSID not specified\n");
+        HLOG_ERR("SSID not specified\n");
         errcode = EINVAL;
         goto done;
     }
@@ -242,7 +242,7 @@ static char *wifiConnect(hbdbus_conn* conn, const char* from_endpoint,
     struct network_device *netdev;
     netdev = retrieve_network_device_from_ifname(info, ifname);
     if (netdev == NULL) {
-        LOG_ERROR("Not existed interface name: %s\n", ifname);
+        HLOG_ERR("Not existed interface name: %s\n", ifname);
         errcode = ENOENT;
         goto done;
     }
@@ -253,7 +253,7 @@ static char *wifiConnect(hbdbus_conn* conn, const char* from_endpoint,
     }
 
     if (update_network_device_dynamic_info(ifname, netdev)) {
-        LOG_ERROR("Failed to update interface information: %s\n", ifname);
+        HLOG_ERR("Failed to update interface information: %s\n", ifname);
         errcode = errno;
         goto done;
     }
@@ -272,7 +272,7 @@ static char *wifiConnect(hbdbus_conn* conn, const char* from_endpoint,
 
     const char *password = purc_variant_get_string_const(jo_tmp);
     if (password == NULL) {
-        LOG_ERROR("Password not specified\n");
+        HLOG_ERR("Password not specified\n");
         errcode = EINVAL;
         goto done;
     }
@@ -789,7 +789,7 @@ int register_wifi_interfaces(hbdbus_conn * conn)
             HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS,
             wifiStartScanHotspots);
     if (errcode) {
-        LOG_ERROR("Error for register procedure %s: %s.\n",
+        HLOG_ERR("Error for register procedure %s: %s.\n",
                 METHOD_WIFI_START_SCAN, hbdbus_get_err_message(errcode));
         goto done;
     }
@@ -798,7 +798,7 @@ int register_wifi_interfaces(hbdbus_conn * conn)
             HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS,
             wifiGetHotspotList);
     if (errcode) {
-        LOG_ERROR("Error for register procedure %s: %s.\n",
+        HLOG_ERR("Error for register procedure %s: %s.\n",
                 METHOD_WIFI_START_SCAN, hbdbus_get_err_message(errcode));
         goto done;
     }
@@ -807,7 +807,7 @@ int register_wifi_interfaces(hbdbus_conn * conn)
             HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS,
             wifiStopScanHotspots);
     if (errcode) {
-        LOG_ERROR("Error for register procedure %s: %s.\n",
+        HLOG_ERR("Error for register procedure %s: %s.\n",
                 METHOD_WIFI_STOP_SCAN, hbdbus_get_err_message(errcode));
         goto done;
     }
@@ -816,7 +816,7 @@ int register_wifi_interfaces(hbdbus_conn * conn)
             HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS,
             wifiConnect);
     if (errcode) {
-        LOG_ERROR("Error for register procedure %s: %s.\n",
+        HLOG_ERR("Error for register procedure %s: %s.\n",
                 METHOD_WIFI_CONNECT_AP, hbdbus_get_err_message(errcode));
         goto done;
     }
@@ -825,7 +825,7 @@ int register_wifi_interfaces(hbdbus_conn * conn)
             HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS,
             wifiDisconnect);
     if (errcode) {
-        LOG_ERROR("Error for register procedure %s: %s.\n",
+        HLOG_ERR("Error for register procedure %s: %s.\n",
                 METHOD_WIFI_DISCONNECT_AP, hbdbus_get_err_message(errcode));
         goto done;
     }
@@ -834,7 +834,7 @@ int register_wifi_interfaces(hbdbus_conn * conn)
             HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS,
             wifiGetNetworkInfo);
     if (errcode) {
-        LOG_ERROR("Error for register procedure %s: %s.\n",
+        HLOG_ERR("Error for register procedure %s: %s.\n",
                 METHOD_WIFI_GET_NETWORK_INFO, hbdbus_get_err_message(errcode));
         goto done;
     }
@@ -842,7 +842,7 @@ int register_wifi_interfaces(hbdbus_conn * conn)
     errcode = hbdbus_register_event(conn, WIFIHOTSPOTSCHANGED,
             HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS);
     if (errcode) {
-        LOG_ERROR("Error for register event %s: %s.\n",
+        HLOG_ERR("Error for register event %s: %s.\n",
                 WIFIHOTSPOTSCHANGED, hbdbus_get_err_message(errcode));
         goto done;
     }
@@ -850,7 +850,7 @@ int register_wifi_interfaces(hbdbus_conn * conn)
     errcode = hbdbus_register_event(conn, WIFISIGNALSTRENGTHCHANGED,
             HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS);
     if (errcode) {
-        LOG_ERROR("Error for register event %s: %s.\n",
+        HLOG_ERR("Error for register event %s: %s.\n",
                 WIFISIGNALSTRENGTHCHANGED, hbdbus_get_err_message(errcode));
         goto done;
     }

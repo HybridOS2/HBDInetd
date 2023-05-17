@@ -26,8 +26,8 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef _HBDBUS_INTERNAL_LIST_H_
-#define _HBDBUS_INTERNAL_LIST_H_
+#ifndef __list_h_
+#define __list_h_
 
 #include <stddef.h>
 #include <stdbool.h>
@@ -205,4 +205,4 @@ list_splice_tail_init(struct list_head *list, struct list_head *head)
 	init_list_head(list);
 }
 
-#endif /* _HBDBUS_INTERNAL_LIST_H_ */
+#endif /* __list_h_ */

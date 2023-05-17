@@ -75,17 +75,17 @@ static int setup_signals(void)
     sa.sa_handler = handle_signal_action;
 
     if (sigaction(SIGINT, &sa, 0) != 0) {
-        LOG_ERR("Failed to call sigaction for SIGINT: %s\n", strerror (errno));
+        HLOG_ERR("Failed to call sigaction for SIGINT: %s\n", strerror (errno));
         return -1;
     }
 
     if (sigaction(SIGPIPE, &sa, 0) != 0) {
-        LOG_ERR("Failed to call sigaction for SIGPIPE: %s\n", strerror (errno));
+        HLOG_ERR("Failed to call sigaction for SIGPIPE: %s\n", strerror (errno));
         return -1;
     }
 
     if (sigaction(SIGCHLD, &sa, 0) != 0) {
-        LOG_ERR("Failed to call sigaction for SIGCHLD: %s\n", strerror (errno));
+        HLOG_ERR("Failed to call sigaction for SIGCHLD: %s\n", strerror (errno));
         return -1;
     }
 
