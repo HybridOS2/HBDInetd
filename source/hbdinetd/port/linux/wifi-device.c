@@ -20,21 +20,11 @@
 ** along with this program.  If not, see http://www.gnu.org/licenses/.
 */
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <net/if.h>
-#include <linux/wireless.h>
-#include <netdb.h>
-#include <ifaddrs.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <assert.h>
-#include <errno.h>
-
 #include "hbdinetd.h"
-#include "global.h"
+#include "internal.h"
 #include "log.h"
+
+#include "wifi-internal.h"
 
 int wifi_device_on(struct run_info *info, struct network_device *netdev)
 {

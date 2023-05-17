@@ -33,7 +33,7 @@
 #include <errno.h>
 
 #include "hbdinetd.h"
-#include "global.h"
+#include "internal.h"
 #include "log.h"
 
 bool is_valid_interface_name(const char *ifname)

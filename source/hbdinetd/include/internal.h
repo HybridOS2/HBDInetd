@@ -1,5 +1,5 @@
 /*
-** global.h -- The blobal header for HBDInetd.
+** internal.h -- The internal header for HBDInetd.
 **
 ** Copyright (C) 2023 FMSoft (http://www.fmsoft.cn)
 **
@@ -43,7 +43,7 @@ struct run_info {
     struct kvlist devices;
 };
 
-// network device description
+/* network device description */
 struct hbd_ifaddr {
     char *addr;    /* Address of interface */
     char *netmask; /* Netmask of interface */
@@ -57,6 +57,7 @@ struct hbd_ifaddr {
 #define hbdifa_dstaddr   ifa_ifu.dstaddr
 };
 
+/* The details of this structure should be defined by the device engine. */
 struct netdev_context;
 
 struct wifi_hotspot {

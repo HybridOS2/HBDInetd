@@ -21,7 +21,7 @@
 */
 
 #include "hbdinetd.h"
-#include "global.h"
+#include "internal.h"
 #include "log.h"
 #include "list.h"
 
