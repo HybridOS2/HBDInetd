@@ -52,11 +52,16 @@
 #define WIFI_MSG_BUF_SIZE                   4096
 #define MAX_RETRIES_ON_AUTH_FAILURE         3
 
+#define DEF_SCAN_INTERVAL                   60  /* seconds */
+
 struct netdev_context {
     struct network_device *netdev;
     struct wpa_ctrl *ctrl_conn;
     struct wpa_ctrl *monitor_conn;
     int exit_sockets[2];
+
+    time_t last_scan_finish_time;
+    unsigned scan_interval;
 
     unsigned auth_fail_count;
 

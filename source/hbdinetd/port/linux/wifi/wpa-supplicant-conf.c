@@ -36,14 +36,12 @@ static int is_ip_exist(void)
 }
 
 #define CMD_BUF_SIZE    256
-#define REPLY_BUF_SIZE  4096 // wpa_supplicant's maximum size.
-#define NET_ID_LEN      10
+#define NET_ID_LEN      128
 
 bool wpa_conf_network_info_exist(struct netdev_context *ctxt)
 {
-    char reply[REPLY_BUF_SIZE];
-
-    wifi_command(ctxt, "LIST_NETWORKS", reply, sizeof(reply));
+    char *reply = ctxt->buf;
+    wifi_command(ctxt, "LIST_NETWORKS", reply, WIFI_MSG_BUF_SIZE);
 
     if (strchr(reply, '\n') != NULL) {
         return true;
@@ -64,7 +62,7 @@ int wpa_conf_is_ap_exist(struct netdev_context *ctxt,
 {
     int ret = -1;
     char cmd[CMD_BUF_SIZE];
-    char reply[REPLY_BUF_SIZE], key_reply[128];
+    char *reply = ctxt->buf, key_reply[128];
     char *pssid_start = NULL, *pssid_end = NULL, *ptr=NULL;
     int flag = 0;
 
@@ -73,7 +71,7 @@ int wpa_conf_is_ap_exist(struct netdev_context *ctxt,
         return -1;
     }
 
-    ret = wifi_command(ctxt, "LIST_NETWORKS", reply, sizeof(reply));
+    ret = wifi_command(ctxt, "LIST_NETWORKS", reply, WIFI_MSG_BUF_SIZE);
     if (ret) {
         LOG_ERR("do list networks error!\n");
         return -1;
@@ -153,13 +151,12 @@ int wpa_conf_ssid2netid(struct netdev_context *ctxt,
 {
     int ret = -1;
     char cmd[CMD_BUF_SIZE];
-    char reply[REPLY_BUF_SIZE], key_reply[128];
+    char *reply = ctxt->buf, key_reply[128];
     char *pssid_start = NULL, *pssid_end = NULL, *ptr = NULL;
     int flag = 0;
 
     /* list ap in wpa_supplicant.conf */
-    strcpy(cmd, "LIST_NETWORKS");
-    ret = wifi_command(ctxt, cmd, reply, sizeof(reply));
+    ret = wifi_command(ctxt, "LIST_NETWORKS", reply, WIFI_MSG_BUF_SIZE);
     if (ret) {
         LOG_ERR("do list networks error!\n");
         return -1;
@@ -239,13 +236,12 @@ int wpa_conf_get_max_priority(struct netdev_context *ctxt)
 {
     int  ret = -1;
     int  val = -1, max_val = 0, len = 0;
-    char cmd[CMD_BUF_SIZE + 1], reply[REPLY_BUF_SIZE], priority[32];
+    char cmd[CMD_BUF_SIZE], *reply = ctxt->buf, priority[32];
     char net_id[NET_ID_LEN+1];
     char *p_n = NULL, *p_t = NULL;
 
     /* list ap in wpa_supplicant.conf */
-    strcpy(cmd, "LIST_NETWORKS");
-    ret = wifi_command(ctxt, cmd, reply, sizeof(reply));
+    ret = wifi_command(ctxt, "LIST_NETWORKS", reply, WIFI_MSG_BUF_SIZE);
     if (ret) {
         LOG_ERR("do list networks error!\n");
         return -1;
@@ -283,14 +279,12 @@ int wpa_conf_get_max_priority(struct netdev_context *ctxt)
 int wpa_conf_is_ap_connected(struct netdev_context *ctxt, char *ssid, int *len)
 {
     int ret = -1;
-    char cmd[CMD_BUF_SIZE];
-    char reply[REPLY_BUF_SIZE];
+    char *reply = ctxt->buf;
     char *p_c=NULL, *p_str = NULL;
     char *p_s=NULL, *p_e=NULL, *p=NULL;
     int is_ap_connected = 0;
 
-    strcpy(cmd, "LIST_NETWORKS");
-    ret = wifi_command(ctxt, cmd, reply, sizeof(reply));
+    ret = wifi_command(ctxt, "LIST_NETWORKS", reply, WIFI_MSG_BUF_SIZE);
     if (ret) {
         LOG_ERR("do list networks error!\n");
         return -1;
@@ -339,12 +333,10 @@ int wpa_conf_get_netid_connected(struct netdev_context *ctxt,
         char *net_id, int *len)
 {
     int ret = -1;
-    char cmd[CMD_BUF_SIZE];
-    char reply[REPLY_BUF_SIZE];
+    char *reply = ctxt->buf;
     char *p_c=NULL;
 
-    strcpy(cmd, "LIST_NETWORKS");
-    ret = wifi_command(ctxt, cmd, reply, sizeof(reply));
+    ret = wifi_command(ctxt, "LIST_NETWORKS", reply, WIFI_MSG_BUF_SIZE);
     if(ret){
         LOG_ERR("do list networks error!\n");
         return -1;
@@ -379,59 +371,54 @@ int wpa_conf_get_netid_connected(struct netdev_context *ctxt,
  * 1. link to ap
  * 2. get ip addr
  *
-*/
+ */
 int wpa_conf_get_ap_connected(struct netdev_context *ctxt,
         char *netid, int *len)
 {
     int ret = -1;
-    char cmd[CMD_BUF_SIZE];
-    char reply[REPLY_BUF_SIZE];
+    char *reply = ctxt->buf;
     char *p_c=NULL;
 
-    strcpy(cmd, "LIST_NETWORKS");
-    ret = wifi_command(ctxt, cmd, reply, sizeof(reply));
+    ret = wifi_command(ctxt, "LIST_NETWORKS", reply, WIFI_MSG_BUF_SIZE);
     if (ret) {
         LOG_ERR("do list networks error!\n");
         return -1;
     }
 
-    if ((p_c=strstr(reply, "CURRENT")) != NULL){
-        char *p_s=NULL, *p_e=NULL, *p=NULL;
+    if ((p_c = strstr(reply, "CURRENT")) != NULL) {
+        char *p_s = NULL, *p_e = NULL, *p = NULL;
         p_e = strchr(p_c, '\n');
-        if(p_e){
+        if (p_e) {
             *p_e = '\0';
         }
 
         p_s = strrchr(reply, '\n');
         p_s++;
         p = strtok(p_s, "\t");
-        if(p){
-            if(netid != NULL && *len > 0){
+        if (p) {
+            if (netid != NULL && *len > 0) {
                 strncpy(netid, p, *len-1);
                 netid[*len-1] = '\0';
                 *len = strlen(netid);
             }
         }
-
         return 1;
-    } else {
-        return 0;
     }
 
+    return 0;
 }
 
 int wpa_conf_enable_all_networks(struct netdev_context *ctxt)
 {
     int ret = -1, len = 0;
     char cmd[CMD_BUF_SIZE];
-    char reply[REPLY_BUF_SIZE];
+    char *reply = ctxt->buf;
     char net_id[NET_ID_LEN+1];
     char *p_n = NULL, *p_t = NULL;
 
     /* list ap in wpa_supplicant.conf */
-    strcpy(cmd, "LIST_NETWORKS");
-    ret = wifi_command(ctxt, cmd, reply, sizeof(reply));
-    if(ret){
+    ret = wifi_command(ctxt, "LIST_NETWORKS", reply, WIFI_MSG_BUF_SIZE);
+    if (ret){
         LOG_ERR("do list networks error!\n");
         return -1;
     }
@@ -449,7 +436,7 @@ int wpa_conf_enable_all_networks(struct netdev_context *ctxt)
 
         /* cancel saved in wpa_supplicant.conf */
         sprintf(cmd, "ENABLE_NETWORK %s", net_id);
-        ret = wifi_command(ctxt, cmd, reply, sizeof(reply));
+        ret = wifi_command(ctxt, cmd, reply, WIFI_MSG_BUF_SIZE);
         if (ret) {
             LOG_ERR("do enable network %s error!\n", net_id);
             return -1;
@@ -459,8 +446,7 @@ int wpa_conf_enable_all_networks(struct netdev_context *ctxt)
     }
 
     /* save config */
-    sprintf(cmd, "%s", "SAVE_CONFIG");
-    ret = wifi_command(ctxt, cmd, reply, sizeof(reply));
+    ret = wifi_command(ctxt, "SAVE_CONFIG", reply, WIFI_MSG_BUF_SIZE);
     if (ret) {
         LOG_ERR("do save config error!\n");
         return -1;
@@ -473,13 +459,12 @@ int wpa_conf_remove_all_networks(struct netdev_context *ctxt)
 {
     int ret = -1, len = 0;
     char cmd[CMD_BUF_SIZE];
-    char reply[REPLY_BUF_SIZE];
+    char *reply = ctxt->buf;
     char net_id[NET_ID_LEN+1] = {0};
     char *p_n = NULL, *p_t = NULL;
 
     /* list ap in wpa_supplicant.conf */
-    strcpy(cmd, "LIST_NETWORKS");
-    ret = wifi_command(ctxt, cmd, reply, sizeof(reply));
+    ret = wifi_command(ctxt, "LIST_NETWORKS", reply, WIFI_MSG_BUF_SIZE);
     if (ret) {
         LOG_ERR("do list networks error!\n");
         return -1;
@@ -498,7 +483,7 @@ int wpa_conf_remove_all_networks(struct netdev_context *ctxt)
 
         /* cancel saved in wpa_supplicant.conf */
         sprintf(cmd, "REMOVE_NETWORK %s", net_id);
-        ret = wifi_command(ctxt, cmd, reply, sizeof(reply));
+        ret = wifi_command(ctxt, cmd, reply, WIFI_MSG_BUF_SIZE);
         if(ret){
             LOG_ERR("do remove network %s error!\n", net_id);
             return -1;
@@ -508,7 +493,7 @@ int wpa_conf_remove_all_networks(struct netdev_context *ctxt)
     }
 
     /* save config */
-    ret = wifi_command(ctxt, "SAVE_CONFIG", reply, sizeof(reply));
+    ret = wifi_command(ctxt, "SAVE_CONFIG", reply, WIFI_MSG_BUF_SIZE);
     if (ret) {
         LOG_ERR("do save config error!\n");
         return -1;
