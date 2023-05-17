@@ -23,6 +23,7 @@
 #ifndef _hbdinetd_port_linux_wifi_wifi_event_h
 #define _hbdinetd_port_linux_wifi_wifi_event_h
 
+#include "internal.h"
 #include "wpa-client/wpa_ctrl.h"
 
 #include "list.h"
@@ -51,8 +52,8 @@ void wifi_event_free(struct netdev_context *ctxt);
  *
  * @return 0 on success, < 0 on failure.
  */
-int wifi_event_handle_message(struct netdev_context *ctxt,
-        const char *msg, int len);
+int wifi_event_handle_message(struct run_info *info,
+        struct netdev_context *ctxt, const char *msg, int len);
 
 #ifdef __cplusplus
 };  // extern "C"

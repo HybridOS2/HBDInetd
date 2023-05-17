@@ -298,8 +298,6 @@ int wifi_device_off(struct run_info *info, struct network_device *netdev)
 
 int wifi_device_check(struct run_info *info, struct network_device *netdev)
 {
-    (void)info;
-
     if (netdev->ctxt == NULL)
         return EPERM;
 
@@ -319,7 +317,8 @@ int wifi_device_check(struct run_info *info, struct network_device *netdev)
            else if (bytes < 0)
                return ECONNRESET;
 
-           wifi_event_handle_message(netdev->ctxt, netdev->ctxt->buf, bytes);
+           wifi_event_handle_message(info, netdev->ctxt, netdev->ctxt->buf,
+                   bytes);
        }
     } while (true);
 

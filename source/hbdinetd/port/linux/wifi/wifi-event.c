@@ -32,57 +32,63 @@
 #include <unistd.h>
 #include <errno.h>
 
-typedef int (*event_handler)(struct netdev_context *ctxt,
-        const char *data, int len);
+typedef int (*event_handler)(struct run_info *info,
+        struct netdev_context *ctxt, const char *data, int len);
 
-static int on_connected(struct netdev_context *ctxt,
-        const char *data, int len)
+static int on_connected(struct run_info *info,
+        struct netdev_context *ctxt, const char *data, int len)
 {
+    (void)info;
     (void)ctxt;
     (void)data;
     (void)len;
     return 0;
 }
 
-static int on_disconnected(struct netdev_context *ctxt,
-        const char *data, int len)
+static int on_disconnected(struct run_info *info,
+        struct netdev_context *ctxt, const char *data, int len)
 {
+    (void)info;
     (void)ctxt;
     (void)data;
     (void)len;
     return 0;
 }
 
-static int on_scan_results(struct netdev_context *ctxt,
-        const char *data, int len)
+static int on_scan_results(struct run_info *info,
+        struct netdev_context *ctxt, const char *data, int len)
 {
+    (void)info;
     (void)ctxt;
     (void)data;
     (void)len;
     return 0;
 }
 
-static int on_terminating(struct netdev_context *ctxt,
-        const char *data, int len)
+static int on_terminating(struct run_info *info,
+        struct netdev_context *ctxt, const char *data, int len)
 {
+    (void)info;
     (void)ctxt;
     (void)data;
     (void)len;
     return 0;
 }
 
-static int on_eap_failure(struct netdev_context *ctxt,
-        const char *data, int len)
+static int on_eap_failure(struct run_info *info,
+        struct netdev_context *ctxt, const char *data, int len)
 {
+    (void)info;
     (void)ctxt;
     (void)data;
     (void)len;
     return 0;
 }
 
-static int on_assoc_reject(struct netdev_context *ctxt,
-        const char *data, int len)
+static int on_assoc_reject(struct run_info *info,
+        struct netdev_context *ctxt, const char *data, int len)
 {
+    (void)info;
     (void)ctxt;
     (void)data;
     (void)len;
@@ -127,8 +133,8 @@ void wifi_event_free(struct netdev_context *ctxt)
     kvlist_free(&ctxt->event_handlers);
 }
 
-int wifi_event_handle_message(struct netdev_context *ctxt,
-        const char *msg, int len)
+int wifi_event_handle_message(struct run_info *info,
+        struct netdev_context *ctxt, const char *msg, int len)
 {
     if (msg[0] == '\0')
         return 0;
@@ -148,10 +154,13 @@ int wifi_event_handle_message(struct netdev_context *ctxt,
     else if (strncmp(msg, "CTRL-EVENT-", 11) == 0) {
         const char *event_start = msg + 11;
         const char *event_end = strchr(event_start, ' ');
+        int left = len - 11;
 
         if (event_end) {
             size_t event_len = event_end - event_start;
             char *event_name = strndup(event_start, event_len);
+
+            left -= event_len;
             void *data = kvlist_get(&ctxt->event_handlers, event_name);
             if (data == NULL) {
                 LOG_WARN("Unknown event name: %s\n", event_name);
@@ -159,8 +168,10 @@ int wifi_event_handle_message(struct netdev_context *ctxt,
             else {
                 event_handler handler;
                 handler = *(event_handler *)data;
-                if (handler)
-                    return handler(ctxt, event_end + 1, len - 11 - event_len - 1);
+                if (handler) {
+                    left--;
+                    return handler(info, ctxt, event_end + 1, left);
+                }
                 else {
                     LOG_WARN("Ignore event: %s\n", event_name);
                 }
