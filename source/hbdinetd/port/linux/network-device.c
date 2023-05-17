@@ -436,4 +436,64 @@ failed:
     return -1;
 }
 
+static int netdev_config_iface_helper(const char *ifname, bool up)
+{
+    int fd;
+    struct ifreq ifr;
+
+    if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+        goto failed;
+
+    memset(&ifr, 0, sizeof(ifr));
+    strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
+
+    if (ioctl(fd, SIOCGIFFLAGS, &ifr)) {
+        goto failed;
+    }
+
+    if (up && (ifr.ifr_flags & IFF_UP)) {
+        // do nothing
+    }
+    else if (!up && !(ifr.ifr_flags & IFF_UP)) {
+        // do nothing
+    }
+    else if (up) {
+        ifr.ifr_flags |= IFF_UP;
+
+        if (ioctl(fd, SIOCSIFFLAGS, &ifr)) {
+            goto failed;
+        }
+    }
+    else {
+        ifr.ifr_flags &= ~IFF_UP;
+        if (ioctl(fd, SIOCSIFFLAGS, &ifr)) {
+            goto failed;
+        }
+    }
+
+    close(fd);
+    return 0;
+
+failed:
+    if (fd >= 0)
+        close(fd);
+    return -1;
+}
+
+int netdev_config_iface_up(const char *ifname, struct network_device *netdev)
+{
+    if (netdev_config_iface_helper(ifname, true))
+        return -1;
+
+    return update_network_device_dynamic_info(ifname, netdev);
+}
+
+int netdev_config_iface_down(const char *ifname, struct network_device *netdev)
+{
+    if (netdev_config_iface_helper(ifname, false))
+        return -1;
+
+    return update_network_device_dynamic_info(ifname, netdev);
+}
+
 

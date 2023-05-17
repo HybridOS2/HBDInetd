@@ -61,27 +61,23 @@ struct hbd_ifaddr {
 struct netdev_context;
 
 struct wifi_hotspot {
-    const char *bssid;
-    const char *ssid;
-    const char *frenquency;
-    const char *capabilities;
-
-    uint8_t signal_strength;    // signal strength (0 ~ 100)
+    char *bssid;
+    char *ssid;
+    char *capabilities;
+    char *frequency;
+    char *signal_strength;
     bool is_connected;          // whether connected
 
     struct list_head ln;
 };
 
 struct wifi_device_ops {
-    int (*open)(const char *ifname, struct netdev_context *);
-    int (*close)(struct netdev_context *);
     int (*connect)(struct netdev_context *, const char *ssid, const char *key);
     int (*disconnect)(struct netdev_context *);
     int (*start_scan)(struct netdev_context *);
     int (*stop_scan)(struct netdev_context *);
-    size_t (*get_hotspots)(struct netdev_context *, struct list_head *head);
-    char* (*get_net_info)(struct netdev_context *,
-            size_t *len, int *errcode);
+    struct list_head *(*get_hotspot_list_head)(struct netdev_context *);
+    struct wifi_hotspot *(*get_connected_hotspot)(struct netdev_context *);
 };
 
 typedef struct network_device {
@@ -92,8 +88,7 @@ typedef struct network_device {
     char               *hwaddr;     /* only for ether interface */
 
     /* dynamic info */
-    unsigned short      status;
-    unsigned short      signal;
+    unsigned int        status;
     unsigned int        flags;      /* copied from kernel */
     struct hbd_ifaddr   ipv4;
     struct hbd_ifaddr   ipv6;

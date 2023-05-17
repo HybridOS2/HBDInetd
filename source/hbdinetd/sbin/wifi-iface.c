@@ -109,16 +109,15 @@ static char *wifiGetHotspotList(hbdbus_conn* conn,
         goto done;
     }
 
-    struct list_head hotspot_list;
-    init_list_head(&hotspot_list);
-    errcode = netdev->wifi_ops->get_hotspots(netdev->ctxt, &hotspot_list);
-    if (errcode) {
+    struct list_head *hotspots;
+    hotspots = netdev->wifi_ops->get_hotspot_list_head(netdev->ctxt);
+    if (hotspots == NULL) {
         goto done;
     }
 
     size_t nr_hotspots = 0;
-    struct list_head *p, *n;
-    list_for_each_safe(p, n, &hotspot_list) {
+    struct list_head *p;
+    list_for_each(p, hotspots) {
         struct wifi_hotspot *hotspot;
         hotspot = list_entry(p, struct wifi_hotspot, ln);
 
@@ -128,19 +127,17 @@ static char *wifiGetHotspotList(hbdbus_conn* conn,
                 "\"ssid\":\"%s\","
                 "\"frequency\":\"%s\","
                 "\"capabilities\":\"%s\","
-                "\"signalStrength\":%d,"
+                "\"signalStrength\":\"%s\","
                 "\"isConnected\":%s"
                 "},",
                 hotspot->bssid,
                 hotspot->ssid,
-                hotspot->frenquency,
+                hotspot->frequency,
                 hotspot->capabilities,
                 hotspot->signal_strength,
                 hotspot->is_connected ? "true": "false");
 
         nr_hotspots++;
-        list_del(&hotspot->ln);
-        free(hotspot);
     }
 
     if (nr_hotspots > 0)
@@ -467,121 +464,24 @@ static char *wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint,
             break;
     }
 
-    if (netdev->status != DEVICE_STATUS_RUNNING) {
+    struct wifi_hotspot *hotspot;
+    hotspot = netdev->wifi_ops->get_connected_hotspot(netdev->ctxt);
+    if (hotspot == NULL) {
         errcode = ENONET;
         goto done;
     }
 
-    char *reply;
-    size_t reply_length;
-    reply = netdev->wifi_ops->get_net_info(netdev->ctxt,
-            &reply_length, &errcode);
-    if (errcode) {
-        goto done;
-    }
-
-    char *start = NULL;
-    char *end = NULL;
-    start = strstr(reply, "wpa_state=");
-    if (start) {
-        start += strlen("wpa_state=");
-        end = strstr(start, "\n");
-        if (end) {
-            if (strncasecmp(start, "COMPLETED", strlen("COMPLETED"))) {
-                errcode = ENONET;
-                goto done;
-            }
-        }
-        else {
-            errcode = ENONET;
-            goto done;
-        }
-    }
-    else {
-        errcode = ENONET;
-        goto done;
-    }
-
-    // bssid
-    start = strstr(end, "bssid=");
-    if (start) {
-        start += strlen("bssid=");
-        end = strstr(start, "\n");
-        if (end) {
-            size_t len = end - start;
-            pcutils_printbuf_strappend(pb, "\"bssid\":\"");
-            pcutils_printbuf_memappend_fast(pb, start, len);
-            pcutils_printbuf_strappend(pb, "\",");
-        }
-    }
-
-    if (start == NULL || end == NULL) {
-        pcutils_printbuf_strappend(pb, "\"bssid\":null,");
-        goto done;
-    }
-
-    // frenquency
-    start = strstr(end, "freq=");
-    if (start) {
-        start += strlen("freq=");
-        end = strstr(start, "\n");
-        if (end) {
-            size_t len = end - start;
-            pcutils_printbuf_strappend(pb, "\"frenquency\":\"");
-            pcutils_printbuf_memappend_fast(pb, start, len);
-            pcutils_printbuf_strappend(pb, " MHz\",");
-        }
-    }
-
-    if (start == NULL || end == NULL) {
-        pcutils_printbuf_strappend(pb, "\"frenquency\":null,");
-        goto done;
-    }
-
-    // ssid
-    start = strstr(end, "ssid=");
-    if (start) {
-        start += strlen("ssid=");
-        end = strstr(start, "\n");
-        if (end) {
-            size_t len = end - start;
-            pcutils_printbuf_strappend(pb, "\"ssid\":\"");
-            pcutils_printbuf_memappend_fast(pb, start, len);
-            pcutils_printbuf_strappend(pb, "\",");
-        }
-    }
-
-    if (start == NULL || end == NULL) {
-        pcutils_printbuf_strappend(pb, "\"ssid\":null,");
-        goto done;
-    }
-
-    // encryptionType
-    start = strstr(end, "key_mgmt=");
-    if (start) {
-        start += strlen("key_mgmt=");
-        end = strstr(start, "\n");
-        if (end) {
-            size_t len = end - start;
-            pcutils_printbuf_strappend(pb, "\"encryptionType\":\"");
-            pcutils_printbuf_memappend_fast(pb, start, len);
-            pcutils_printbuf_strappend(pb, "\",");
-        }
-    }
-
-    if (start == NULL || end == NULL) {
-        pcutils_printbuf_strappend(pb, "\"encryptionType\":null,");
-        goto done;
-    }
-
-    // speed
     pcutils_printbuf_format(pb,
-            "\"bitRate\":\"%d Mbps\",", netdev->bitrate / 1000000);
-
-
-    // singal
-    pcutils_printbuf_format(pb,
-            "\"signalStrength\":%d", netdev->signal);
+            "\"bssid\":\"%s\","
+            "\"ssid\":\"%s\","
+            "\"frequency\":\"%s\","
+            "\"capabilities\":\"%s\","
+            "\"signalStrength\":\"%s\",",
+            hotspot->bssid,
+            hotspot->ssid,
+            hotspot->frequency,
+            hotspot->capabilities,
+            hotspot->signal_strength);
 
     pcutils_printbuf_format(pb,
             "\"hardwareAddr\":\"%s\","

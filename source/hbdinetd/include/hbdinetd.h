@@ -50,6 +50,10 @@
 #define NETWORKDEVICECHANGED            "NETWORKDEVICECHANGED"
 
 // events for WiFi Device
+#define WIFICONNECTED                   "WIFICONNECTED"
+#define WIFIDISCONNECTED                "WIFIDISCONNECTED"
+#define WIFISCANFINISHED                "WIFISCANFINISHED"
+#define WIFISCANFAILED                  "WIFISCANFAILED"
 #define WIFIHOTSPOTSCHANGED             "WIFIHOTSPOTSCHANGED"
 #define WIFISIGNALSTRENGTHCHANGED       "WIFISIGNALSTRENGTHCHANGED"
 
@@ -86,6 +90,7 @@ enum {
 
 // errors
 #define ERR_OK                          0
+#define ERR_DEVICE_CONTROLLER           -1
 #define ERR_LIBRARY_OPERATION           -1
 #define ERR_NONE_DEVICE_LIST            -2
 #define ERR_WRONG_PROCEDURE             -3

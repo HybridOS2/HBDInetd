@@ -46,6 +46,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <net/if.h>
 #include <poll.h>
 #include <unistd.h>
 
@@ -312,6 +313,7 @@ wifi_connect_on_socket_path(struct netdev_context *ctxt, const char *path)
         ctxt->ctrl_conn = NULL;
         return -1;
     }
+
     if (wpa_ctrl_attach(ctxt->monitor_conn) != 0) {
         wpa_ctrl_close(ctxt->monitor_conn);
         wpa_ctrl_close(ctxt->ctrl_conn);
@@ -332,19 +334,19 @@ wifi_connect_on_socket_path(struct netdev_context *ctxt, const char *path)
 /* Establishes the control and monitor socket connections on the interface */
 int wifi_connect_to_supplicant(struct netdev_context *ctxt)
 {
-    if (ctxt->socket_path == NULL) {
-        if (access(WIFI_SUPP_CTRL_DIR, F_OK) == 0) {
-            int ret = asprintf(&ctxt->socket_path, "%s/%s",
-                    WIFI_SUPP_CTRL_DIR, ctxt->netdev->ifname);
-            if (ret < 0)
-                goto failed;
-        }
-        else {
+    char socket_path[sizeof(WIFI_SUPP_CTRL_DIR) + IFNAMSIZ + 1];
+
+    if (access(WIFI_SUPP_CTRL_DIR, F_OK) == 0) {
+        int ret = snprintf(socket_path, sizeof(socket_path),
+                "%s/%s", WIFI_SUPP_CTRL_DIR, ctxt->netdev->ifname);
+        if (ret < 0 && ret >= (int)sizeof(socket_path))
             goto failed;
-        }
+    }
+    else {
+        goto failed;
     }
 
-    return wifi_connect_on_socket_path(ctxt, ctxt->socket_path);
+    return wifi_connect_on_socket_path(ctxt, socket_path);
 
 failed:
     return -1;
@@ -375,7 +377,8 @@ int wifi_send_command(struct netdev_context *ctxt,
     return 0;
 }
 
-int wifi_ctrl_recv(struct netdev_context *ctxt, char *reply, size_t *reply_len)
+static int
+wifi_ctrl_recv(struct netdev_context *ctxt, char *reply, size_t *reply_len)
 {
     int res;
     int ctrlfd = wpa_ctrl_get_fd(ctxt->monitor_conn);
@@ -463,11 +466,13 @@ wifi_wait_on_socket(struct netdev_context *ctxt, char *buf, size_t buflen)
         if (match != NULL) {
             nread -= (match + 1 - buf);
             memmove(buf, match + 1, nread + 1);
-            //LOG_ERR("supplicant generated event without interface - %s\n", buf);
+            LOG_ERR("supplicant generated an event without interface - %s\n",
+                    buf);
         }
     } else {
         /* let the event go as is! */
-        //LOG_ERR("supplicant generated event without interface and without message level - %s\n", buf);
+        LOG_ERR("supplicant generated an event without "
+                "interface or message level - %s\n", buf);
     }
 
     return nread;
@@ -521,7 +526,7 @@ int wifi_command(struct netdev_context *ctxt,
         return -1;
     }
 
-    if(strncmp(cmd, "SAVE_CONFIG", strlen("SAVE_CONFIG")) == 0)
+    if (strncmp(cmd, "SAVE_CONFIG", strlen("SAVE_CONFIG")) == 0)
         return 0;
 
     LOG_INFO("do cmd %s\n", cmd);

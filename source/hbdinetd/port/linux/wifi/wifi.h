@@ -41,17 +41,28 @@
 
 #include "wpa-client/wpa_ctrl.h"
 
-#define WIFI_ENTROPY_FILE       "/data/misc/wifi/entropy.bin"
+#include "list.h"
+#include "kvlist.h"
+
+#define WIFI_ENTROPY_FILE       "/run/wpa_supplicant-hbd/entropy.bin"
 #define WIFI_SUPP_CONFIG_FILE   "/etc/wifi/wpa_supplicant-hbd.conf"
 #define WIFI_SUPP_CONFIG_TEMP   "/etc/wifi/wpa_supplicant-tmp.conf"
 #define WIFI_SUPP_CTRL_DIR      "/var/run/wpa_supplicant-hbd"
 
+#define WIFI_MSG_BUF_SIZE                   4096
+#define MAX_RETRIES_ON_AUTH_FAILURE         3
+
 struct netdev_context {
-    const struct network_device *netdev;
-    char *socket_path;
+    struct network_device *netdev;
     struct wpa_ctrl *ctrl_conn;
     struct wpa_ctrl *monitor_conn;
     int exit_sockets[2];
+
+    unsigned auth_fail_count;
+
+    char *buf;  /* the buffer use for event or respones. */
+    struct list_head hotspots;
+    struct kvlist event_handlers;
 };
 
 #ifdef __cplusplus
