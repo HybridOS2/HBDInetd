@@ -1,26 +1,64 @@
 /*
- * Copyright (C) 2008 The Android Open Source Project
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+** wifi.h -- The internal header for WiFi device on Linux.
+**
+** Copyright (C) 2023 FMSoft (http://www.fmsoft.cn)
+**
+** Author: Vincent Wei (https://github.com/VincentWei)
+**
+** This file is part of HBDInetd.
+**
+** HBDInetd is free software: you can redistribute it and/or modify
+** it under the terms of the GNU General Public License as published by
+** the Free Software Foundation, either version 3 of the License, or
+** (at your option) any later version.
+**
+** HBDInetd is distributed in the hope that it will be useful,
+** but WITHOUT ANY WARRANTY; without even the implied warranty of
+** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+** GNU General Public License for more details.
+** You should have received a copy of the GNU General Public License
+** along with this program.  If not, see http://www.gnu.org/licenses/.
+**
+** This file is derived from Android:
+**
+** Copyright (C) 2008 The Android Open Source Project
+**
+** Licensed under the Apache License, Version 2.0 (the "License");
+** you may not use this file except in compliance with the License.
+** You may obtain a copy of the License at
+**
+**      http://www.apache.org/licenses/LICENSE-2.0
+**
+** Unless required by applicable law or agreed to in writing, software
+** distributed under the License is distributed on an "AS IS" BASIS,
+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+** See the License for the specific language governing permissions and
+** limitations under the License.
+*/
 
-#ifndef _WIFI_H
-#define _WIFI_H
+#ifndef _hbdinetd_port_linux_wifi_wifi_h
+#define _hbdinetd_port_linux_wifi_wifi_h
+
+#include "wpa-client/wpa_ctrl.h"
+
+#define WIFI_ENTROPY_FILE       "/data/misc/wifi/entropy.bin"
+#define WIFI_SUPP_CONFIG_FILE   "/etc/wifi/wpa_supplicant-hbd.conf"
+#define WIFI_SUPP_CONFIG_TEMP   "/etc/wifi/wpa_supplicant-tmp.conf"
+#define WIFI_SUPP_CTRL_DIR      "/var/run/wpa_supplicant-hbd"
+
+struct netdev_context {
+    const struct network_device *netdev;
+    char *socket_path;
+    struct wpa_ctrl *ctrl_conn;
+    struct wpa_ctrl *monitor_conn;
+    int exit_sockets[2];
+};
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#if 0 /* not implemented so far */
 /**
  * Load the Wi-Fi driver.
  *
@@ -42,34 +80,48 @@ int wifi_unload_driver();
  */
 int is_wifi_driver_loaded();
 
+/**
+ * Return the path to requested firmware
+ */
+#define WIFI_GET_FW_PATH_STA	0
+#define WIFI_GET_FW_PATH_AP	1
+#define WIFI_GET_FW_PATH_P2P	2
+const char *wifi_get_fw_path(int fw_type);
+
+/**
+ * Change the path to firmware for the wlan driver
+ */
+int wifi_change_fw_path(const char *fwpath);
+
+#endif /* not implemented */
 
 /**
  * Start supplicant.
  *
  * @return 0 on success, < 0 on failure.
  */
-int wifi_start_supplicant(int p2pSupported);
+int wifi_start_supplicant(struct netdev_context *ctxt, int p2pSupported);
 
 /**
  * Stop supplicant.
  *
  * @return 0 on success, < 0 on failure.
  */
-int wifi_stop_supplicant(int p2pSupported);
+int wifi_stop_supplicant(struct netdev_context *ctxt);
 
 /**
  * Open a connection to supplicant
  *
  * @return 0 on success, < 0 on failure.
  */
-int wifi_connect_to_supplicant();
+int wifi_connect_to_supplicant(struct netdev_context *ctxt);
 
 /**
  * Close connection to supplicant
  *
  * @return 0 on success, < 0 on failure.
  */
-void wifi_close_supplicant_connection();
+void wifi_close_supplicant_connection(struct netdev_context *ctxt);
 
 /**
  * wifi_wait_for_event() performs a blocking call to
@@ -83,17 +135,10 @@ void wifi_close_supplicant_connection();
  * event (for instance, no connection), and less than 0
  * if there is an error.
  */
-int wifi_wait_for_event(char *buf, size_t len);
+int wifi_wait_for_event(struct netdev_context *ctxt, char *buf, size_t len);
 
 /**
  * wifi_command() issues a command to the Wi-Fi driver.
- *
- * Android extends the standard commands listed at
- * /link http://hostap.epitest.fi/wpa_supplicant/devel/ctrl_iface_page.html
- * to include support for sending commands to the driver:
- *
- * See wifi/java/android/net/wifi/WifiNative.java for the details of
- * driver commands that are supported
  *
  * @param command is the string command (preallocated with 32 bytes)
  * @param commandlen is command buffer length
@@ -104,7 +149,8 @@ int wifi_wait_for_event(char *buf, size_t len);
  *
  * @return 0 if successful, < 0 if an error.
  */
-int wifi_command(const char *command, char *reply, size_t reply_len);
+int wifi_command(struct netdev_context *ctxt, const char *command,
+        char *reply, size_t reply_len);
 
 /**
  * do_dhcp_request() issues a dhcp request and returns the acquired
@@ -122,32 +168,19 @@ int wifi_command(const char *command, char *reply, size_t reply_len);
  *
  * @return 0 if successful, < 0 if error.
  */
-int do_dhcp_request(int *ipaddr, int *gateway, int *mask,
-                   int *dns1, int *dns2, int *server, int *lease);
+int do_dhcp_request(struct netdev_context *ctxt,
+        int *ipaddr, int *gateway, int *mask,
+        int *dns1, int *dns2, int *server, int *lease);
 
 /**
  * Return the error string of the last do_dhcp_request().
  */
-const char *get_dhcp_error_string();
-
-/**
- * Return the path to requested firmware
- */
-#define WIFI_GET_FW_PATH_STA	0
-#define WIFI_GET_FW_PATH_AP	1
-#define WIFI_GET_FW_PATH_P2P	2
-const char *wifi_get_fw_path(int fw_type);
-
-/**
- * Change the path to firmware for the wlan driver
- */
-int wifi_change_fw_path(const char *fwpath);
+const char *get_dhcp_error_string(struct netdev_context *ctxt);
 
 /**
  * Check and create if necessary initial entropy file
  */
-#define WIFI_ENTROPY_FILE	"/data/misc/wifi/entropy.bin"
-int ensure_entropy_file_exists();
+int ensure_entropy_file_exists(void);
 
 /**
  * PATH_MAX
@@ -171,4 +204,5 @@ int ensure_entropy_file_exists();
 };  // extern "C"
 #endif
 
-#endif  // _WIFI_H
+#endif  // _hbdinetd_port_linux_wifi_wifi_h
+

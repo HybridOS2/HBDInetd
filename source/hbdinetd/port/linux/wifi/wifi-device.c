@@ -24,7 +24,7 @@
 #include "internal.h"
 #include "log.h"
 
-#include "wifi-internal.h"
+#include "wifi.h"
 
 int wifi_device_on(struct run_info *info, struct network_device *netdev)
 {
