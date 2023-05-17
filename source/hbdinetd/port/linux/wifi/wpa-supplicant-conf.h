@@ -18,12 +18,6 @@
 ** GNU General Public License for more details.
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see http://www.gnu.org/licenses/.
-**
-** This file is derived from  wpa_supplicant/hostapd control interface library
-** Copyright (c) 2004-2017, Jouni Malinen <j@w1.fi>
-**
-** This software may be distributed under the terms of the BSD license.
-** See README for more details.
 */
 
 #ifndef _hbdinetd_port_linux_wifi_conf_h

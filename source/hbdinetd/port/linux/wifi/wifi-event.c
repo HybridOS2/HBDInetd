@@ -27,6 +27,7 @@
 #include "network-device.h"
 #include "wifi.h"
 #include "wifi-event.h"
+#include "wpa-supplicant-conf.h"
 
 #include <unistd.h>
 #include <errno.h>
@@ -164,6 +165,10 @@ int wifi_event_handle_message(struct netdev_context *ctxt,
                     LOG_WARN("Ignore event: %s\n", event_name);
                 }
             }
+            free(event_name);
+        }
+        else {
+            LOG_WARN("Bad event message: %s\n", msg);
         }
     }
 
