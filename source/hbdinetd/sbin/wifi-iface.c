@@ -781,78 +781,50 @@ void report_wifi_scan_info(char * device_name, int type, void * results, int num
 }
 #endif
 
-int register_wifi_interfaces(hbdbus_conn * conn)
+static const struct procedure {
+    const char           *name;
+    hbdbus_method_handler handler;
+} procedures[] = {
+    { METHOD_WIFI_START_SCAN, wifiStartScanHotspots },
+    { METHOD_WIFI_GET_HOTSPOTS, wifiGetHotspotList },
+    { METHOD_WIFI_STOP_SCAN, wifiStopScanHotspots },
+    { METHOD_WIFI_CONNECT_AP, wifiConnect },
+    { METHOD_WIFI_DISCONNECT_AP, wifiDisconnect },
+    { METHOD_WIFI_GET_NETWORK_INFO, wifiGetNetworkInfo },
+};
+
+static const char *events[] = {
+    WIFISCANFINISHED,
+    WIFICONNECTED,
+    WIFICONFIGURED,
+    WIFIDISCONNECTED,
+    WIFISCANFINISHED,
+    WIFISIGNALSTRENGTHCHANGED,
+};
+
+int register_wifi_interfaces(hbdbus_conn *conn)
 {
     int errcode = 0;
 
-    errcode = hbdbus_register_procedure(conn, METHOD_WIFI_START_SCAN,
-            HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS,
-            wifiStartScanHotspots);
-    if (errcode) {
-        HLOG_ERR("Error for register procedure %s: %s.\n",
-                METHOD_WIFI_START_SCAN, hbdbus_get_err_message(errcode));
-        goto done;
+    for (size_t i = 0; i < PCA_TABLESIZE(procedures); i++) {
+        errcode = hbdbus_register_procedure(conn, procedures[i].name,
+                HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS,
+                procedures[i].handler);
+        if (errcode) {
+            HLOG_ERR("Error when registering procedure %s: %s.\n",
+                    procedures[i].name, hbdbus_get_err_message(errcode));
+            goto done;
+        }
     }
 
-    errcode = hbdbus_register_procedure(conn, METHOD_WIFI_GET_HOTSPOTS,
-            HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS,
-            wifiGetHotspotList);
-    if (errcode) {
-        HLOG_ERR("Error for register procedure %s: %s.\n",
-                METHOD_WIFI_START_SCAN, hbdbus_get_err_message(errcode));
-        goto done;
-    }
-
-    errcode = hbdbus_register_procedure(conn, METHOD_WIFI_STOP_SCAN,
-            HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS,
-            wifiStopScanHotspots);
-    if (errcode) {
-        HLOG_ERR("Error for register procedure %s: %s.\n",
-                METHOD_WIFI_STOP_SCAN, hbdbus_get_err_message(errcode));
-        goto done;
-    }
-
-    errcode = hbdbus_register_procedure(conn, METHOD_WIFI_CONNECT_AP,
-            HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS,
-            wifiConnect);
-    if (errcode) {
-        HLOG_ERR("Error for register procedure %s: %s.\n",
-                METHOD_WIFI_CONNECT_AP, hbdbus_get_err_message(errcode));
-        goto done;
-    }
-
-    errcode = hbdbus_register_procedure(conn, METHOD_WIFI_DISCONNECT_AP,
-            HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS,
-            wifiDisconnect);
-    if (errcode) {
-        HLOG_ERR("Error for register procedure %s: %s.\n",
-                METHOD_WIFI_DISCONNECT_AP, hbdbus_get_err_message(errcode));
-        goto done;
-    }
-
-    errcode = hbdbus_register_procedure(conn, METHOD_WIFI_GET_NETWORK_INFO,
-            HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS,
-            wifiGetNetworkInfo);
-    if (errcode) {
-        HLOG_ERR("Error for register procedure %s: %s.\n",
-                METHOD_WIFI_GET_NETWORK_INFO, hbdbus_get_err_message(errcode));
-        goto done;
-    }
-
-    errcode = hbdbus_register_event(conn, WIFISCANFINISHED,
-            HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS);
-    if (errcode) {
-        HLOG_ERR("Error for register event %s: %s.\n",
-                WIFISCANFINISHED, hbdbus_get_err_message(errcode));
-        goto done;
-    }
-
-    errcode = hbdbus_register_event(conn, WIFISIGNALSTRENGTHCHANGED,
-            HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS);
-    if (errcode) {
-        HLOG_ERR("Error for register event %s: %s.\n",
-                WIFISIGNALSTRENGTHCHANGED, hbdbus_get_err_message(errcode));
-        goto done;
+    for (size_t i = 0; i < PCA_TABLESIZE(events); i++) {
+        errcode = hbdbus_register_event(conn, events[i],
+                HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS);
+        if (errcode) {
+            HLOG_ERR("Error for register event %s: %s.\n",
+                    events[i], hbdbus_get_err_message(errcode));
+            goto done;
+        }
     }
 
 done:
@@ -861,14 +833,12 @@ done:
 
 void revoke_wifi_interfaces(hbdbus_conn *conn)
 {
-    hbdbus_revoke_event(conn, WIFISIGNALSTRENGTHCHANGED);
-    hbdbus_revoke_event(conn, WIFISCANFINISHED);
+    for (size_t i = 0; i < PCA_TABLESIZE(events); i++) {
+        hbdbus_revoke_event(conn, events[i]);
+    }
 
-    hbdbus_revoke_procedure(conn, METHOD_WIFI_START_SCAN);
-    hbdbus_revoke_procedure(conn, METHOD_WIFI_GET_HOTSPOTS);
-    hbdbus_revoke_procedure(conn, METHOD_WIFI_STOP_SCAN);
-    hbdbus_revoke_procedure(conn, METHOD_WIFI_CONNECT_AP);
-    hbdbus_revoke_procedure(conn, METHOD_WIFI_DISCONNECT_AP);
-    hbdbus_revoke_procedure(conn, METHOD_WIFI_GET_NETWORK_INFO);
+    for (size_t i = 0; i < PCA_TABLESIZE(procedures); i++) {
+        hbdbus_revoke_procedure(conn, procedures[i].name);
+    }
 }
 
