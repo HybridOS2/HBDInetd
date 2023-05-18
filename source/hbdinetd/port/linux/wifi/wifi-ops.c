@@ -130,11 +130,12 @@
 #endif
 
 static int connect(struct netdev_context *ctxt,
-        const char *ssid, const char *key)
+        const char *ssid, const char *keymgmt, const char *password)
 {
     (void)ctxt;
     (void)ssid;
-    (void)key;
+    (void)keymgmt;
+    (void)password;
     return 0;
 }
 
@@ -144,9 +145,10 @@ static int disconnect(struct netdev_context *ctxt)
     return 0;
 }
 
-static int start_scan(struct netdev_context *ctxt)
+static int start_scan(struct netdev_context *ctxt, unsigned interval)
 {
     (void)ctxt;
+    (void)interval;
     return 0;
 }
 

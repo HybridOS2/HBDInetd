@@ -41,9 +41,11 @@ static char *wifiStartScanHotspots(hbdbus_conn* conn,
     assert(info);
     assert(strcasecmp(to_method, METHOD_WIFI_START_SCAN) == 0);
 
+    purc_variant_t extra_value;
+
     struct network_device *netdev;
-    netdev = check_network_device(info, method_param,
-            DEVICE_TYPE_ETHER_WIRELESS, &errcode);
+    netdev = check_network_device_ex(info, method_param,
+            DEVICE_TYPE_ETHER_WIRELESS, "interval", &extra_value, &errcode);
     if (netdev == NULL) {
         goto done;
     }
@@ -55,7 +57,12 @@ static char *wifiStartScanHotspots(hbdbus_conn* conn,
         goto done;
     }
 
-    errcode = netdev->wifi_ops->start_scan(netdev->ctxt);
+    uint32_t interval = 0;
+    if (extra_value) {
+        purc_variant_cast_to_uint32(extra_value, &interval, false);
+        purc_variant_unref(extra_value);
+    }
+    errcode = netdev->wifi_ops->start_scan(netdev->ctxt, interval);
     if (errcode) {
         goto done;
     }
@@ -216,6 +223,7 @@ static char *wifiConnect(hbdbus_conn* conn, const char* from_endpoint,
     }
 
     if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "device")) == NULL) {
+        HLOG_ERR("No `device` key\n");
         errcode = ENOKEY;
         goto done;
     }
@@ -228,6 +236,7 @@ static char *wifiConnect(hbdbus_conn* conn, const char* from_endpoint,
     }
 
     if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "ssid")) == NULL) {
+        HLOG_ERR("No `ssid` key\n");
         errcode = ENOKEY;
         goto done;
     }
@@ -237,6 +246,12 @@ static char *wifiConnect(hbdbus_conn* conn, const char* from_endpoint,
         HLOG_ERR("SSID not specified\n");
         errcode = EINVAL;
         goto done;
+    }
+
+    const char *keymgmt = NULL;
+    if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "keymgmt"))) {
+        keymgmt = purc_variant_get_string_const(jo_tmp);
+        HLOG_INFO("Specified key management: %s\n", keymgmt);
     }
 
     struct network_device *netdev;
@@ -277,7 +292,7 @@ static char *wifiConnect(hbdbus_conn* conn, const char* from_endpoint,
         goto done;
     }
 
-    errcode = netdev->wifi_ops->connect(netdev->ctxt, ssid, password);
+    errcode = netdev->wifi_ops->connect(netdev->ctxt, ssid, keymgmt, password);
 
 done:
     if (jo)

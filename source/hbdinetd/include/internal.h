@@ -72,9 +72,10 @@ struct wifi_hotspot {
 };
 
 struct wifi_device_ops {
-    int (*connect)(struct netdev_context *, const char *ssid, const char *key);
+    int (*connect)(struct netdev_context *,
+            const char *ssid, const char *keymgmt, const char *password);
     int (*disconnect)(struct netdev_context *);
-    int (*start_scan)(struct netdev_context *);
+    int (*start_scan)(struct netdev_context *, unsigned int interval);
     int (*stop_scan)(struct netdev_context *);
     struct list_head *(*get_hotspot_list_head)(struct netdev_context *);
     struct wifi_hotspot *(*get_connected_hotspot)(struct netdev_context *);
@@ -134,8 +135,9 @@ int wifi_device_check(struct run_info *info, struct network_device *netdev);
 
 /* utils.c */
 const char *get_error_message(int errcode);
-struct network_device *check_network_device(struct run_info *info,
-        const char *method_param, int expect_type, int *errcode);
+struct network_device *check_network_device_ex(struct run_info *info,
+        const char *method_param, int expect_type,
+        const char *extra_key, purc_variant_t *extra_value, int *errcode);
 int start_daemon(const char *pathname, const char *arg, ...);
 
 /* common-iface.c */
@@ -156,6 +158,14 @@ retrieve_network_device_from_ifname(struct run_info *info, const char *ifname)
     void *data;
     data = kvlist_get(&info->devices, ifname);
     return *(struct network_device **)data;
+}
+
+static inline struct network_device *
+check_network_device(struct run_info *info,
+        const char *method_param, int expect_type, int *errcode)
+{
+    return check_network_device_ex(info,
+        method_param, expect_type, NULL, NULL, errcode);
 }
 
 #endif /* not defined _hbdinetd_internal_h */

@@ -75,8 +75,9 @@ const char *get_error_message(int errcode)
     return error_messages[errcode];
 }
 
-struct network_device *check_network_device(struct run_info *info,
-        const char *method_param, int expect_type, int *errcode)
+struct network_device *check_network_device_ex(struct run_info *info,
+        const char *method_param, int expect_type,
+        const char *extra_key, purc_variant_t *extra_value, int *errcode)
 {
     purc_variant_t jo = NULL, jo_tmp;
     struct network_device *netdev = NULL;
@@ -118,6 +119,13 @@ struct network_device *check_network_device(struct run_info *info,
         HLOG_ERR("Failed to update interface information: %s\n", ifname);
         *errcode = errno;
         goto failed;
+    }
+
+    if (extra_key) {
+        *extra_value = purc_variant_object_get_by_ckey(jo, extra_key);
+        if (*extra_value) {
+            purc_variant_ref(*extra_value);
+        }
     }
 
     if (jo)
