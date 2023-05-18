@@ -627,7 +627,7 @@ void report_wifi_scan_info(char * device_name, int type, void * results, int num
             hbdbus_fire_event(conn, WIFISIGNALSTRENGTHCHANGED, signal);
         }
 
-        // if scan ap, send WIFIHOTSPOTSCHANGED message
+        // if scan ap, send WIFISCANFINISHED message
         memset(signal, 0, 4096);
         sprintf(signal, "\"changed\":[");
 
@@ -756,7 +756,7 @@ void report_wifi_scan_info(char * device_name, int type, void * results, int num
 
         memset(message, 0, 8192);
         sprintf(message, "{%s], %s], %s]}", added, remove, signal);
-        hbdbus_fire_event(conn, WIFIHOTSPOTSCHANGED, message);
+        hbdbus_fire_event(conn, WIFISCANFINISHED, message);
 
         free(signal);
         free(remove);
@@ -839,11 +839,11 @@ int register_wifi_interfaces(hbdbus_conn * conn)
         goto done;
     }
 
-    errcode = hbdbus_register_event(conn, WIFIHOTSPOTSCHANGED,
+    errcode = hbdbus_register_event(conn, WIFISCANFINISHED,
             HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS);
     if (errcode) {
         HLOG_ERR("Error for register event %s: %s.\n",
-                WIFIHOTSPOTSCHANGED, hbdbus_get_err_message(errcode));
+                WIFISCANFINISHED, hbdbus_get_err_message(errcode));
         goto done;
     }
 
@@ -862,7 +862,7 @@ done:
 void revoke_wifi_interfaces(hbdbus_conn *conn)
 {
     hbdbus_revoke_event(conn, WIFISIGNALSTRENGTHCHANGED);
-    hbdbus_revoke_event(conn, WIFIHOTSPOTSCHANGED);
+    hbdbus_revoke_event(conn, WIFISCANFINISHED);
 
     hbdbus_revoke_procedure(conn, METHOD_WIFI_START_SCAN);
     hbdbus_revoke_procedure(conn, METHOD_WIFI_GET_HOTSPOTS);

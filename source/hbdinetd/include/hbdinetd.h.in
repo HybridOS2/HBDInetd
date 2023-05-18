@@ -51,10 +51,9 @@
 
 // events for WiFi Device
 #define WIFICONNECTED                   "WIFICONNECTED"
+#define WIFICONFIGURED                  "WIFICONFIGURED"
 #define WIFIDISCONNECTED                "WIFIDISCONNECTED"
 #define WIFISCANFINISHED                "WIFISCANFINISHED"
-#define WIFISCANFAILED                  "WIFISCANFAILED"
-#define WIFIHOTSPOTSCHANGED             "WIFIHOTSPOTSCHANGED"
 #define WIFISIGNALSTRENGTHCHANGED       "WIFISIGNALSTRENGTHCHANGED"
 
 // events for Ethernet Device
