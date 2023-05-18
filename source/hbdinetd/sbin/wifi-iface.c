@@ -31,7 +31,7 @@
 
 static char *wifiStartScanHotspots(hbdbus_conn* conn,
         const char* from_endpoint, const char* to_method,
-        const char* method_param, int *ret_code)
+        const char* method_param, int *bus_ec)
 {
     (void)from_endpoint;
     (void)to_method;
@@ -64,20 +64,20 @@ done:
     struct pcutils_printbuf my_buff, *pb = &my_buff;
 
     if (pcutils_printbuf_init(pb)) {
-        *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
+        *bus_ec = HBDBUS_EC_NOMEM;
         return NULL;
     }
 
     pcutils_printbuf_format(pb,
             "{\"errCode\":%d, \"errMsg\":\"%s\"}",
             errcode, get_error_message(errcode));
-    *ret_code = PCRDR_SC_OK;
+    *bus_ec = 0;
     return pb->buf;
 }
 
 static char *wifiGetHotspotList(hbdbus_conn* conn,
         const char* from_endpoint, const char* to_method,
-        const char* method_param, int *ret_code)
+        const char* method_param, int *bus_ec)
 {
     (void)from_endpoint;
     (void)to_method;
@@ -89,7 +89,7 @@ static char *wifiGetHotspotList(hbdbus_conn* conn,
 
     struct pcutils_printbuf my_buff, *pb = &my_buff;
     if (pcutils_printbuf_init(pb)) {
-        *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
+        *bus_ec = HBDBUS_EC_NOMEM;
         return NULL;
     }
 
@@ -151,7 +151,7 @@ done:
 
 static char *wifiStopScanHotspots(hbdbus_conn* conn,
         const char* from_endpoint, const char* to_method,
-        const char* method_param, int *ret_code)
+        const char* method_param, int *bus_ec)
 {
     (void)from_endpoint;
     (void)to_method;
@@ -184,19 +184,19 @@ done:
     struct pcutils_printbuf my_buff, *pb = &my_buff;
 
     if (pcutils_printbuf_init(pb)) {
-        *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
+        *bus_ec = HBDBUS_EC_NOMEM;
         return NULL;
     }
 
     pcutils_printbuf_format(pb,
             "{\"errCode\":%d, \"errMsg\":\"%s\"}",
             errcode, get_error_message(errcode));
-    *ret_code = PCRDR_SC_OK;
+    *bus_ec = 0;
     return pb->buf;
 }
 
 static char *wifiConnect(hbdbus_conn* conn, const char* from_endpoint,
-        const char* to_method, const char* method_param, int *ret_code)
+        const char* to_method, const char* method_param, int *bus_ec)
 {
     (void)from_endpoint;
     (void)to_method;
@@ -355,19 +355,19 @@ done:
     struct pcutils_printbuf my_buff, *pb = &my_buff;
 
     if (pcutils_printbuf_init(pb)) {
-        *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
+        *bus_ec = HBDBUS_EC_NOMEM;
         return NULL;
     }
 
     pcutils_printbuf_format(pb,
             "{\"errCode\":%d, \"errMsg\":\"%s\"}",
             errcode, get_error_message(errcode));
-    *ret_code = PCRDR_SC_OK;
+    *bus_ec = 0;
     return pb->buf;
 }
 
 static char *wifiDisconnect(hbdbus_conn* conn, const char* from_endpoint,
-        const char* to_method, const char* method_param, int *ret_code)
+        const char* to_method, const char* method_param, int *bus_ec)
 {
     (void)from_endpoint;
     (void)to_method;
@@ -398,19 +398,19 @@ done:
     struct pcutils_printbuf my_buff, *pb = &my_buff;
 
     if (pcutils_printbuf_init(pb)) {
-        *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
+        *bus_ec = HBDBUS_EC_NOMEM;
         return NULL;
     }
 
     pcutils_printbuf_format(pb,
             "{\"errCode\":%d, \"errMsg\":\"%s\"}",
             errcode, get_error_message(errcode));
-    *ret_code = PCRDR_SC_OK;
+    *bus_ec = 0;
     return pb->buf;
 }
 
 static char *wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint,
-        const char* to_method, const char* method_param, int *ret_code)
+        const char* to_method, const char* method_param, int *bus_ec)
 {
     (void)from_endpoint;
     (void)to_method;
@@ -422,7 +422,7 @@ static char *wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint,
 
     struct pcutils_printbuf my_buff, *pb = &my_buff;
     if (pcutils_printbuf_init(pb)) {
-        *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
+        *bus_ec = HBDBUS_EC_NOMEM;
         return NULL;
     }
 
@@ -509,7 +509,7 @@ done:
     pcutils_printbuf_format(pb,
             "},\"errCode\":%d, \"errMsg\":\"%s\"}",
             errcode, get_error_message(errcode));
-    *ret_code = PCRDR_SC_OK;
+    *bus_ec = 0;
     return pb->buf;
 }
 

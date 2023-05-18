@@ -242,14 +242,13 @@ int wifi_device_on(struct run_info *info, struct network_device *netdev)
     if (netdev->status < DEVICE_STATUS_UP) {
         ret = netdev_config_iface_up(netdev->ifname, netdev);
         if (ret) {
-            HLOG_ERR("Failed to make WiFi device up!\n");
+            HLOG_ERR("Failed to make WiFi device up; you may consult `rfkill`!\n");
             return errno;
         }
     }
 
     netdev->ctxt->netdev = netdev;
     ret = wifi_connect_to_supplicant(netdev->ctxt);
-
     if (ret) {
         wifi_start_supplicant(netdev->ctxt, 0);
 

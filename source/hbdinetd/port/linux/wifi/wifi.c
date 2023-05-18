@@ -80,19 +80,23 @@ int ensure_entropy_file_exists(void)
     if ((ret == 0) || (errno == EACCES)) {
         if ((ret != 0) &&
             (chmod(SUPP_ENTROPY_FILE, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP) != 0)) {
-            HLOG_ERR("Cannot set RW to \"%s\": %s\n", SUPP_ENTROPY_FILE, strerror(errno));
+            HLOG_ERR("Cannot set RW to \"%s\": %s\n",
+                    SUPP_ENTROPY_FILE, strerror(errno));
             return -1;
         }
         return 0;
     }
     destfd = TEMP_FAILURE_RETRY(open(SUPP_ENTROPY_FILE, O_CREAT|O_RDWR, 0660));
     if (destfd < 0) {
-        HLOG_ERR("Cannot create \"%s\": %s\n", SUPP_ENTROPY_FILE, strerror(errno));
+        HLOG_ERR("Cannot create \"%s\": %s\n",
+                SUPP_ENTROPY_FILE, strerror(errno));
         return -1;
     }
 
-    if (TEMP_FAILURE_RETRY(write(destfd, dummy_key, sizeof(dummy_key))) != sizeof(dummy_key)) {
-        HLOG_ERR("Error writing \"%s\": %s\n", SUPP_ENTROPY_FILE, strerror(errno));
+    if (TEMP_FAILURE_RETRY(write(destfd, dummy_key, sizeof(dummy_key))) !=
+            sizeof(dummy_key)) {
+        HLOG_ERR("Error writing \"%s\": %s\n",
+                SUPP_ENTROPY_FILE, strerror(errno));
         close(destfd);
         return -1;
     }
@@ -185,6 +189,28 @@ static int update_ctrl_interface(struct netdev_context *ctxt,
     return ret;
 }
 
+static int ensure_ctrl_dir_exists(struct netdev_context *ctxt,
+        const char *ctrl_dir)
+{
+    (void)ctxt;
+
+    int ret = access(ctrl_dir, R_OK | W_OK | X_OK);
+    if ((ret == 0) || (errno == EACCES)) {
+        if ((ret != 0) && (chmod(ctrl_dir, 0770) != 0)) {
+            HLOG_ERR("Cannot set RW to \"%s\": %s\n", ctrl_dir, strerror(errno));
+            return -1;
+        }
+    }
+    else if (errno == ENOENT) {
+        if (mkdir(ctrl_dir, 0770)) {
+            HLOG_ERR("Cannot create \"%s\": %s\n", ctrl_dir, strerror(errno));
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
 static int ensure_config_file_exists(struct netdev_context *ctxt,
         const char *config_file)
 {
@@ -255,6 +281,12 @@ int wifi_start_supplicant(struct netdev_context *ctxt, int p2p_supported)
 {
     (void)p2p_supported;
 
+    /* Before starting the daemon, make sure the control directory exists */
+    if (ensure_ctrl_dir_exists(ctxt, WIFI_SUPP_CTRL_DIR) < 0) {
+        HLOG_ERR("Wi-Fi will not be enabled\n");
+        return -1;
+    }
+
     /* Before starting the daemon, make sure its config file exists */
     if (ensure_config_file_exists(ctxt, SUPP_CONFIG_FILE) < 0) {
         HLOG_ERR("Wi-Fi will not be enabled\n");
@@ -263,6 +295,7 @@ int wifi_start_supplicant(struct netdev_context *ctxt, int p2p_supported)
 
     if (ensure_entropy_file_exists() < 0) {
         HLOG_ERR("Wi-Fi entropy file was not created\n");
+        return -1;
     }
 
     /* Clear out any stale socket files that might be left over. */
@@ -271,10 +304,20 @@ int wifi_start_supplicant(struct netdev_context *ctxt, int p2p_supported)
     /* Reset sockets used for exiting from hung state */
     ctxt->exit_sockets[0] = ctxt->exit_sockets[1] = -1;
 
+    char ifopt[2 + IFNAMSIZ + 1] = "-i";
+    strcat(ifopt, ctxt->netdev->ifname);
+
     /* start wpa_supplicant */
-//    strncpy(cmd, "/etc/wifi/wifi start", 511);            // gengyue
-//    cmd[511] = '\0';
-//    system(cmd);
+    if (start_daemon(PATH_WPA_SUPPLICANT,
+            PATH_WPA_SUPPLICANT,
+            "-c" WIFI_SUPP_CONFIG_FILE,
+            "-P" WIFI_SUPP_PID_FILE,
+            ifopt,
+            "-B",
+            NULL)) {
+        HLOG_ERR("Failed start_daemon(%s)\n", PATH_WPA_SUPPLICANT);
+        return -1;
+    }
 
     return 0;
 }

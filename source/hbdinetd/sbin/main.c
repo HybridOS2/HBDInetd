@@ -363,6 +363,8 @@ int main(int argc, char **argv)
     hbdbus_conn_set_user_data(conn, &run_info);
     enumerate_network_devices(&run_info);
 
+    register_common_interfaces(conn);
+
     format_current_time(curr_time, sizeof(curr_time) - 1);
 
     maxfd = cnnfd;
@@ -387,7 +389,7 @@ int main(int argc, char **argv)
             if (FD_ISSET(cnnfd, &rfds)) {
                 int err_code = hbdbus_read_and_dispatch_packet(conn);
                 if (err_code) {
-                    fprintf(stderr, "Failed to read and dispatch packet: %s\n",
+                    HLOG_ERR("Failed hbdbus_read_and_dispatch_packet(): %s\n",
                             hbdbus_get_err_message(err_code));
                     if (err_code == HBDBUS_EC_IO)
                         break;
@@ -406,13 +408,14 @@ int main(int argc, char **argv)
     } while (run_info.running);
 
 failed:
+    revoke_common_interfaces(conn);
     if (cnnfd >= 0)
         hbdbus_disconnect(conn);
 
+    cleanup_network_devices(&run_info);
     if (run_info.dump_stm)
         purc_rwstream_destroy(run_info.dump_stm);
 
-    cleanup_network_devices(&run_info);
 
     purc_cleanup();
 

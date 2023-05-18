@@ -20,6 +20,8 @@
 ** along with this program.  If not, see http://www.gnu.org/licenses/.
 */
 
+#undef NDEBUG
+
 #include "internal.h"
 #include "log.h"
 
@@ -29,7 +31,7 @@
 #include <errno.h>
 
 static char* openDevice(hbdbus_conn* conn, const char* from_endpoint,
-        const char* to_method, const char* method_param, int *ret_code)
+        const char* to_method, const char* method_param, int *bus_ec)
 {
     (void)from_endpoint;
     (void)to_method;
@@ -63,18 +65,18 @@ done:
     struct pcutils_printbuf my_buff, *pb = &my_buff;
 
     if (pcutils_printbuf_init(pb)) {
-        *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
+        *bus_ec = HBDBUS_EC_NOMEM;
         return NULL;
     }
 
     pcutils_printbuf_format(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", errcode,
             get_error_message(errcode));
-    *ret_code = PCRDR_SC_OK;
+    *bus_ec = 0;
     return pb->buf;
 }
 
 static char *closeDevice(hbdbus_conn* conn, const char* from_endpoint,
-        const char* to_method, const char* method_param, int *ret_code)
+        const char* to_method, const char* method_param, int *bus_ec)
 {
     (void)from_endpoint;
     (void)to_method;
@@ -108,19 +110,19 @@ done:
     struct pcutils_printbuf my_buff, *pb = &my_buff;
 
     if (pcutils_printbuf_init(pb)) {
-        *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
+        *bus_ec = HBDBUS_EC_NOMEM;
         return NULL;
     }
 
     pcutils_printbuf_format(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", errcode,
             get_error_message(errcode));
-    *ret_code = PCRDR_SC_OK;
+    *bus_ec = 0;
     return pb->buf;
 }
 
 static char *getDeviceStatus(hbdbus_conn* conn,
         const char* from_endpoint, const char* to_method,
-        const char* method_param, int *ret_code)
+        const char* method_param, int *bus_ec)
 {
     (void)from_endpoint;
     (void)to_method;
@@ -135,37 +137,40 @@ static char *getDeviceStatus(hbdbus_conn* conn,
     assert(info);
     assert(strcasecmp(to_method, METHOD_NET_GET_DEVICE_STATUS) == 0);
 
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
+    if (pcutils_printbuf_init(pb)) {
+        *bus_ec = HBDBUS_EC_NOMEM;
+        return NULL;
+    }
+
+    pcutils_printbuf_strappend(pb, "{\"data\":[");
+
     jo = purc_variant_make_from_json_string(method_param, strlen(method_param));
     if (jo == NULL || !purc_variant_is_object(jo)) {
+        HLOG_ERR("Bad parameters: %s\n", method_param);
         errcode = EINVAL;
         goto done;
     }
 
     if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "device")) == NULL) {
+        HLOG_ERR("No device defined: %s\n", method_param);
         errcode = ENOKEY;
         goto done;
     }
 
     ifname = purc_variant_get_string_const(jo_tmp);
-    if (ifname == NULL || !is_valid_interface_name(ifname)) {
-        HLOG_ERR("Bad interface name: %s\n", ifname);
+    if (ifname == NULL) {
+        HLOG_ERR("Bad interface name\n");
         errcode = EINVAL;
         goto done;
     }
 
     GPatternSpec* spec = g_pattern_spec_new(ifname);
     if (spec == NULL) {
-        *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
+        free(pb->buf);
+        *bus_ec = HBDBUS_EC_NOMEM;
         return NULL;
     }
-
-    struct pcutils_printbuf my_buff, *pb = &my_buff;
-    if (pcutils_printbuf_init(pb)) {
-        *ret_code = PCRDR_SC_INSUFFICIENT_STORAGE;
-        return NULL;
-    }
-
-    pcutils_printbuf_strappend(pb, "{\"data\":[");
 
     int nr_devices = 0;
     const char* name;
@@ -237,12 +242,16 @@ static char *getDeviceStatus(hbdbus_conn* conn,
                     netdev->hwaddr ? netdev->hwaddr : "",
                     netdev->ipv4.addr ? netdev->ipv4.addr : "",
                     netdev->ipv4.netmask ? netdev->ipv4.netmask : "",
-                    (netdev->flags & IFF_POINTOPOINT) ? "" : netdev->ipv4.hbdifa_broadaddr,
-                    (netdev->flags & IFF_POINTOPOINT) ? netdev->ipv4.hbdifa_dstaddr : "",
+                    (netdev->flags & IFF_POINTOPOINT) ? "" :
+                        (netdev->ipv4.hbdifa_broadaddr ? netdev->ipv4.hbdifa_broadaddr : ""),
+                    (netdev->flags & IFF_POINTOPOINT) ?
+                        (netdev->ipv4.hbdifa_dstaddr ? netdev->ipv4.hbdifa_dstaddr : "") : "",
                     netdev->ipv6.addr ? netdev->ipv6.addr : "",
                     netdev->ipv6.netmask ? netdev->ipv6.netmask : "",
-                    (netdev->flags & IFF_POINTOPOINT) ? "" : netdev->ipv6.hbdifa_broadaddr,
-                    (netdev->flags & IFF_POINTOPOINT) ? netdev->ipv6.hbdifa_dstaddr : "");
+                    (netdev->flags & IFF_POINTOPOINT) ? "" :
+                        (netdev->ipv6.hbdifa_broadaddr ? netdev->ipv6.hbdifa_broadaddr : ""),
+                    (netdev->flags & IFF_POINTOPOINT) ?
+                        (netdev->ipv6.hbdifa_dstaddr ? netdev->ipv6.hbdifa_dstaddr : "") : "");
             nr_devices++;
         }
     }
@@ -250,10 +259,12 @@ static char *getDeviceStatus(hbdbus_conn* conn,
     if (nr_devices > 0)
         pcutils_printbuf_shrink(pb, 1);
 
+    g_pattern_spec_free(spec);
+
 done:
     pcutils_printbuf_format(pb, "],\"errCode\":%d, \"errMsg\":\"%s\"}",
             errcode, get_error_message(errcode));
-    *ret_code = PCRDR_SC_OK;
+    *bus_ec = 0;
     return pb->buf;
 }
 

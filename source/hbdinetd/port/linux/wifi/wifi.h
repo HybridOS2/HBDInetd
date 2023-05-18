@@ -48,6 +48,7 @@
 #define PATH_DHCLIENT           "/sbin/dhclient"
 
 #define WIFI_SUPP_CTRL_DIR      "/var/run/wpa_supplicant-hbd"
+#define WIFI_SUPP_PID_FILE      "/var/run/wpa_supplicant-hbd/pid"
 #define WIFI_ENTROPY_FILE       "/var/run/wpa_supplicant-hbd/entropy.bin"
 #define WIFI_SUPP_CONFIG_FILE   "/etc/wpa_supplicant-hbd.conf"
 #define WIFI_SUPP_CONFIG_TEMPLATE   \

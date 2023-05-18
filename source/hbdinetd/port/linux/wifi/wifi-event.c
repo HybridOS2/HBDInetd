@@ -115,7 +115,7 @@ int wifi_event_init(struct netdev_context *ctxt)
     kvlist_init(&ctxt->event_handlers, NULL);
 
     for (size_t i = 0; i < PCA_TABLESIZE(event_handlers); i++) {
-        if (kvlist_set(&ctxt->event_handlers, event_handlers[i].name,
+        if (!kvlist_set(&ctxt->event_handlers, event_handlers[i].name,
                 &event_handlers[i].handler)) {
             goto failed;
         }

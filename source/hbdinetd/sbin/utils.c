@@ -83,11 +83,13 @@ struct network_device *check_network_device(struct run_info *info,
 
     jo = purc_variant_make_from_json_string(method_param, strlen(method_param));
     if (jo == NULL || !purc_variant_is_object(jo)) {
+        HLOG_ERR("Bad parameter: %s\n", method_param);
         *errcode = EINVAL;
         goto failed;
     }
 
     if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "device")) == NULL) {
+        HLOG_ERR("Not 'device' key: %s\n", method_param);
         *errcode = ENOKEY;
         goto failed;
     }
@@ -164,6 +166,7 @@ int start_daemon(const char *pathname, const char *arg, ...)
         return -1;
     }
 
+    nr_args++;
     if (nr_args <= SZ_IN_STACK_ARGS) {
         argv = argv_in_stack;
     }
@@ -178,9 +181,10 @@ int start_daemon(const char *pathname, const char *arg, ...)
 
     p = (char *)arg;
     size_t i = 0;
-    while (p) {
+    while (nr_args) {
         argv[i] = p;
         i++;
+        nr_args--;
         p = va_arg(ap, char *);
     }
     va_end(ap);
@@ -194,8 +198,8 @@ int start_daemon(const char *pathname, const char *arg, ...)
     }
     else if (cpid == 0) {
         if (execv(pathname, argv)) {
-            HLOG_ERR("Failed execv: %s\n", pathname);
-            exit(1);
+            HLOG_ERR("Failed execv(%s): %s\n", pathname, strerror(errno));
+            _exit(1);
         }
     }
     else {
