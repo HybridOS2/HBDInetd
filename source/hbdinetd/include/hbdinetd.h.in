@@ -23,7 +23,7 @@
 #ifndef __hbdinetd_h
 #define __hbdinetd_h
 
-#define HBDINETD_APP_NAME               "cn.fmsoft.hybridos.inetd"
+#define HBDINETD_APP_NAME               "@PROJECT_APP_NAME@"
 #define HBDINETD_RUNNER_NAME            "daemon"
 
 #define HBDINETD_ALLOWED_HOSTS          "localhost"

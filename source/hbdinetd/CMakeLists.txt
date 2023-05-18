@@ -1,11 +1,14 @@
 include(GlobalCommon)
 
+configure_file(include/hbdinetd.h.in ${FORWARDING_HEADERS_DIR}/hbdinetd.h @ONLY)
+
 HBDINETD_EXECUTABLE_DECLARE(hbdinetd)
 
 list(APPEND hbdinetd_PRIVATE_INCLUDE_DIRECTORIES
     "${CMAKE_BINARY_DIR}"
     "${HBDINETD_DIR}"
     "${HBDINETD_DIR}/include"
+    "${FORWARDING_HEADERS_DIR}"
     "${PURC_INCLUDE_DIRS}"
     "${HBDBUS_INCLUDE_DIRS}"
     "${GLIB_INCLUDE_DIRS}"
