@@ -12,6 +12,7 @@ set(SYSEXEC_INSTALL_DIR "${CMAKE_INSTALL_FULL_SBINDIR}" CACHE PATH "Absolute pat
 set(LIBEXEC_INSTALL_DIR "${CMAKE_INSTALL_FULL_LIBEXECDIR}/hbdinetd" CACHE PATH "Absolute path to install executables executed by the library")
 set(HEADER_INSTALL_DIR "${CMAKE_INSTALL_INCLUDEDIR}" CACHE PATH "Absolute path to header installation directory")
 set(HBDINETD_HEADER_INSTALL_DIR "${CMAKE_INSTALL_INCLUDEDIR}/hbdinetd" CACHE PATH "Absolute path to HBDInetd header installation directory")
+set(HBDINETD_APP_INSTALL_DIR "/app/${HYBRIDOS_APP_NAME}" CACHE PATH "Absolute path to HBDInetd app directory" FORCE)
 
 add_definitions(-DBUILDING_LINUX__=1)
 

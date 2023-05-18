@@ -12,6 +12,8 @@ cmake_minimum_required(VERSION 3.16)
 
 project(HBDInetd C CXX)
 
+set(HYBRIDOS_APP_NAME "cn.fmsoft.hybridos.inetd")
+
 if (NOT CMAKE_BUILD_TYPE)
     message(WARNING "No CMAKE_BUILD_TYPE value specified, defaulting to RelWithDebInfo.")
     set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Choose the type of build." FORCE)

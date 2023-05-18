@@ -45,5 +45,6 @@ set_target_properties(hbdinetd PROPERTIES
 HBDINETD_COMPUTE_SOURCES(hbdinetd)
 HBDINETD_FRAMEWORK(hbdinetd)
 
-install(TARGETS hbdinetd DESTINATION "${SYSEXEC_INSTALL_DIR}/")
+install(TARGETS hbdinetd
+    DESTINATION "${HBDINETD_APP_INSTALL_DIR}/sbin/")
 

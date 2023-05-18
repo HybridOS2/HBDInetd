@@ -24,3 +24,8 @@ list(APPEND hbdinetd_SOURCES
 #    "${HBDINETD_DIR}/port/linux/wifi/wifimanager.c"
 )
 
+install(FILES
+    "${HBDINETD_DIR}/etc/wpa_supplicant.conf"
+    DESTINATION "${HBDINETD_APP_INSTALL_DIR}/share/doc/"
+)
+
