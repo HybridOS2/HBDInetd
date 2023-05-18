@@ -187,15 +187,21 @@ int start_daemon(const char *pathname, const char *arg, ...)
 
     pid_t cpid = vfork();
     if (cpid == -1) {
+        if (argv != argv_in_stack)
+            free(argv);
         HLOG_ERR("Failed vfork(): %s.\n", strerror(errno));
         return -1;
     }
     else if (cpid == 0) {
-        execv(pathname, argv);
+        if (execv(pathname, argv)) {
+            HLOG_ERR("Failed execv: %s\n", pathname);
+            exit(1);
+        }
     }
-
-    if (argv != argv_in_stack)
-        free(argv);
+    else {
+        if (argv != argv_in_stack)
+            free(argv);
+    }
 
     return 0;
 }

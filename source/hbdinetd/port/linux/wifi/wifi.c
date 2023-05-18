@@ -57,7 +57,7 @@
 
 #define IFACE_VALUE_MAX 32
 
-static const char SUPP_CONFIG_TEMPLATE[]= WIFI_SUPP_CONFIG_TEMP;
+static const char SUPP_CONFIG_TEMPLATE[]= WIFI_SUPP_CONFIG_TEMPLATE;
 static const char SUPP_CONFIG_FILE[]    = WIFI_SUPP_CONFIG_FILE;
 static const char CONTROL_IFACE_PATH[]  = WIFI_SUPP_CTRL_DIR;
 static const char SUPP_ENTROPY_FILE[]   = WIFI_ENTROPY_FILE;
@@ -193,15 +193,15 @@ static int ensure_config_file_exists(struct netdev_context *ctxt,
     int nread;
     int ret;
 
-    ret = access(config_file, R_OK|W_OK);
+    ret = access(config_file, R_OK | W_OK);
     if ((ret == 0) || (errno == EACCES)) {
         if ((ret != 0) &&
-            (chmod(config_file, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP) != 0)) {
+                (chmod(config_file, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP) != 0)) {
             HLOG_ERR("Cannot set RW to \"%s\": %s\n", config_file, strerror(errno));
             return -1;
         }
         /* return if we were able to update control interface properly */
-        if (update_ctrl_interface(ctxt, config_file) >=0) {
+        if (update_ctrl_interface(ctxt, config_file) >= 0) {
             return 0;
         } else {
             /* This handles the scenario where the file had bad data
@@ -254,7 +254,6 @@ static int ensure_config_file_exists(struct netdev_context *ctxt,
 int wifi_start_supplicant(struct netdev_context *ctxt, int p2p_supported)
 {
     (void)p2p_supported;
-//    char cmd[512] = {0};
 
     /* Before starting the daemon, make sure its config file exists */
     if (ensure_config_file_exists(ctxt, SUPP_CONFIG_FILE) < 0) {

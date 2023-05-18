@@ -44,10 +44,14 @@
 #include "list.h"
 #include "kvlist.h"
 
+#define PATH_WPA_SUPPLICANT     "/sbin/wpa_supplicant"
+#define PATH_DHCLIENT           "/sbin/dhclient"
+
 #define WIFI_SUPP_CTRL_DIR      "/var/run/wpa_supplicant-hbd"
 #define WIFI_ENTROPY_FILE       "/var/run/wpa_supplicant-hbd/entropy.bin"
 #define WIFI_SUPP_CONFIG_FILE   "/etc/wpa_supplicant-hbd.conf"
-#define WIFI_SUPP_CONFIG_TEMP   "/etc/wpa_supplicant-tmp.conf"
+#define WIFI_SUPP_CONFIG_TEMPLATE   \
+    "/app/" HBDINETD_APP_NAME "/share/doc/wpa_supplicant.conf"
 
 #define WIFI_MSG_BUF_SIZE                   4096
 #define MAX_RETRIES_ON_AUTH_FAILURE         3
