@@ -18,22 +18,6 @@
 ** GNU General Public License for more details.
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see http://www.gnu.org/licenses/.
-**
-** This file is derived from Android:
-**
-** Copyright (C) 2008 The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License");
-** you may not use this file except in compliance with the License.
-** You may obtain a copy of the License at
-**
-**      http://www.apache.org/licenses/LICENSE-2.0
-**
-** Unless required by applicable law or agreed to in writing, software
-** distributed under the License is distributed on an "AS IS" BASIS,
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-** See the License for the specific language governing permissions and
-** limitations under the License.
 */
 
 #include <string.h>
@@ -41,6 +25,7 @@
 
 #include "internal.h"
 #include "log.h"
+#include "wifi.h"
 #include "helpers.h"
 
 void wifi_reset_hotspots(struct list_head *hotspots)
@@ -161,11 +146,16 @@ int wifi_parse_scan_results(struct list_head *hotspots,
         end = strstr(start, "\n");
         if (end) {
             size_t len = end - start;
+            size_t nr_chars = 0;
             if (len == 0)
                 goto failed;
 
             one->ssid = malloc(len + 1);
             if (unescape_hex(start, len, one->ssid)) {
+                goto failed;
+            }
+            else if (!pcutils_string_check_utf8(one->ssid, -1, &nr_chars, NULL)
+                    || nr_chars == 0) {
                 goto failed;
             }
 
@@ -200,6 +190,180 @@ failed:
         free(one);
     }
 
+    return -1;
+}
+
+int wifi_parse_networks(struct kvlist *networks,
+        const char *results, size_t max_len)
+{
+    const char *start = results;
+    const char *last = results + max_len;
+    const char *end = NULL;
+
+    end = strstr(start, "\n");  // skip first line
+    while (end && end < last) {
+        start = end + 1;
+
+        int id;
+        end = strstr(start, "\t");
+        if (end)
+            id = atoi(start);
+        else
+            goto failed;
+
+        start = end + 1;
+        end = strstr(start, "\t");
+        if (end) {
+            size_t len = end - start;
+            size_t nr_chars;
+            char ssid[len + 1];
+            if (unescape_hex(start, len, ssid)) {
+                HLOG_ERR("Bad hex encoding: %s\n", start);
+                goto failed;
+            }
+            else if (!pcutils_string_check_utf8(ssid, -1, &nr_chars, NULL)
+                    || nr_chars == 0) {
+                HLOG_ERR("SSID is not a valid UTF-8 string: %s\n", start);
+                goto failed;
+            }
+
+            kvlist_set(networks, ssid, &id);
+        }
+        else {
+            HLOG_ERR("Bad format in network list: %s\n", start);
+            goto failed;
+        }
+
+        start = end + 1;
+        end = strstr(start, "\t");
+        if (end) {
+            // skip field bssid
+        }
+        else {
+            HLOG_ERR("Bad format in network list: %s\n", start);
+            goto failed;
+        }
+
+        start = end + 1;
+        end = strstr(start, "\n");
+        // skip field flags
+    }
+
+    return 0;
+
+failed:
+    return -1;
+}
+
+int wifi_parse_status_for_netid(struct netdev_context *ctxt,
+        const char *results, size_t max_len, char **ssid_ret)
+{
+    (void)max_len;
+    const char *start = results;
+    const char *end = NULL;
+    while (start) {
+        end = strstr(start, "=");
+        if (end) {
+            size_t len = end - start;
+            if (strncasecmp(start, "ssid", len) == 0) {
+
+                start = end + 1;
+                end = strstr(start, "\n");
+                if (end)
+                    len = end - start;
+                else
+                    len = strlen(start);
+
+                size_t nr_chars;
+                char ssid[len + 1];
+                if (unescape_hex(start, len, ssid)) {
+                    HLOG_ERR("Bad hex encoding: %s\n", start);
+                    goto failed;
+                }
+                else if (!pcutils_string_check_utf8(ssid, -1, &nr_chars, NULL)
+                        || nr_chars == 0) {
+                    HLOG_ERR("SSID is not a valid UTF-8 string: %s\n", start);
+                    goto failed;
+                }
+
+                void *data = kvlist_get(&ctxt->saved_networks, ssid);
+                if (data) {
+                    int id;
+                    id = *(int *)data;
+                    if (ssid_ret)
+                        *ssid_ret = strdup(ssid);
+                    return id;
+                }
+                else {
+                    HLOG_ERR("Current network is not saved one: %s\n", ssid);
+                    goto failed;
+                }
+            }
+            else {
+                start = end + 1;
+                end = strstr(start, "\n");
+                if (end)
+                    start = end + 1;
+                else {
+                    break;
+                }
+            }
+        }
+        else {
+            break;
+        }
+    }
+
+failed:
+    return -1;
+}
+
+int wifi_parse_bss_for_signal_level(struct wifi_hotspot *hotspot,
+        const char *results, size_t max_len)
+{
+    (void)max_len;
+    const char *start = results;
+    const char *end = NULL;
+    while (start) {
+        end = strstr(start, "=");
+        if (end) {
+            size_t len = end - start;
+            if (strncasecmp(start, "level", len) == 0) {
+                start = end + 1;
+                end = strstr(start, "\n");
+                if (end == NULL)
+                    len = end - start;
+                else {
+                    len = strlen(start);
+                }
+
+                if (len == 0) {
+                    HLOG_ERR("No valid level value: %s\n", start);
+                    goto failed;
+                }
+
+                int level = atoi(start);
+                if (level == hotspot->signal_level)
+                    return 0;
+                else
+                    return 1;
+            }
+            else {
+                start = end + 1;
+                end = strstr(start, "\n");
+                if (end)
+                    start = end + 1;
+                else {
+                    break;
+                }
+            }
+        }
+        else {
+            break;
+        }
+    }
+
+failed:
     return -1;
 }
 

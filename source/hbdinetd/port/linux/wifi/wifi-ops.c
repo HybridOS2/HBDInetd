@@ -25,6 +25,7 @@
 #include "log.h"
 
 #include "network-device.h"
+#include "wpa-supplicant-conf.h"
 #include "wifi.h"
 #include "event.h"
 #include "helpers.h"
@@ -186,6 +187,13 @@ static struct wifi_device_ops wifi_ops = {
     get_connected_hotspot,
 };
 
+static int get_id_len(struct kvlist *kv, const void *data)
+{
+    (void)kv;
+    (void)data;
+    return sizeof(int);
+}
+
 static struct netdev_context *netdev_context_new(void)
 {
     struct netdev_context *ctxt = NULL;
@@ -207,7 +215,7 @@ static struct netdev_context *netdev_context_new(void)
             ctxt = NULL;
         }
 
-        kvlist_init(&ctxt->saved_networks, NULL);
+        kvlist_init(&ctxt->saved_networks, get_id_len);
     }
 
     return ctxt;
@@ -270,14 +278,20 @@ int wifi_device_on(hbdbus_conn *conn, struct network_device *netdev)
         } while (ret && nr_tries < 10);
 
         if (ret) {
-            netdev_context_delete(netdev->ctxt);
-            netdev->ctxt = NULL;
             HLOG_ERR("Give up after 10 retries to connect to wpa_supplicant!\n");
-            return ERR_DEVICE_CONTROLLER;
         }
     }
 
+    if (wpa_conf_load_saved_networks(netdev->ctxt)) {
+        goto failed;
+    }
+
     return 0;
+
+failed:
+    netdev_context_delete(netdev->ctxt);
+    netdev->ctxt = NULL;
+    return ERR_DEVICE_CONTROLLER;
 }
 
 int wifi_device_off(hbdbus_conn *conn, struct network_device *netdev)

@@ -30,7 +30,7 @@
 extern "C" {
 #endif
 
-size_t wpa_conf_network_load_saved_networks(struct netdev_context *ctxt);
+int wpa_conf_load_saved_networks(struct netdev_context *ctxt);
 
 int wpa_conf_is_ap_exist(struct netdev_context *ctxt, const char *ssid,
         const char *key_mgmt, char *net_id, int *len);

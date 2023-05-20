@@ -33,6 +33,17 @@ extern "C" {
 void wifi_reset_hotspots(struct list_head *hotspots);
 int wifi_parse_scan_results(struct list_head *hotspots,
         const char *results, size_t max_len);
+int wifi_parse_networks(struct kvlist *networks,
+        const char *results, size_t max_len);
+
+struct netdev_context;
+int wifi_parse_status_for_netid(struct netdev_context *ctxt,
+        const char *results, size_t max_len, char **ssid);
+
+struct wifi_hotspot;
+/* returns 0 for not changed, > 0 for changed, < 0 for failure */
+int wifi_parse_bss_for_signal_level(struct wifi_hotspot *hotspot,
+        const char *results, size_t max_len);
 
 #ifdef __cplusplus
 };  // extern "C"
