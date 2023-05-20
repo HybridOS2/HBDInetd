@@ -62,17 +62,15 @@ static int on_scan_results(hbdbus_conn *conn,
     (void)data;
     (void)len;
 
-    ctxt->next_scan_time = purc_monotonic_time_after(ctxt->scan_interval);
-    ctxt->scan_state = SCAN_STATE_FINISHED;
-
-    int ret = wifi_command(ctxt, "SCAN_RESULTS", ctxt->buf, WIFI_MSG_BUF_SIZE);
+    size_t reply_len = WIFI_MSG_BUF_SIZE;
+    int ret = wifi_command(ctxt, "SCAN_RESULTS", ctxt->buf, &reply_len);
     if (ret) {
         ctxt->cmd_failure_count++;
         HLOG_ERR("Failed when getting scan results: %d\n", ret);
         goto failed;
     }
 
-    wifi_parse_scan_results(&ctxt->hotspots, ctxt->buf, WIFI_MSG_BUF_SIZE);
+    wifi_parse_scan_results(&ctxt->hotspots, ctxt->buf, reply_len);
     return 0;
 
 failed:
@@ -164,7 +162,8 @@ int wifi_event_handle_message(hbdbus_conn *conn,
             ctxt->auth_failure_count++;
             if (ctxt->auth_failure_count >= MAX_RETRIES_ON_AUTH_FAILURE) {
 
-                wifi_command(ctxt, "DISCONNECT", ctxt->buf, WIFI_MSG_BUF_SIZE);
+                size_t len = WIFI_MSG_BUF_SIZE;
+                wifi_command(ctxt, "DISCONNECT", ctxt->buf, &len);
                 // TODO:
 
                 ctxt->auth_failure_count = 0;

@@ -25,6 +25,7 @@
 #include "log.h"
 #include "list.h"
 
+#include <unistd.h>
 #include <net/if.h>
 #include <assert.h>
 #include <errno.h>
@@ -41,11 +42,18 @@ static char *wifiStartScanHotspots(hbdbus_conn* conn,
     assert(info);
     assert(strcasecmp(to_method, METHOD_WIFI_START_SCAN) == 0);
 
-    purc_variant_t extra_value;
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
+    if (pcutils_printbuf_init(pb)) {
+        *bus_ec = HBDBUS_EC_NOMEM;
+        return NULL;
+    }
 
+    pcutils_printbuf_strappend(pb, "{\"data\":[");
+
+    purc_variant_t extra_value;
     struct network_device *netdev;
     netdev = check_network_device_ex(info, method_param,
-            DEVICE_TYPE_ETHER_WIRELESS, "interval", &extra_value, &errcode);
+            DEVICE_TYPE_ETHER_WIRELESS, "waitSeconds", &extra_value, &errcode);
     if (netdev == NULL) {
         goto done;
     }
@@ -57,26 +65,36 @@ static char *wifiStartScanHotspots(hbdbus_conn* conn,
         goto done;
     }
 
-    uint32_t interval = 0;
+    uint32_t wait_seconds = 0;
     if (extra_value) {
-        purc_variant_cast_to_uint32(extra_value, &interval, false);
+        purc_variant_cast_to_uint32(extra_value, &wait_seconds, false);
         purc_variant_unref(extra_value);
     }
-    errcode = netdev->wifi_ops->start_scan(netdev->ctxt, interval);
+    errcode = netdev->wifi_ops->start_scan(netdev->ctxt);
     if (errcode) {
         goto done;
     }
 
-done:
-    struct pcutils_printbuf my_buff, *pb = &my_buff;
+    if (wait_seconds > 0) {
+        wait_seconds = (wait_seconds > 5) ? 5 : wait_seconds;
+        wait_seconds *= 2;
+        do {
+            TEMP_FAILURE_RETRY(usleep(500000)); // 0.5s
+        } while (--wait_seconds);
 
-    if (pcutils_printbuf_init(pb)) {
-        *bus_ec = HBDBUS_EC_NOMEM;
-        return NULL;
     }
 
+    struct list_head *hotspots;
+    hotspots = netdev->wifi_ops->get_hotspot_list_head(netdev->ctxt);
+    if (hotspots == NULL) {
+        goto done;
+    }
+
+    print_hotspots(hotspots, pb);
+
+done:
     pcutils_printbuf_format(pb,
-            "{\"errCode\":%d, \"errMsg\":\"%s\"}",
+            "],\"errCode\":%d, \"errMsg\":\"%s\"}",
             errcode, get_error_message(errcode));
     *bus_ec = 0;
     return pb->buf;
@@ -100,7 +118,7 @@ static char *wifiGetHotspotList(hbdbus_conn* conn,
         return NULL;
     }
 
-    pcutils_printbuf_strappend(pb, "{\"data\":");
+    pcutils_printbuf_strappend(pb, "{\"data\":[");
 
     struct network_device *netdev;
     netdev = check_network_device(info, method_param,
@@ -125,7 +143,7 @@ static char *wifiGetHotspotList(hbdbus_conn* conn,
     print_hotspots(hotspots, pb);
 
 done:
-    pcutils_printbuf_format(pb, ",\"errCode\":%d, \"errMsg\":\"%s\"}",
+    pcutils_printbuf_format(pb, "],\"errCode\":%d, \"errMsg\":\"%s\"}",
             errcode, get_error_message(errcode));
     return pb->buf;
 }

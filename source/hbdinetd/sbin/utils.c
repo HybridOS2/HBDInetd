@@ -177,8 +177,6 @@ int print_hotspots(const struct list_head *hotspots,
     size_t nr_hotspots = 0;
     struct list_head *p;
 
-    pcutils_printbuf_strappend(pb, "[");
-
     list_for_each(p, hotspots) {
         struct wifi_hotspot *hotspot;
         hotspot = list_entry(p, struct wifi_hotspot, ln);
@@ -207,7 +205,6 @@ int print_hotspots(const struct list_head *hotspots,
 
     if (nr_hotspots > 0)
         pcutils_printbuf_shrink(pb, 1);
-    pcutils_printbuf_strappend(pb, "]");
     return 0;
 }
 

@@ -69,7 +69,9 @@ struct wifi_hotspot {
     char *capabilities;
     unsigned int frequency;
     int signal_level;
-    bool is_connected;
+
+    unsigned is_saved:1;
+    unsigned is_connected:1;
 
     struct list_head ln;
 };
@@ -78,7 +80,7 @@ struct wifi_device_ops {
     int (*connect)(struct netdev_context *,
             const char *ssid, const char *keymgmt, const char *password);
     int (*disconnect)(struct netdev_context *);
-    int (*start_scan)(struct netdev_context *, unsigned int interval);
+    int (*start_scan)(struct netdev_context *);
     int (*stop_scan)(struct netdev_context *);
     struct list_head *(*get_hotspot_list_head)(struct netdev_context *);
     struct wifi_hotspot *(*get_connected_hotspot)(struct netdev_context *);
@@ -174,4 +176,16 @@ check_network_device(struct run_info *info,
         method_param, expect_type, NULL, NULL, errcode);
 }
 
+/* Evaluate EXPRESSION, and repeat as long as it returns -1 with `errno'
+    set to EINTR.  */
+#ifndef TEMP_FAILURE_RETRY
+#define TEMP_FAILURE_RETRY(expression) \
+   (__extension__                                                              \
+     ({ long int __result;                                                     \
+        do __result = (long int) (expression);                                 \
+        while (__result == -1L && errno == EINTR);                             \
+        __result; }))
+#endif
+
 #endif /* not defined _hbdinetd_internal_h */
+

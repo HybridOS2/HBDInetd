@@ -1,5 +1,5 @@
 /*
-** wifi-device.c -- The basic operators for wifi devices.
+** wifi-ops.c -- The basic operators for wifi devices.
 **
 ** Copyright (C) 2023 FMSoft (http://www.fmsoft.cn)
 **
@@ -146,10 +146,15 @@ static int disconnect(struct netdev_context *ctxt)
     return 0;
 }
 
-static int start_scan(struct netdev_context *ctxt, unsigned interval)
+static int start_scan(struct netdev_context *ctxt)
 {
-    (void)ctxt;
-    (void)interval;
+    size_t len = WIFI_MSG_BUF_SIZE;
+    int ret = wifi_command(ctxt, "SCAN", ctxt->buf, &len);
+    if (ret) {
+        HLOG_ERR("Failed to issue SCAN command to wpa_supplicant\n");
+        return ERR_DEVICE_CONTROLLER;
+    }
+
     return 0;
 }
 
@@ -201,6 +206,8 @@ static struct netdev_context *netdev_context_new(void)
             free(ctxt);
             ctxt = NULL;
         }
+
+        kvlist_init(&ctxt->saved_networks, NULL);
     }
 
     return ctxt;
@@ -208,6 +215,8 @@ static struct netdev_context *netdev_context_new(void)
 
 static void netdev_context_delete(struct netdev_context *ctxt)
 {
+    kvlist_free(&ctxt->saved_networks);
+
     wifi_event_free(ctxt);
 
     wifi_reset_hotspots(&ctxt->hotspots);

@@ -59,23 +59,11 @@
 
 #define DEF_SCAN_INTERVAL                   60  /* seconds */
 
-enum {
-    SCAN_STATE_UNKNOWN = 0,
-    SCAN_STATE_STARTED,
-    SCAN_STATE_FINISHED,
-};
-
 struct netdev_context {
     struct network_device *netdev;
     struct wpa_ctrl *ctrl_conn;
     struct wpa_ctrl *monitor_conn;
     int exit_sockets[2];
-
-    time_t next_scan_time;
-    unsigned scan_interval;
-
-    /* state of wpa_supplicant */
-    unsigned scan_state:2;
 
     unsigned auth_failure_count;
     unsigned cmd_failure_count;
@@ -83,6 +71,7 @@ struct netdev_context {
     char *buf;  /* the buffer use for event or respones. */
     struct list_head hotspots;
     struct kvlist event_handlers;
+    struct kvlist saved_networks;
 };
 
 #ifdef __cplusplus
@@ -175,13 +164,12 @@ int wifi_wait_for_event(struct netdev_context *ctxt, char *buf, size_t len);
  * @param commandlen is command buffer length
  * @param reply is a buffer to receive a reply string
  * @param reply_len on entry, this is the maximum length of
- *        the reply buffer. On exit, the number of
- *        bytes in the reply buffer.
+ *        the reply buffer. On exit, the length of the reply in the buffer.
  *
  * @return 0 if successful, < 0 if an error.
  */
 int wifi_command(struct netdev_context *ctxt, const char *command,
-        char *reply, size_t reply_len);
+        char *reply, size_t *reply_len);
 
 /**
  * do_dhcp_request() issues a dhcp request and returns the acquired
@@ -218,17 +206,6 @@ int ensure_entropy_file_exists(void);
  */
 #ifndef PATH_MAX
 #define PATH_MAX 4096
-#endif
-
-/* Evaluate EXPRESSION, and repeat as long as it returns -1 with `errno'
-    set to EINTR.  */
-#ifndef TEMP_FAILURE_RETRY
-#define TEMP_FAILURE_RETRY(expression) \
-   (__extension__                                                              \
-     ({ long int __result;                                                     \
-        do __result = (long int) (expression);                                 \
-        while (__result == -1L && errno == EINTR);                             \
-        __result; }))
 #endif
 
 #ifdef __cplusplus

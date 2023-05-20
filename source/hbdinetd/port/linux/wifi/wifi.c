@@ -49,6 +49,7 @@
 #include <net/if.h>
 #include <poll.h>
 #include <unistd.h>
+#include <assert.h>
 
 #include "internal.h"
 #include "wpa-client/wpa_ctrl.h"
@@ -400,19 +401,23 @@ int wifi_send_command(struct netdev_context *ctxt,
     int ret;
 
     if (ctxt->ctrl_conn == NULL) {
-        HLOG_ERR("Not connected to wpa_supplicant - \"%s\" command dropped.\n", cmd);
+        HLOG_ERR("Not connected to wpa_supplicant - \"%s\" command dropped.\n",
+                cmd);
         return -1;
     }
 
-    ret = wpa_ctrl_request(ctxt->ctrl_conn, cmd, strlen(cmd), reply, reply_len, NULL);
+    ret = wpa_ctrl_request(ctxt->ctrl_conn, cmd, strlen(cmd), reply, reply_len,
+            NULL);
     if (ret == -2) {
         HLOG_ERR("'%s' command timed out.\n", cmd);
         /* unblocks the monitor receive socket for termination */
         TEMP_FAILURE_RETRY(write(ctxt->exit_sockets[0], "T", 1));
         return -2;
-    } else if (ret < 0 || strncmp(reply, "FAIL", 4) == 0) {
+    }
+    else if (ret < 0 || strncmp(reply, "FAIL", 4) == 0) {
         return -1;
     }
+
     if (strncmp(cmd, "PING", 4) == 0) {
         reply[*reply_len] = '\0';
     }
@@ -562,28 +567,27 @@ void wifi_close_supplicant_connection(struct netdev_context *ctxt)
 }
 
 int wifi_command(struct netdev_context *ctxt,
-        char const *cmd, char *reply, size_t reply_len)
+        char const *cmd, char *reply, size_t *reply_len)
 {
-    if(!cmd || !cmd[0]){
-        return -1;
-    }
+    assert(cmd && cmd[0]);
 
-    if (strncmp(cmd, "SAVE_CONFIG", strlen("SAVE_CONFIG")) == 0)
-        return 0;
+    HLOG_INFO("Issuing a control command: %s\n", cmd);
 
-    HLOG_INFO("do cmd %s\n", cmd);
-
-    --reply_len; // Ensure we have room to add NUL termination.
-    if (wifi_send_command(ctxt, cmd, reply, &reply_len) != 0) {
+    size_t my_len = *reply_len;
+    --my_len;
+    if (wifi_send_command(ctxt, cmd, reply, &my_len)) {
         return -1;
     }
 
     // Strip off trailing newline.
-    if (reply_len > 0 && reply[reply_len-1] == '\n') {
-        reply[reply_len-1] = '\0';
-    } else {
-        reply[reply_len] = '\0';
+    if (my_len > 0 && reply[my_len - 1] == '\n') {
+        *reply_len = my_len - 1;
     }
+    else {
+        *reply_len = my_len;
+    }
+
+    reply[*reply_len - 1] = '\0';
     return 0;
 }
 
