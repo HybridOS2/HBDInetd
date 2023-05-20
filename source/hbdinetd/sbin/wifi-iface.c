@@ -100,7 +100,7 @@ static char *wifiGetHotspotList(hbdbus_conn* conn,
         return NULL;
     }
 
-    pcutils_printbuf_strappend(pb, "{\"data\":[");
+    pcutils_printbuf_strappend(pb, "{\"data\":");
 
     struct network_device *netdev;
     netdev = check_network_device(info, method_param,
@@ -122,36 +122,10 @@ static char *wifiGetHotspotList(hbdbus_conn* conn,
         goto done;
     }
 
-    size_t nr_hotspots = 0;
-    struct list_head *p;
-    list_for_each(p, hotspots) {
-        struct wifi_hotspot *hotspot;
-        hotspot = list_entry(p, struct wifi_hotspot, ln);
-
-        pcutils_printbuf_format(pb,
-                "{"
-                "\"bssid\":\"%s\","
-                "\"ssid\":\"%s\","
-                "\"frequency\":\"%s\","
-                "\"capabilities\":\"%s\","
-                "\"signalStrength\":\"%s\","
-                "\"isConnected\":%s"
-                "},",
-                hotspot->bssid,
-                hotspot->ssid,
-                hotspot->frequency,
-                hotspot->capabilities,
-                hotspot->signal_strength,
-                hotspot->is_connected ? "true": "false");
-
-        nr_hotspots++;
-    }
-
-    if (nr_hotspots > 0)
-        pcutils_printbuf_shrink(pb, 1);
+    print_hotspots(hotspots, pb);
 
 done:
-    pcutils_printbuf_format(pb, "],\"errCode\":%d, \"errMsg\":\"%s\"}",
+    pcutils_printbuf_format(pb, ",\"errCode\":%d, \"errMsg\":\"%s\"}",
             errcode, get_error_message(errcode));
     return pb->buf;
 }
@@ -417,17 +391,19 @@ static char *wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint,
         goto done;
     }
 
+    char frequency[64];
+    print_frequency(hotspot->frequency, frequency, sizeof(frequency));
     pcutils_printbuf_format(pb,
             "\"bssid\":\"%s\","
             "\"ssid\":\"%s\","
             "\"frequency\":\"%s\","
             "\"capabilities\":\"%s\","
-            "\"signalStrength\":\"%s\",",
+            "\"signalLevel\":%d,",
             hotspot->bssid,
             hotspot->ssid,
-            hotspot->frequency,
+            frequency,
             hotspot->capabilities,
-            hotspot->signal_strength);
+            hotspot->signal_level);
 
     pcutils_printbuf_format(pb,
             "\"hardwareAddr\":\"%s\","
@@ -472,12 +448,12 @@ static const struct procedure {
 };
 
 static const char *events[] = {
-    WIFISCANFINISHED,
-    WIFICONNECTED,
-    WIFICONFIGURED,
-    WIFIDISCONNECTED,
-    WIFISCANFINISHED,
-    WIFISIGNALSTRENGTHCHANGED,
+    BUBBLE_WIFISCANFINISHED,
+    BUBBLE_WIFICONNECTED,
+    BUBBLE_WIFICONFIGURED,
+    BUBBLE_WIFIDISCONNECTED,
+    BUBBLE_WIFISCANFINISHED,
+    BUBBLE_WIFISIGNALSTRENGTHCHANGED,
 };
 
 int register_wifi_interfaces(hbdbus_conn *conn)

@@ -24,13 +24,17 @@
 #define __hbdinetd_h
 
 #define HBDINETD_APP_NAME               "@PROJECT_APP_NAME@"
-#define HBDINETD_RUNNER_NAME            "daemon"
+#define HBDINETD_RUNNER_MAIN            "main"
+#define HBDINETD_RUNNER_DHCLIENT        "dhclient"
 
 #define HBDINETD_ALLOWED_HOSTS          "localhost"
 #define HBDINETD_PRIVILEGED_APPS        "cn.fmsoft.hybridos.*"
 #define HBDINETD_ANY_APPS               "*"
 
-// methods for all network devices
+// global methods
+#define METHOD_GLOBAL_TERMINATE         "terminate"
+
+// methods for network devices
 #define METHOD_NET_OPEN_DEVICE          "openDevice"
 #define METHOD_NET_CLOSE_DEVICE         "closeDevice"
 #define METHOD_NET_GET_DEVICE_STATUS    "getDeviceStatus"
@@ -46,15 +50,15 @@
 // method for wired device
 // method for mobile device
 
-// events for All Network Devices
-#define NETWORKDEVICECHANGED            "NETWORKDEVICECHANGED"
+// events for global state
+#define BUBBLE_NETWORKDEVICECHANGED         "NetworkDeviceChanged"
 
-// events for WiFi Device
-#define WIFICONNECTED                   "WIFICONNECTED"
-#define WIFICONFIGURED                  "WIFICONFIGURED"
-#define WIFIDISCONNECTED                "WIFIDISCONNECTED"
-#define WIFISCANFINISHED                "WIFISCANFINISHED"
-#define WIFISIGNALSTRENGTHCHANGED       "WIFISIGNALSTRENGTHCHANGED"
+// events for WiFi device
+#define BUBBLE_WIFICONNECTED                "WiFiConnected"
+#define BUBBLE_WIFICONFIGURED               "WiFiConfigured"
+#define BUBBLE_WIFIDISCONNECTED             "WiFiDisconnected"
+#define BUBBLE_WIFISCANFINISHED             "WiFiScanFinished"
+#define BUBBLE_WIFISIGNALSTRENGTHCHANGED    "WiFiSignalStrengthChanged"
 
 // events for Ethernet Device
 // events for Mobile Device

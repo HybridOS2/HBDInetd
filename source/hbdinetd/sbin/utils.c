@@ -140,6 +140,77 @@ failed:
     return NULL;
 }
 
+int print_frequency(unsigned int frequency, char *buf, size_t buf_sz)
+{
+    const char *format = "%d Hz";
+    unsigned val = frequency;
+
+    assert(buf_sz > 0);
+    if (frequency > 1000000000) {
+        format = "%d GHz";
+        val /= 1000000000;
+    }
+    else if (frequency > 1000000) {
+        format = "%d MHz";
+        val /= 1000000;
+    }
+    else if (frequency > 1000) {
+        format = "%d KHz";
+        val /= 1000;
+    }
+
+    int n = snprintf(buf, buf_sz, format, val);
+    if (n < 0 || (size_t)n >= buf_sz) {
+        goto failed;
+    }
+
+    return 0;
+
+failed:
+    buf[0] = 0;
+    return -1;
+}
+
+int print_hotspots(const struct list_head *hotspots,
+        struct pcutils_printbuf *pb)
+{
+    size_t nr_hotspots = 0;
+    struct list_head *p;
+
+    pcutils_printbuf_strappend(pb, "[");
+
+    list_for_each(p, hotspots) {
+        struct wifi_hotspot *hotspot;
+        hotspot = list_entry(p, struct wifi_hotspot, ln);
+
+        char frequency[64];
+        print_frequency(hotspot->frequency, frequency, sizeof(frequency));
+
+        pcutils_printbuf_format(pb,
+                "{"
+                "\"bssid\":\"%s\","
+                "\"ssid\":\"%s\","
+                "\"frequency\":\"%s\","
+                "\"capabilities\":\"%s\","
+                "\"signalLevel\":%d,"
+                "\"isConnected\":%s"
+                "},",
+                hotspot->bssid,
+                hotspot->ssid,
+                frequency,
+                hotspot->capabilities,
+                hotspot->signal_level,
+                hotspot->is_connected ? "true": "false");
+
+        nr_hotspots++;
+    }
+
+    if (nr_hotspots > 0)
+        pcutils_printbuf_shrink(pb, 1);
+    pcutils_printbuf_strappend(pb, "]");
+    return 0;
+}
+
 #define SZ_IN_STACK_ARGS    16
 
 #ifndef __clang__

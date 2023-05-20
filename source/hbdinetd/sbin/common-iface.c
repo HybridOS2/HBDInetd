@@ -30,6 +30,51 @@
 #include <assert.h>
 #include <errno.h>
 
+static char* terminate(hbdbus_conn* conn, const char* from_endpoint,
+        const char* to_method, const char* method_param, int *bus_ec)
+{
+    (void)from_endpoint;
+    (void)to_method;
+    int errcode = ERR_OK;
+    struct run_info *info = hbdbus_conn_get_user_data(conn);
+
+    assert(info);
+    assert(strcasecmp(to_method, METHOD_GLOBAL_TERMINATE) == 0);
+
+    purc_variant_t jo, jo_tmp;
+    jo = purc_variant_make_from_json_string(method_param, strlen(method_param));
+    if (jo == NULL || !purc_variant_is_object(jo)) {
+        errcode = EINVAL;
+        goto done;
+    }
+
+    uint32_t seconds;
+    if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "afterSeconds")) &&
+        (purc_variant_cast_to_uint32(jo_tmp, &seconds, false))) {
+        info->shutdown_time = time(NULL) + seconds;
+        HLOG_INFO("HBDInetd will terminate in %u seconds\n", seconds);
+    }
+    else {
+        errcode = EINVAL;
+        goto done;
+    }
+
+    purc_variant_unref(jo);
+
+done:
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
+
+    if (pcutils_printbuf_init(pb)) {
+        *bus_ec = HBDBUS_EC_NOMEM;
+        return NULL;
+    }
+
+    pcutils_printbuf_format(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", errcode,
+            get_error_message(errcode));
+    *bus_ec = 0;
+    return pb->buf;
+}
+
 static char* openDevice(hbdbus_conn* conn, const char* from_endpoint,
         const char* to_method, const char* method_param, int *bus_ec)
 {
@@ -58,7 +103,7 @@ static char* openDevice(hbdbus_conn* conn, const char* from_endpoint,
         goto done;
     }
     else {
-        errcode = netdev->on(info, netdev);
+        errcode = netdev->on(conn, netdev);
     }
 
 done:
@@ -103,7 +148,7 @@ static char *closeDevice(hbdbus_conn* conn, const char* from_endpoint,
         goto done;
     }
     else {
-        errcode = netdev->off(info, netdev);
+        errcode = netdev->off(conn, netdev);
     }
 
 done:
@@ -272,6 +317,14 @@ int register_common_interfaces(hbdbus_conn * conn)
 {
     int errcode = 0;
 
+    errcode = hbdbus_register_procedure(conn, METHOD_GLOBAL_TERMINATE,
+            HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS, terminate);
+    if (errcode) {
+        HLOG_ERR("Error for register procedure %s: %s.\n",
+                METHOD_GLOBAL_TERMINATE, hbdbus_get_err_message(errcode));
+        goto failed;
+    }
+
     errcode = hbdbus_register_procedure(conn, METHOD_NET_OPEN_DEVICE,
             HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS, openDevice);
     if (errcode) {
@@ -296,11 +349,11 @@ int register_common_interfaces(hbdbus_conn * conn)
         goto failed;
     }
 
-    errcode = hbdbus_register_event(conn, NETWORKDEVICECHANGED,
+    errcode = hbdbus_register_event(conn, BUBBLE_NETWORKDEVICECHANGED,
             HBDINETD_ALLOWED_HOSTS, HBDINETD_ANY_APPS);
     if (errcode) {
         HLOG_ERR("Error for register event %s: %s.\n",
-                NETWORKDEVICECHANGED, hbdbus_get_err_message(errcode));
+                BUBBLE_NETWORKDEVICECHANGED, hbdbus_get_err_message(errcode));
         goto failed;
     }
 
@@ -312,7 +365,7 @@ failed:
 
 void revoke_common_interfaces(hbdbus_conn *conn)
 {
-    hbdbus_revoke_event(conn, NETWORKDEVICECHANGED);
+    hbdbus_revoke_event(conn, BUBBLE_NETWORKDEVICECHANGED);
     hbdbus_revoke_procedure(conn, METHOD_NET_OPEN_DEVICE);
     hbdbus_revoke_procedure(conn, METHOD_NET_CLOSE_DEVICE);
     hbdbus_revoke_procedure(conn, METHOD_NET_GET_DEVICE_STATUS);

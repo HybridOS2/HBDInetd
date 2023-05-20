@@ -59,16 +59,26 @@
 
 #define DEF_SCAN_INTERVAL                   60  /* seconds */
 
+enum {
+    SCAN_STATE_UNKNOWN = 0,
+    SCAN_STATE_STARTED,
+    SCAN_STATE_FINISHED,
+};
+
 struct netdev_context {
     struct network_device *netdev;
     struct wpa_ctrl *ctrl_conn;
     struct wpa_ctrl *monitor_conn;
     int exit_sockets[2];
 
-    time_t last_scan_finish_time;
+    time_t next_scan_time;
     unsigned scan_interval;
 
-    unsigned auth_fail_count;
+    /* state of wpa_supplicant */
+    unsigned scan_state:2;
+
+    unsigned auth_failure_count;
+    unsigned cmd_failure_count;
 
     char *buf;  /* the buffer use for event or respones. */
     struct list_head hotspots;

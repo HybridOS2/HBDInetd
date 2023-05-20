@@ -1,5 +1,5 @@
 /*
-** wifi-event.c -- The event handlers for wpa_supplicant.
+** event.c -- The event handlers for wpa_supplicant.
 **
 ** Copyright (C) 2023 FMSoft (http://www.fmsoft.cn)
 **
@@ -26,69 +26,89 @@
 
 #include "network-device.h"
 #include "wifi.h"
-#include "wifi-event.h"
+#include "event.h"
+#include "helpers.h"
 #include "wpa-supplicant-conf.h"
 
 #include <unistd.h>
 #include <errno.h>
 
-typedef int (*event_handler)(struct run_info *info,
+typedef int (*event_handler)(hbdbus_conn *conn,
         struct netdev_context *ctxt, const char *data, int len);
 
-static int on_connected(struct run_info *info,
+static int on_connected(hbdbus_conn *conn,
         struct netdev_context *ctxt, const char *data, int len)
 {
-    (void)info;
+    (void)conn;
     (void)ctxt;
     (void)data;
     (void)len;
     return 0;
 }
 
-static int on_disconnected(struct run_info *info,
+static int on_disconnected(hbdbus_conn *conn,
         struct netdev_context *ctxt, const char *data, int len)
 {
-    (void)info;
+    (void)conn;
     (void)ctxt;
     (void)data;
     (void)len;
     return 0;
 }
 
-static int on_scan_results(struct run_info *info,
+static int on_scan_results(hbdbus_conn *conn,
         struct netdev_context *ctxt, const char *data, int len)
 {
-    (void)info;
+    (void)data;
+    (void)len;
+
+    ctxt->next_scan_time = purc_monotonic_time_after(ctxt->scan_interval);
+    ctxt->scan_state = SCAN_STATE_FINISHED;
+
+    int ret = wifi_command(ctxt, "SCAN_RESULTS", ctxt->buf, WIFI_MSG_BUF_SIZE);
+    if (ret) {
+        ctxt->cmd_failure_count++;
+        HLOG_ERR("Failed when getting scan results: %d\n", ret);
+        goto failed;
+    }
+
+    wifi_parse_scan_results(&ctxt->hotspots, ctxt->buf, WIFI_MSG_BUF_SIZE);
+    return 0;
+
+failed:
+    ret = hbdbus_fire_event(conn, BUBBLE_WIFISCANFINISHED,
+            "{\"success\":false,\"hotspots\":null}");
+    if (ret) {
+        HLOG_ERR("Failed when firing event: %s\n", BUBBLE_WIFISCANFINISHED);
+    }
+
+    return ret;
+}
+
+static int on_terminating(hbdbus_conn *conn,
+        struct netdev_context *ctxt, const char *data, int len)
+{
+    (void)conn;
     (void)ctxt;
     (void)data;
     (void)len;
     return 0;
 }
 
-static int on_terminating(struct run_info *info,
+static int on_eap_failure(hbdbus_conn *conn,
         struct netdev_context *ctxt, const char *data, int len)
 {
-    (void)info;
+    (void)conn;
     (void)ctxt;
     (void)data;
     (void)len;
     return 0;
 }
 
-static int on_eap_failure(struct run_info *info,
+static int on_assoc_reject(hbdbus_conn *conn,
         struct netdev_context *ctxt, const char *data, int len)
 {
-    (void)info;
-    (void)ctxt;
-    (void)data;
-    (void)len;
-    return 0;
-}
-
-static int on_assoc_reject(struct run_info *info,
-        struct netdev_context *ctxt, const char *data, int len)
-{
-    (void)info;
+    (void)conn;
     (void)ctxt;
     (void)data;
     (void)len;
@@ -133,7 +153,7 @@ void wifi_event_free(struct netdev_context *ctxt)
     kvlist_free(&ctxt->event_handlers);
 }
 
-int wifi_event_handle_message(struct run_info *info,
+int wifi_event_handle_message(hbdbus_conn *conn,
         struct netdev_context *ctxt, const char *msg, int len)
 {
     if (msg[0] == '\0')
@@ -141,13 +161,13 @@ int wifi_event_handle_message(struct run_info *info,
 
     if (strncmp(msg, "WPA:", 4) == 0) {
         if (strstr(msg, "pre-shared key may be incorrect")) {
-            ctxt->auth_fail_count++;
-            if (ctxt->auth_fail_count >= MAX_RETRIES_ON_AUTH_FAILURE) {
+            ctxt->auth_failure_count++;
+            if (ctxt->auth_failure_count >= MAX_RETRIES_ON_AUTH_FAILURE) {
 
                 wifi_command(ctxt, "DISCONNECT", ctxt->buf, WIFI_MSG_BUF_SIZE);
                 // TODO:
 
-                ctxt->auth_fail_count = 0;
+                ctxt->auth_failure_count = 0;
             }
         }
     }
@@ -170,7 +190,7 @@ int wifi_event_handle_message(struct run_info *info,
                 handler = *(event_handler *)data;
                 if (handler) {
                     left--;
-                    return handler(info, ctxt, event_end + 1, left);
+                    return handler(conn, ctxt, event_end + 1, left);
                 }
                 else {
                     HLOG_WARN("Ignore event: %s\n", event_name);

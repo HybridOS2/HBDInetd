@@ -321,7 +321,7 @@ int main(int argc, char **argv)
 
     if (!run_info.runner_name[0] ||
             !purc_is_valid_runner_name(run_info.runner_name)) {
-        strcpy(run_info.runner_name, HBDINETD_RUNNER_NAME);
+        strcpy(run_info.runner_name, HBDINETD_RUNNER_MAIN);
     }
 
     ret = purc_init_ex(PURC_MODULE_EJSON, run_info.app_name,
@@ -405,7 +405,8 @@ int main(int argc, char **argv)
             }
         }
 
-    } while (run_info.running);
+    } while (run_info.running && (run_info.shutdown_time == 0 ||
+                time(NULL) < run_info.shutdown_time));
 
 failed:
     revoke_common_interfaces(conn);

@@ -26,7 +26,8 @@
 
 #include "network-device.h"
 #include "wifi.h"
-#include "wifi-event.h"
+#include "event.h"
+#include "helpers.h"
 
 #include <unistd.h>
 #include <errno.h>
@@ -209,13 +210,7 @@ static void netdev_context_delete(struct netdev_context *ctxt)
 {
     wifi_event_free(ctxt);
 
-    struct list_head *p, *n;
-    list_for_each_safe(p, n, &ctxt->hotspots) {
-        struct wifi_hotspot *hotspot;
-        hotspot = list_entry(p, struct wifi_hotspot, ln);
-        list_del(&hotspot->ln);
-        free(hotspot);
-    }
+    wifi_reset_hotspots(&ctxt->hotspots);
 
     if (ctxt->ctrl_conn) {
         wifi_close_supplicant_connection(ctxt);
@@ -226,9 +221,9 @@ static void netdev_context_delete(struct netdev_context *ctxt)
     free(ctxt);
 }
 
-int wifi_device_on(struct run_info *info, struct network_device *netdev)
+int wifi_device_on(hbdbus_conn *conn, struct network_device *netdev)
 {
-    (void)info;
+    (void)conn;
 
     if (netdev->ctxt)
         return 0;
@@ -276,9 +271,9 @@ int wifi_device_on(struct run_info *info, struct network_device *netdev)
     return 0;
 }
 
-int wifi_device_off(struct run_info *info, struct network_device *netdev)
+int wifi_device_off(hbdbus_conn *conn, struct network_device *netdev)
 {
-    (void)info;
+    (void)conn;
 
     if (netdev->ctxt == NULL || netdev->ctxt->ctrl_conn == NULL)
         return EPERM;
@@ -297,7 +292,7 @@ int wifi_device_off(struct run_info *info, struct network_device *netdev)
     return 0;
 }
 
-int wifi_device_check(struct run_info *info, struct network_device *netdev)
+int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
 {
     if (netdev->ctxt == NULL)
         return EPERM;
@@ -318,7 +313,7 @@ int wifi_device_check(struct run_info *info, struct network_device *netdev)
            else if (bytes < 0)
                return ECONNRESET;
 
-           wifi_event_handle_message(info, netdev->ctxt, netdev->ctxt->buf,
+           wifi_event_handle_message(conn, netdev->ctxt, netdev->ctxt->buf,
                    bytes);
        }
     } while (true);

@@ -52,7 +52,7 @@ void wifi_event_free(struct netdev_context *ctxt);
  *
  * @return 0 on success, < 0 on failure.
  */
-int wifi_event_handle_message(struct run_info *info,
+int wifi_event_handle_message(hbdbus_conn *conn,
         struct netdev_context *ctxt, const char *msg, int len);
 
 #ifdef __cplusplus

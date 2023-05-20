@@ -29,10 +29,13 @@
 #include "hbdinetd.h"
 #include "kvlist.h"
 
+#include <time.h>
+
 struct run_info {
     bool running;
     bool daemon;
     bool verbose;
+    time_t shutdown_time;
 
     char app_name[PURC_LEN_APP_NAME + 1];
     char runner_name[PURC_LEN_RUNNER_NAME + 1];
@@ -64,9 +67,9 @@ struct wifi_hotspot {
     char *bssid;
     char *ssid;
     char *capabilities;
-    char *frequency;
-    char *signal_strength;
-    bool is_connected;          // whether connected
+    unsigned int frequency;
+    int signal_level;
+    bool is_connected;
 
     struct list_head ln;
 };
@@ -95,9 +98,9 @@ typedef struct network_device {
     struct hbd_ifaddr   ipv6;
 
     /* basic operators for the device engine. */
-    int (*on)(struct run_info *info, struct network_device* netdev);
-    int (*off)(struct run_info *info, struct network_device* netdev);
-    int (*check)(struct run_info *info, struct network_device* netdev);
+    int (*on)(hbdbus_conn *conn, struct network_device* netdev);
+    int (*off)(hbdbus_conn *conn, struct network_device* netdev);
+    int (*check)(hbdbus_conn *conn, struct network_device* netdev);
 
     /* the following fields will be managed by the device engine */
     time_t              last_time_checked;
@@ -129,15 +132,18 @@ int update_network_device_dynamic_info(const char *ifname,
 int update_network_device_info(struct run_info *info, const char *ifname);
 
 /* ports/<port>/wifi-device.c */
-int wifi_device_on(struct run_info *info, struct network_device *netdev);
-int wifi_device_off(struct run_info *info, struct network_device *netdev);
-int wifi_device_check(struct run_info *info, struct network_device *netdev);
+int wifi_device_on(hbdbus_conn *conn, struct network_device *netdev);
+int wifi_device_off(hbdbus_conn *conn, struct network_device *netdev);
+int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev);
 
 /* utils.c */
 const char *get_error_message(int errcode);
 struct network_device *check_network_device_ex(struct run_info *info,
         const char *method_param, int expect_type,
         const char *extra_key, purc_variant_t *extra_value, int *errcode);
+int print_frequency(unsigned int frequency, char *buf, size_t buf_sz);
+int print_hotspots(const struct list_head *hotspots,
+        struct pcutils_printbuf *pb);
 int start_daemon(const char *pathname, const char *arg, ...);
 
 /* common-iface.c */
