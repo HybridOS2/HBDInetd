@@ -38,21 +38,94 @@ typedef int (*event_handler)(hbdbus_conn *conn,
 static int on_connected(hbdbus_conn *conn,
         struct netdev_context *ctxt, const char *data, int len)
 {
-    (void)conn;
-    (void)ctxt;
     (void)data;
     (void)len;
+
+    int ret;
+    ret = wifi_update_status(ctxt);
+    if (ret) {
+        HLOG_ERR("Failed when updating status\n");
+        goto fatal;
+    }
+
+    if (ctxt->status && ctxt->status->bssid) {
+        struct pcutils_printbuf my_buff, *pb = &my_buff;
+        if (pcutils_printbuf_init(pb)) {
+            HLOG_ERR("Failed when initializing print buffer\n");
+            goto fatal;
+        }
+
+        pcutils_printbuf_format(pb,
+                "{\"bssid\":\"%s\","
+                "\"ssid\":\"%s\","
+                "\"signalLevel\":%d}",
+                  ctxt->status->bssid,
+                  ctxt->status->escaped_ssid ? ctxt->status->escaped_ssid :
+                    ctxt->status->ssid,
+                  ctxt->status->signal_level);
+
+        ret = hbdbus_fire_event(conn, BUBBLE_WIFICONNECTED, pb->buf);
+        free(pb->buf);
+        if (ret)
+            goto fatal;
+    }
+    else {
+        ret = hbdbus_fire_event(conn, BUBBLE_WIFICONNECTED,
+                "{\"bssid\":null,\"ssid\":null,\"signalLevel\":null}");
+        if (ret)
+            goto fatal;
+    }
+
     return 0;
+
+fatal:
+    if (ret) {
+        HLOG_ERR("Failed when firing event: %s\n", BUBBLE_WIFICONNECTED);
+    }
+
+    return ret;
 }
 
 static int on_disconnected(hbdbus_conn *conn,
         struct netdev_context *ctxt, const char *data, int len)
 {
-    (void)conn;
-    (void)ctxt;
     (void)data;
     (void)len;
+
+    int ret;
+    if (ctxt->status && ctxt->status->bssid) {
+        struct pcutils_printbuf my_buff, *pb = &my_buff;
+        if (pcutils_printbuf_init(pb)) {
+            HLOG_ERR("Failed when initializing print buffer\n");
+            goto fatal;
+        }
+
+        pcutils_printbuf_format(pb,
+                "{\"bssid\":\"%s\",\"ssid\":\"%s\"}",
+                  ctxt->status->bssid,
+                  ctxt->status->escaped_ssid ? ctxt->status->escaped_ssid :
+                    ctxt->status->ssid);
+        ret = hbdbus_fire_event(conn, BUBBLE_WIFIDISCONNECTED, pb->buf);
+        free(pb->buf);
+        if (ret)
+            goto fatal;
+    }
+    else {
+        ret = hbdbus_fire_event(conn, BUBBLE_WIFIDISCONNECTED,
+                "{\"bssid\":null,\"ssid\":null}");
+        if (ret)
+            goto fatal;
+    }
+
+    wifi_reset_status(ctxt);
     return 0;
+
+fatal:
+    if (ret) {
+        HLOG_ERR("Failed when firing event: %s\n", BUBBLE_WIFIDISCONNECTED);
+    }
+
+    return ret;
 }
 
 static int on_scan_results(hbdbus_conn *conn,
@@ -76,7 +149,7 @@ static int on_scan_results(hbdbus_conn *conn,
     struct pcutils_printbuf my_buff, *pb = &my_buff;
     if (pcutils_printbuf_init(pb)) {
         HLOG_ERR("Failed when initializing print buffer\n");
-        goto failed;
+        goto fatal;
     }
 
     pcutils_printbuf_strappend(pb, "{\"success\":true,\"hotspots\":[");
