@@ -217,7 +217,7 @@ static char *wifiConnect(hbdbus_conn* conn, const char* from_endpoint,
 
     jo = purc_variant_make_from_json_string(method_param, strlen(method_param));
     if (jo == NULL || !purc_variant_is_object(jo)) {
-        errcode = ERR_WRONG_JSON;
+        errcode = EINVAL;
         goto done;
     }
 
