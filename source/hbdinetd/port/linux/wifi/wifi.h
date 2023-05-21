@@ -72,6 +72,7 @@ struct netdev_context {
     struct list_head hotspots;
     struct kvlist event_handlers;
     struct kvlist saved_networks;
+    struct wifi_status *status;
 };
 
 #ifdef __cplusplus

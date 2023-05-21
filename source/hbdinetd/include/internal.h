@@ -76,14 +76,156 @@ struct wifi_hotspot {
     struct list_head ln;
 };
 
+#define STATUS_KEY_BSSID            "bssid"
+#define STATUS_KEY_SSID             "ssid"
+#define STATUS_KEY_PAIRWISE_CIPHER  "pairwise_cipher"
+#define STATUS_KEY_GROUP_CIPHER     "group_cipher"
+#define STATUS_KEY_KEY_MGMT         "key_mgmt"
+#define STATUS_KEY_WPA_STATE        "wpa_state"
+#define STATUS_KEY_IP_ADDRESS       "ip_address"
+#define STATUS_KEY_SUPP_PAE_STATE   "Supplicant PAE state"
+#define STATUS_KEY_SUPP_PORT_STATUS "suppPortStatus"
+#define STATUS_KEY_EAP_STATE        "EAP state"
+
+enum wpa_state {
+    WPA_STATE_floor = 0,
+
+    WPA_STATE_UNKNOWN = WPA_STATE_floor,
+#define WPA_STATE_NAME_UNKNOWN              "UNKNOWN"
+    WPA_STATE_DISCONNECTED,
+#define WPA_STATE_NAME_DISCONNECTED         "DISCONNECTED"
+    WPA_STATE_INACTIVE,
+#define WPA_STATE_NAME_INACTIVE             "INACTIVE"
+    WPA_STATE_INTERFACE_DISABLED,
+#define WPA_STATE_NAME_INTERFACE_DISABLED   "INTERFACE_DISABLED"
+    WPA_STATE_SCANNING,
+#define WPA_STATE_NAME_SCANNING             "SCANNING"
+    WPA_STATE_AUTHENTICATING,
+#define WPA_STATE_NAME_AUTHENTICATING       "AUTHENTICATING"
+    WPA_STATE_ASSOCIATING,
+#define WPA_STATE_NAME_ASSOCIATING          "ASSOCIATING"
+    WPA_STATE_ASSOCIATED,
+#define WPA_STATE_NAME_ASSOCIATED           "ASSOCIATED"
+    WPA_STATE_4WAY_HANDSHAKE,
+#define WPA_STATE_NAME_4WAY_HANDSHAKE       "4WAY_HANDSHAKE"
+    WPA_STATE_GROUP_HANDSHAKE,
+#define WPA_STATE_NAME_GROUP_HANDSHAKE      "GROUP_HANDSHAKE"
+    WPA_STATE_COMPLETED,
+#define WPA_STATE_NAME_COMPLETED            "COMPLETED"
+
+    WPA_STATE_ceil,
+};
+
+#define WPA_STATE_nr (WPA_STATE_ceil - WPA_STATE_floor)
+
+enum supp_pae_state {
+    SUPP_PAE_STATE_floor = 0,
+
+    SUPP_PAE_STATE_UNKNOWN = SUPP_PAE_STATE_floor,
+#define SUPP_PAE_STATE_NAME_UNKNOWN         "Unknown"
+    SUPP_PAE_STATE_INITIALIZE,
+#define SUPP_PAE_STATE_NAME_INITIALIZE      "INITIALIZE"
+    SUPP_PAE_STATE_DISCONNECTED,
+#define SUPP_PAE_STATE_NAME_DISCONNECTED    "DISCONNECTED"
+    SUPP_PAE_STATE_CONNECTING,
+#define SUPP_PAE_STATE_NAME_CONNECTING      "CONNECTING"
+    SUPP_PAE_STATE_AUTHENTICATING,
+#define SUPP_PAE_STATE_NAME_AUTHENTICATING  "AUTHENTICATING"
+    SUPP_PAE_STATE_AUTHENTICATED,
+#define SUPP_PAE_STATE_NAME_AUTHENTICATED   "AUTHENTICATED"
+    SUPP_PAE_STATE_ABORTING,
+#define SUPP_PAE_STATE_NAME_ABORTING        "ABORTING"
+    SUPP_PAE_STATE_HELD,
+#define SUPP_PAE_STATE_NAME_HELD            "HELD"
+    SUPP_PAE_STATE_FORCE_AUTH,
+#define SUPP_PAE_STATE_NAME_FORCE_AUTH      "FORCE_AUTH"
+    SUPP_PAE_STATE_FORCE_UNAUTH,
+#define SUPP_PAE_STATE_NAME_FORCE_UNAUTH    "FORCE_UNAUTH"
+    SUPP_PAE_STATE_RESTART,
+#define SUPP_PAE_STATE_NAME_RESTART         "RESTART"
+
+    SUPP_PAE_STATE_ceil,
+};
+
+#define SUPP_PAE_STATE_nr   (SUPP_PAE_STATE_ceil - SUPP_PAE_STATE_floor)
+
+enum supp_port_status {
+    SUPP_PORT_STATUS_floor = 0,
+
+    SUPP_PORT_STATUS_UNKNOWN = SUPP_PORT_STATUS_floor,
+#define SUPP_PORT_STATUS_NAME_UNKNOWN       "Unknown"
+    SUPP_PORT_STATUS_AUTHORIZED,
+#define SUPP_PORT_STATUS_NAME_AUTHORIZED    "Authorized"
+    SUPP_PORT_STATUS_UNAUTHORIZED,
+#define SUPP_PORT_STATUS_NAME_UNAUTHORIZED  "Unauthorized"
+
+    SUPP_PORT_STATUS_ceil,
+};
+
+#define SUPP_PORT_STATUS_nr   (SUPP_PORT_STATUS_ceil - SUPP_PORT_STATUS_floor)
+
+enum eap_state {
+    EPA_STATE_floor = 0,
+
+    EPA_STATE_UNKNOWN = EPA_STATE_floor,
+#define EPA_STATE_NAME_UNKNOWN          "UNKNOWN"
+    EAP_STATE_INITIALIZE,
+#define EAP_STATE_NAME_INITIALIZE       "INITIALIZE"
+    EAP_STATE_DISABLED,
+#define EAP_STATE_NAME_DISABLED         "DISABLED"
+    EAP_STATE_IDLE,
+#define EAP_STATE_NAME_IDLE             "IDLE"
+    EAP_STATE_RECEIVED,
+#define EAP_STATE_NAME_RECEIVED         "RECEIVED"
+    EAP_STATE_GET_METHOD,
+#define EAP_STATE_NAME_GET_METHOD       "GET_METHOD"
+    EAP_STATE_METHOD,
+#define EAP_STATE_NAME_METHOD           "METHOD"
+    EAP_STATE_SEND_RESPONSE,
+#define EAP_STATE_NAME_SEND_RESPONSE    "SEND_RESPONSE"
+    EAP_STATE_DISCARD,
+#define EAP_STATE_NAME_DISCARD          "DISCARD"
+    EAP_STATE_IDENTITY,
+#define EAP_STATE_NAME_IDENTITY         "IDENTITY"
+    EAP_STATE_NOTIFICATION,
+#define EAP_STATE_NAME_NOTIFICATION     "NOTIFICATION"
+    EAP_STATE_RETRANSMIT,
+#define EAP_STATE_NAME_RETRANSMIT       "RETRANSMIT"
+    EAP_STATE_SUCCESS,
+#define EAP_STATE_NAME_SUCCESS          "SUCCESS"
+    EAP_STATE_FAILURE,
+#define EAP_STATE_NAME_FAILURE          "FAILURE"
+
+    EAP_STATE_ceil,
+};
+
+#define EAP_STATE_nr   (EAP_STATE_ceil - EAP_STATE_floor)
+
+struct wifi_status {
+    char *bssid;            /* NULL if not connected */
+    char *ssid;
+    char *pairwise_cipher;  /* CCMP */
+    char *group_cipher;     /* CCMP */
+    char *key_mgmt;         /* WPA-PSK */
+
+    const struct wifi_hotspot *hotspot;
+
+    int  netid;             /* -1 if not connected */
+
+    enum wpa_state          wpa_state;
+    enum supp_pae_state     supp_pae_state;
+    enum supp_port_status   supp_port_status;
+    enum eap_state          eap_state;
+};
+
 struct wifi_device_ops {
     int (*connect)(struct netdev_context *,
             const char *ssid, const char *keymgmt, const char *password);
     int (*disconnect)(struct netdev_context *);
     int (*start_scan)(struct netdev_context *);
     int (*stop_scan)(struct netdev_context *);
-    struct list_head *(*get_hotspot_list_head)(struct netdev_context *);
-    struct wifi_hotspot *(*get_connected_hotspot)(struct netdev_context *);
+    const struct list_head *(*get_hotspot_list_head)(struct netdev_context *);
+    const struct wifi_status *(*get_status)(struct netdev_context *);
 };
 
 typedef struct network_device {

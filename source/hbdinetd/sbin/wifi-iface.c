@@ -65,32 +65,39 @@ static char *wifiStartScanHotspots(hbdbus_conn* conn,
         goto done;
     }
 
-    uint32_t wait_seconds = 0;
+    double wait_seconds = 0;
     if (extra_value) {
-        purc_variant_cast_to_uint32(extra_value, &wait_seconds, false);
+        purc_variant_cast_to_number(extra_value, &wait_seconds, false);
         purc_variant_unref(extra_value);
     }
-    errcode = netdev->wifi_ops->start_scan(netdev->ctxt);
-    if (errcode) {
-        goto done;
-    }
 
-    if (wait_seconds > 0) {
-        wait_seconds = (wait_seconds > 5) ? 5 : wait_seconds;
-        wait_seconds *= 2;
+    if (wait_seconds >= 0.1) {
+        errcode = netdev->wifi_ops->start_scan(netdev->ctxt);
+        if (errcode) {
+            goto done;
+        }
+
+        if (wait_seconds > 5.0) {
+            wait_seconds = 5.0;
+        }
+
+        unsigned nr_100ms = (unsigned)(wait_seconds * 10);
         do {
-            TEMP_FAILURE_RETRY(usleep(500000)); // 0.5s
-        } while (--wait_seconds);
-
+            TEMP_FAILURE_RETRY(usleep(100000)); // 0.1s
+        } while (--nr_100ms);
     }
 
-    struct list_head *hotspots;
+    const struct list_head *hotspots;
     hotspots = netdev->wifi_ops->get_hotspot_list_head(netdev->ctxt);
     if (hotspots == NULL) {
         goto done;
     }
 
     print_hotspots(hotspots, pb);
+
+    if (wait_seconds < 0.1) {
+        netdev->wifi_ops->start_scan(netdev->ctxt);
+    }
 
 done:
     pcutils_printbuf_format(pb,
@@ -134,7 +141,7 @@ static char *wifiGetHotspotList(hbdbus_conn* conn,
         goto done;
     }
 
-    struct list_head *hotspots;
+    const struct list_head *hotspots;
     hotspots = netdev->wifi_ops->get_hotspot_list_head(netdev->ctxt);
     if (hotspots == NULL) {
         goto done;
@@ -402,12 +409,14 @@ static char *wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint,
             break;
     }
 
-    struct wifi_hotspot *hotspot;
-    hotspot = netdev->wifi_ops->get_connected_hotspot(netdev->ctxt);
-    if (hotspot == NULL) {
+    const struct wifi_status *status;
+    status = netdev->wifi_ops->get_status(netdev->ctxt);
+    if (status == NULL || status->hotspot == NULL) {
         errcode = ENONET;
         goto done;
     }
+
+    const struct wifi_hotspot *hotspot = status->hotspot;
 
     char frequency[64];
     print_frequency(hotspot->frequency, frequency, sizeof(frequency));
@@ -415,12 +424,12 @@ static char *wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint,
             "\"bssid\":\"%s\","
             "\"ssid\":\"%s\","
             "\"frequency\":\"%s\","
-            "\"capabilities\":\"%s\","
+            "\"keyMgmt\":\"%s\","
             "\"signalLevel\":%d,",
             hotspot->bssid,
             hotspot->ssid,
             frequency,
-            hotspot->capabilities,
+            status->key_mgmt,
             hotspot->signal_level);
 
     pcutils_printbuf_format(pb,

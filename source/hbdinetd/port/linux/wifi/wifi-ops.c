@@ -165,17 +165,16 @@ static int stop_scan(struct netdev_context *ctxt)
     return 0;
 }
 
-static struct list_head *
+static const struct list_head *
 get_hotspot_list_head(struct netdev_context *ctxt)
 {
     return &ctxt->hotspots;
 }
 
-static struct wifi_hotspot *
-get_connected_hotspot(struct netdev_context *ctxt)
+static const struct wifi_status *
+get_status(struct netdev_context *ctxt)
 {
-    (void)ctxt;
-    return NULL;
+    return ctxt->status;
 }
 
 static struct wifi_device_ops wifi_ops = {
@@ -184,7 +183,7 @@ static struct wifi_device_ops wifi_ops = {
     start_scan,
     stop_scan,
     get_hotspot_list_head,
-    get_connected_hotspot,
+    get_status,
 };
 
 static int get_id_len(struct kvlist *kv, const void *data)
