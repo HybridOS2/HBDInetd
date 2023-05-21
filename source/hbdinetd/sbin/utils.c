@@ -238,12 +238,7 @@ int start_daemon(const char *pathname, const char *arg, ...)
     }
     va_end(ap1);
 
-    if (nr_args < 1) {
-        HLOG_ERR("Bad arg: %s\n", arg);
-        return -1;
-    }
-
-    nr_args++;
+    nr_args += 2; // for pathname and terminating NULL
     if (nr_args <= SZ_IN_STACK_ARGS) {
         argv = argv_in_stack;
     }
@@ -258,9 +253,10 @@ int start_daemon(const char *pathname, const char *arg, ...)
 
     p = (char *)arg;
     size_t i = 0;
+    argv[i++] = pathname;
+    nr_args--;
     while (nr_args) {
-        argv[i] = p;
-        i++;
+        argv[i++] = p;
         nr_args--;
         p = va_arg(ap, char *);
     }

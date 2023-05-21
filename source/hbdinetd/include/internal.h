@@ -299,6 +299,8 @@ char *escape_quotes_for_ssid(const char *ssid);
 int print_frequency(unsigned int frequency, char *buf, size_t buf_sz);
 int print_hotspots(const struct list_head *hotspots,
         struct pcutils_printbuf *pb);
+
+/* pathname will be the first argument. */
 int start_daemon(const char *pathname, const char *arg, ...);
 
 /* common-iface.c */

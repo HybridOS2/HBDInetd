@@ -48,6 +48,8 @@ static int on_connected(hbdbus_conn *conn,
         goto fatal;
     }
 
+    /* TODO: Save config and issue DHCP request */
+
     if (ctxt->status && ctxt->status->bssid) {
         struct pcutils_printbuf my_buff, *pb = &my_buff;
         if (pcutils_printbuf_init(pb)) {
@@ -76,6 +78,7 @@ static int on_connected(hbdbus_conn *conn,
             goto fatal;
     }
 
+    // TODO: start dhclient to fetch addresses.
     return 0;
 
 fatal:
@@ -182,6 +185,7 @@ static int on_terminating(hbdbus_conn *conn,
     (void)ctxt;
     (void)data;
     (void)len;
+    /* TODO */
     return 0;
 }
 
@@ -192,6 +196,7 @@ static int on_eap_failure(hbdbus_conn *conn,
     (void)ctxt;
     (void)data;
     (void)len;
+    /* TODO */
     return 0;
 }
 
@@ -202,6 +207,7 @@ static int on_assoc_reject(hbdbus_conn *conn,
     (void)ctxt;
     (void)data;
     (void)len;
+    /* TODO */
     return 0;
 }
 
@@ -211,11 +217,8 @@ static const struct event_handler {
 } event_handlers[] = {
     { "CONNECTED", on_connected },
     { "DISCONNECTED", on_disconnected },
-    { "STATE-CHANGE", NULL },
     { "SCAN-RESULTS", on_scan_results },
-    { "LINK-SPEED", NULL },
     { "TERMINATING", on_terminating },
-    { "DRIVER-STATE", NULL },
     { "EAP-FAILURE", on_eap_failure },
     { "ASSOC-REJECT", on_assoc_reject },
 };

@@ -310,7 +310,6 @@ int wifi_start_supplicant(struct netdev_context *ctxt, int p2p_supported)
 
     /* start wpa_supplicant */
     if (start_daemon(PATH_WPA_SUPPLICANT,
-            PATH_WPA_SUPPLICANT,
             "-c" WIFI_SUPP_CONFIG_FILE,
             "-P" WIFI_SUPP_PID_FILE,
             ifopt,

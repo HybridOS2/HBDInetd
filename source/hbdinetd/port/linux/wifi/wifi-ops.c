@@ -339,7 +339,9 @@ int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
     } while (true);
 
     /* check if signal level changed */
-    if (netdev->ctxt->status && netdev->ctxt->status->bssid) {
+    if (netdev->ctxt->status && netdev->ctxt->status->bssid &&
+            netdev->ctxt->status->wpa_state == WPA_STATE_COMPLETED) {
+
         time_t t = purc_monotonic_time_after(0);
         if (t >= netdev->ctxt->last_update_time + DEF_UPDATE_INTERVAL) {
 
