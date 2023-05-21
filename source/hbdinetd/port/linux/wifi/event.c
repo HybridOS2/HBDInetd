@@ -28,7 +28,6 @@
 #include "wifi.h"
 #include "event.h"
 #include "helpers.h"
-#include "wpa-supplicant-conf.h"
 
 #include <unistd.h>
 #include <errno.h>

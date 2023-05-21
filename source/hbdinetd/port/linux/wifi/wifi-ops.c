@@ -25,7 +25,6 @@
 #include "log.h"
 
 #include "network-device.h"
-#include "wpa-supplicant-conf.h"
 #include "wifi.h"
 #include "event.h"
 #include "helpers.h"
@@ -281,7 +280,7 @@ int wifi_device_on(hbdbus_conn *conn, struct network_device *netdev)
         }
     }
 
-    if (wpa_conf_load_saved_networks(netdev->ctxt)) {
+    if (wifi_load_saved_networks(netdev->ctxt)) {
         goto failed;
     }
 

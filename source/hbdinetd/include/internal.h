@@ -165,9 +165,9 @@ enum supp_port_status {
 #define SUPP_PORT_STATUS_nr   (SUPP_PORT_STATUS_ceil - SUPP_PORT_STATUS_floor)
 
 enum eap_state {
-    EPA_STATE_floor = 0,
+    EAP_STATE_floor = 0,
 
-    EPA_STATE_UNKNOWN = EPA_STATE_floor,
+    EAP_STATE_UNKNOWN = EAP_STATE_floor,
 #define EPA_STATE_NAME_UNKNOWN          "UNKNOWN"
     EAP_STATE_INITIALIZE,
 #define EAP_STATE_NAME_INITIALIZE       "INITIALIZE"
@@ -202,11 +202,15 @@ enum eap_state {
 #define EAP_STATE_nr   (EAP_STATE_ceil - EAP_STATE_floor)
 
 struct wifi_status {
+    char *fields[0];        /* aliaes for the following fields */
+#define WIFI_STATUS_STRING_FIELDS       6
+
     char *bssid;            /* NULL if not connected */
     char *ssid;
     char *pairwise_cipher;  /* CCMP */
     char *group_cipher;     /* CCMP */
     char *key_mgmt;         /* WPA-PSK */
+    char *ip_address;       /* 192.168.2.77 */
 
     const struct wifi_hotspot *hotspot;
 

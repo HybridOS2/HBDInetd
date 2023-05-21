@@ -33,36 +33,6 @@
 #define CMD_BUF_SIZE    256
 #define NET_ID_LEN      128
 
-int wpa_conf_load_saved_networks(struct netdev_context *ctxt)
-{
-    char *reply = ctxt->buf;
-    size_t reply_len = WIFI_MSG_BUF_SIZE;
-    if (wifi_command(ctxt, "LIST_NETWORKS", reply, &reply_len)) {
-        HLOG_ERR("Failed LIST_NETWORKS\n");
-        return -1;
-    }
-
-    HLOG_INFO("Result of LIST_NETWORKS:\n%s\n", reply);
-    if (wifi_parse_networks(&ctxt->saved_networks, reply, reply_len))
-        return -1;
-
-    return 0;
-}
-
-int wpa_conf_get_current_network(struct netdev_context *ctxt)
-{
-    char *reply = ctxt->buf;
-    size_t reply_len = WIFI_MSG_BUF_SIZE;
-    if (wifi_command(ctxt, "STATUS", reply, &reply_len)) {
-        HLOG_ERR("Failed STATUS\n");
-        return -1;
-    }
-
-    HLOG_INFO("Result of STATUS:\n%s\n", reply);
-
-    return wifi_parse_status_for_netid(ctxt, reply, reply_len, NULL);
-}
-
 /*
  * get ap(ssid/key_mgmt) status in wpa_supplicant.conf
  * return

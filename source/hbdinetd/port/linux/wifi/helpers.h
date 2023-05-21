@@ -31,6 +31,9 @@ extern "C" {
 #endif
 
 void wifi_reset_hotspots(struct list_head *hotspots);
+int wifi_load_saved_networks(struct netdev_context *ctxt);
+int wifi_update_status(struct netdev_context *ctxt);
+
 int wifi_parse_scan_results(struct list_head *hotspots,
         const char *results, size_t max_len);
 int wifi_parse_networks(struct kvlist *networks,

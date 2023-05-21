@@ -142,21 +142,21 @@ failed:
 
 int print_frequency(unsigned int frequency, char *buf, size_t buf_sz)
 {
-    const char *format = "%d Hz";
-    unsigned val = frequency;
+    const char *format = "%.0f Hz";
+    double val = frequency;
 
     assert(buf_sz > 0);
     if (frequency > 1000000000) {
-        format = "%d GHz";
-        val /= 1000000000;
+        format = "%.1f GHz";
+        val /= 1000000000.0;
     }
     else if (frequency > 1000000) {
-        format = "%d MHz";
-        val /= 1000000;
+        format = "%.1f MHz";
+        val /= 1000000.0;
     }
     else if (frequency > 1000) {
-        format = "%d KHz";
-        val /= 1000;
+        format = "%.1f KHz";
+        val /= 1000.0;
     }
 
     int n = snprintf(buf, buf_sz, format, val);
