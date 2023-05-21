@@ -247,6 +247,11 @@ static char *wifiConnect(hbdbus_conn* conn, const char* from_endpoint,
         goto done;
     }
 
+    const char *bssid = purc_variant_get_string_const(jo_tmp);
+    if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "bssid"))) {
+        bssid = purc_variant_get_string_const(jo_tmp);
+    }
+
     const char *keymgmt = NULL;
     if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "keymgmt"))) {
         keymgmt = purc_variant_get_string_const(jo_tmp);
@@ -279,19 +284,20 @@ static char *wifiConnect(hbdbus_conn* conn, const char* from_endpoint,
         goto done;
     }
 
-    if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "password")) == NULL) {
+    if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "passphrase")) == NULL) {
         errcode = ENOKEY;
         goto done;
     }
 
-    const char *password = purc_variant_get_string_const(jo_tmp);
-    if (password == NULL) {
+    const char *passphrase = purc_variant_get_string_const(jo_tmp);
+    if (passphrase == NULL) {
         HLOG_ERR("Password not specified\n");
         errcode = EINVAL;
         goto done;
     }
 
-    errcode = netdev->wifi_ops->connect(netdev->ctxt, ssid, keymgmt, password);
+    errcode = netdev->wifi_ops->connect(netdev->ctxt, ssid, bssid,
+            keymgmt, passphrase);
 
 done:
     if (jo)

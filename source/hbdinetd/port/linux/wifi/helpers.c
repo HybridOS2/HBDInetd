@@ -20,8 +20,11 @@
 ** along with this program.  If not, see http://www.gnu.org/licenses/.
 */
 
+#undef NDEBUG
+
 #include <string.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include "internal.h"
 #include "log.h"
@@ -37,6 +40,70 @@ void wifi_reset_hotspots(struct list_head *hotspots)
         list_del(&hotspot->ln);
         free(hotspot);
     }
+}
+
+const struct wifi_hotspot *
+wifi_get_hotspot_by_ssid(struct netdev_context *ctxt, const char *ssid)
+{
+    struct list_head *p;
+    list_for_each(p, &ctxt->hotspots) {
+        struct wifi_hotspot *hotspot;
+        hotspot = list_entry(p, struct wifi_hotspot, ln);
+
+        if (strcmp(ssid, hotspot->ssid) == 0) {
+            return hotspot;
+        }
+    }
+
+    return NULL;
+}
+
+int wifi_get_netid_from_ssid(struct netdev_context *ctxt, const char *ssid)
+{
+    void *data = kvlist_get(&ctxt->saved_networks, ssid);
+    if (data) {
+        return *(int *)data;
+    }
+
+    return -1;
+}
+
+static bool escape_nonascii_chars(const char *ssid, char *escaped)
+{
+    bool nonascii = false;
+    size_t i = 0;
+    while (*ssid != '\0') {
+        unsigned char ch = (unsigned char)*ssid;
+
+        if (ch <= 0x7f) {
+            /* ascii character */
+           escaped[i++] = ch;
+        }
+        else {
+            nonascii = true;
+            // escaped[i++] = '\\';
+            // escaped[i++] = 'x';
+
+            unsigned char h_val = (ch & 0xf0) >> 4;
+            if (h_val < 0x0a) {
+                escaped[i++] = h_val + '0';
+            }
+            else {
+                escaped[i++] = h_val + + 'a' - 0xa;
+            }
+
+            unsigned char l_val = ch & 0x0f;
+            if (l_val < 0x0a) {
+                escaped[i++] = h_val + '0';
+            }
+            else {
+                escaped[i++] = h_val + 'a' - 0xa;
+            }
+        }
+    }
+
+    escaped[i] = 0;
+    return nonascii;
 }
 
 static int unescape_hex(const char *src, size_t len, char *dst)
@@ -552,25 +619,9 @@ failed:
     return -1;
 }
 
-int wpa_conf_get_current_network(struct netdev_context *ctxt)
+void wifi_reset_status(struct netdev_context *ctxt)
 {
-    char *reply = ctxt->buf;
-    size_t reply_len = WIFI_MSG_BUF_SIZE;
-    if (wifi_command(ctxt, "STATUS", reply, &reply_len)) {
-        HLOG_ERR("Failed STATUS\n");
-        return -1;
-    }
-
-    HLOG_INFO("Result of STATUS:\n%s\n", reply);
-
-    if (ctxt->status == NULL) {
-        ctxt->status = calloc(1, sizeof(*ctxt->status));
-        if (ctxt->status == NULL) {
-            HLOG_ERR("Failed allocating WiFi status structure\n");
-            return -1;
-        }
-    }
-    else {
+    if (ctxt->status) {
         for (size_t i = 0; i < WIFI_STATUS_STRING_FIELDS; i++) {
             if (ctxt->status->fields[i]) {
                 free(ctxt->status->fields[i]);
@@ -580,6 +631,28 @@ int wpa_conf_get_current_network(struct netdev_context *ctxt)
         memset(ctxt->status, 0, sizeof(*ctxt->status));
         ctxt->status->netid = -1;
     }
+}
+
+int wifi_update_status(struct netdev_context *ctxt)
+{
+    if (ctxt->status == NULL) {
+        ctxt->status = calloc(1, sizeof(*ctxt->status));
+        if (ctxt->status == NULL) {
+            HLOG_ERR("Failed allocating WiFi status structure\n");
+            return -1;
+        }
+    }
+    else
+        wifi_reset_status(ctxt);
+
+    char *reply = ctxt->buf;
+    size_t reply_len = WIFI_MSG_BUF_SIZE;
+    if (wifi_command(ctxt, "STATUS", reply, &reply_len)) {
+        HLOG_ERR("Failed STATUS\n");
+        return -1;
+    }
+
+    HLOG_INFO("Result of STATUS:\n%s\n", reply);
 
     if (wifi_parse_status(ctxt->status, reply, reply_len)) {
         HLOG_ERR("Failed parsing STATUS\n");
@@ -600,10 +673,42 @@ int wpa_conf_get_current_network(struct netdev_context *ctxt)
     return 0;
 }
 
-int wifi_parse_bss_for_signal_level(struct wifi_hotspot *hotspot,
-        const char *results, size_t max_len)
+const char *
+wifi_get_keymgmt_from_capabilities(const struct wifi_hotspot *hotspot)
 {
-    (void)max_len;
+    if (strstr(hotspot->capabilities, "WPA2-PSK"))
+        return "WPA2-PSK";
+    else if (strstr(hotspot->capabilities, "WPA-PSK"))
+        return "WPA-PSK";
+    else if (strstr(hotspot->capabilities, "WPA2"))
+        return "WPA2";
+    else if (strstr(hotspot->capabilities, "WPA"))
+        return "WPA";
+    else if (strstr(hotspot->capabilities, "WEP"))
+        return "WEP";
+    else if (strstr(hotspot->capabilities, "NONE"))
+        return "NONE";
+
+    return NULL;
+}
+
+int wifi_get_signal_level_by_bssid(struct netdev_context *ctxt,
+        const char *bssid)
+{
+    char cmd[64];
+    int n = snprintf(cmd, sizeof(cmd), "BSS %s", bssid);
+    if (n < 0 || n >= (int)sizeof(cmd)) {
+        HLOG_ERR("Too small buffer for `BSS %s` command\n", bssid);
+        return -1;
+    }
+
+    char *results = ctxt->buf;
+    size_t max_len = WIFI_MSG_BUF_SIZE;
+    if (wifi_command(ctxt, cmd, results, &max_len)) {
+        HLOG_ERR("Failed `BSS %s` command\n", bssid);
+        return -1;
+    }
+
     const char *start = results;
     const char *end = NULL;
     while (start) {
@@ -624,11 +729,7 @@ int wifi_parse_bss_for_signal_level(struct wifi_hotspot *hotspot,
                     goto failed;
                 }
 
-                int level = atoi(start);
-                if (level == hotspot->signal_level)
-                    return 0;
-                else
-                    return 1;
+                return atoi(start);
             }
             else {
                 start = end + 1;
@@ -647,5 +748,82 @@ int wifi_parse_bss_for_signal_level(struct wifi_hotspot *hotspot,
 
 failed:
     return -1;
+}
+
+int wifi_update_network(struct netdev_context *ctxt, int netid,
+        const char *ssid, const char *keymgmt, const char *passphrase)
+{
+    char cmd[256];
+    char escaped_ssid[strlen(ssid) * 2 + 1];
+    bool nonascii = escape_nonascii_chars(ssid, escaped_ssid);
+    const char *cmd_format;
+    if (nonascii) {
+        cmd_format = "SET_NETWORK %d ssid \"%s\"";
+    }
+    else {
+        cmd_format = "SET_NETWORK %d ssid %s";
+    }
+
+    int n = snprintf(cmd, sizeof(cmd), cmd_format, netid, escaped_ssid);
+    if (n < 0 || n >= (int)sizeof(cmd)) {
+        HLOG_ERR("Too small buffer for `SET_NETWORK %d ssid %s` command\n",
+                netid, escaped_ssid);
+        return -1;
+    }
+
+    char *results = ctxt->buf;
+    size_t max_len = WIFI_MSG_BUF_SIZE;
+    if (wifi_command(ctxt, cmd, results, &max_len)) {
+        HLOG_ERR("Failed `%s` command\n", cmd);
+        return -1;
+    }
+
+    n = snprintf(cmd, sizeof(cmd), "SET_NETWORK %d key_mgmt %s",
+            netid, keymgmt);
+    if (n < 0 || n >= (int)sizeof(cmd)) {
+        HLOG_ERR("Too small buffer for `SET_NETWORK %d key_mgmt %s` command\n",
+                netid, keymgmt);
+        return -1;
+    }
+
+    max_len = WIFI_MSG_BUF_SIZE;
+    if (wifi_command(ctxt, cmd, results, &max_len)) {
+        HLOG_ERR("Failed `%s` command\n", cmd);
+        return -1;
+    }
+
+    if (strncmp(keymgmt, "PSA", 3) == 0) {
+        n = snprintf(cmd, sizeof(cmd), "SET_NETWORK %d psk %s",
+                netid, passphrase);
+        if (n < 0 || n >= (int)sizeof(cmd)) {
+            HLOG_ERR("Too small buffer for `SET_NETWORK %d psk %s` command\n",
+                    netid, passphrase);
+            return -1;
+        }
+
+        max_len = WIFI_MSG_BUF_SIZE;
+        if (wifi_command(ctxt, cmd, results, &max_len)) {
+            HLOG_ERR("Failed `%s` command\n", cmd);
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+int wifi_add_network(struct netdev_context *ctxt, const char *ssid,
+        const char *keymgmt, const char *passphrase)
+{
+    char *results = ctxt->buf;
+    size_t max_len = WIFI_MSG_BUF_SIZE;
+    if (wifi_command(ctxt, "ADD_NETWORK", results, &max_len)) {
+        HLOG_ERR("Failed `ADD_NETWORK` command\n");
+        return -1;
+    }
+
+    int netid = atoi(results);
+    assert(netid >= 0);
+
+    return wifi_update_network(ctxt, netid, ssid, keymgmt, passphrase);
 }
 

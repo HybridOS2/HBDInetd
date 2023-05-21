@@ -30,8 +30,17 @@
 extern "C" {
 #endif
 
+struct wifi_hotspot;
+struct netdev_context;
+
 void wifi_reset_hotspots(struct list_head *hotspots);
+const struct wifi_hotspot *
+wifi_get_hotspot_by_ssid(struct netdev_context *ctxt, const char *ssid);
+
 int wifi_load_saved_networks(struct netdev_context *ctxt);
+int wifi_get_netid_from_ssid(struct netdev_context *ctxt, const char *ssid);
+
+void wifi_reset_status(struct netdev_context *ctxt);
 int wifi_update_status(struct netdev_context *ctxt);
 
 int wifi_parse_scan_results(struct list_head *hotspots,
@@ -39,14 +48,16 @@ int wifi_parse_scan_results(struct list_head *hotspots,
 int wifi_parse_networks(struct kvlist *networks,
         const char *results, size_t max_len);
 
-struct netdev_context;
-int wifi_parse_status_for_netid(struct netdev_context *ctxt,
-        const char *results, size_t max_len, char **ssid);
+const char *
+wifi_get_keymgmt_from_capabilities(const struct wifi_hotspot *hotspot);
 
-struct wifi_hotspot;
-/* returns 0 for not changed, > 0 for changed, < 0 for failure */
-int wifi_parse_bss_for_signal_level(struct wifi_hotspot *hotspot,
-        const char *results, size_t max_len);
+int wifi_get_signal_level_by_bssid(struct netdev_context *ctxt,
+        const char *bssid);
+
+int wifi_add_network(struct netdev_context *ctxt, const char *ssid,
+        const char *keymgmt, const char *passphrase);
+int wifi_update_network(struct netdev_context *ctxt, int netid,
+        const char *ssid, const char *keymgmt, const char *passphrase);
 
 #ifdef __cplusplus
 };  // extern "C"

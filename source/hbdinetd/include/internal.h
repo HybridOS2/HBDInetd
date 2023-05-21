@@ -202,7 +202,7 @@ enum eap_state {
 #define EAP_STATE_nr   (EAP_STATE_ceil - EAP_STATE_floor)
 
 struct wifi_status {
-    char *fields[0];        /* aliaes for the following fields */
+    char *fields[0];        /* aliase for the following fields */
 #define WIFI_STATUS_STRING_FIELDS       6
 
     char *bssid;            /* NULL if not connected */
@@ -215,6 +215,7 @@ struct wifi_status {
     const struct wifi_hotspot *hotspot;
 
     int  netid;             /* -1 if not connected */
+    int  signal_level;
 
     enum wpa_state          wpa_state;
     enum supp_pae_state     supp_pae_state;
@@ -224,7 +225,8 @@ struct wifi_status {
 
 struct wifi_device_ops {
     int (*connect)(struct netdev_context *,
-            const char *ssid, const char *keymgmt, const char *password);
+            const char *ssid, const char *bssid,
+            const char *keymgmt, const char *passphrase);
     int (*disconnect)(struct netdev_context *);
     int (*start_scan)(struct netdev_context *);
     int (*stop_scan)(struct netdev_context *);

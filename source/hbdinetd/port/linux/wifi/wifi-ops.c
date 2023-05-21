@@ -131,18 +131,109 @@
 #endif
 
 static int connect(struct netdev_context *ctxt,
-        const char *ssid, const char *keymgmt, const char *password)
+        const char *ssid, const char *bssid,
+        const char *keymgmt, const char *passphrase)
 {
-    (void)ctxt;
-    (void)ssid;
-    (void)keymgmt;
-    (void)password;
+    int ret;
+
+    if (ctxt->status) {
+        if (bssid) {
+            if (ctxt->status->bssid &&
+                    strcmp(ctxt->status->bssid, bssid) == 0) {
+                /* already connected */
+                return 0;
+            }
+        }
+        else if (ctxt->status->ssid &&
+                strcmp(ctxt->status->ssid, ssid) == 0) {
+            /* already connected */
+            return 0;
+        }
+    }
+
+    int netid = wifi_get_netid_from_ssid(ctxt, ssid);
+    if (keymgmt == NULL || keymgmt[0] == 0) {
+        if (netid >= 0) {   /* if it is a saved network */
+            goto select;
+        }
+
+        const struct wifi_hotspot *hotspot;
+        hotspot = wifi_get_hotspot_by_ssid(ctxt, ssid);
+        if (hotspot == NULL) {
+            HLOG_ERR("No key_mgmt specified and `%s` not found.\n", ssid);
+            return ENOENT;
+        }
+        keymgmt = wifi_get_keymgmt_from_capabilities(hotspot);
+
+        if (keymgmt == NULL) {
+            HLOG_ERR("Can not get key_mgmt from capabilities: %s.\n",
+                    hotspot->capabilities);
+            return ENOTSUP;
+        }
+
+        netid = wifi_add_network(ctxt, ssid, keymgmt, passphrase);
+        if (netid < 0) {
+            HLOG_ERR("Failed to add new network: %s (key_mgmt: %s)\n",
+                    ssid, keymgmt);
+            return ERR_DEVICE_CONTROLLER;
+        }
+    }
+    else if (netid >= 0) {
+        if (wifi_update_network(ctxt, netid, ssid, keymgmt, passphrase)) {
+            HLOG_ERR("Failed to update network: %d) %s (key_mgmt: %s)\n",
+                    netid, ssid, keymgmt);
+            return ERR_DEVICE_CONTROLLER;
+        }
+    }
+
+    if (ctxt->status && ctxt->status->bssid) {
+        /* disconnect first if connected */
+        size_t len = WIFI_MSG_BUF_SIZE;
+        ret = wifi_command(ctxt, "DISCONNECT", ctxt->buf, &len);
+        if (ret) {
+            HLOG_ERR("Failed to issue DISCONNECT command\n");
+            return ERR_DEVICE_CONTROLLER;
+        }
+
+        wifi_reset_status(ctxt);
+    }
+
+select:
+    char cmd[32];
+    sprintf(cmd, "SELECT_NETWORK %d", netid);
+
+    size_t len = WIFI_MSG_BUF_SIZE;
+    ret = wifi_command(ctxt, cmd, ctxt->buf, &len);
+    if (ret) {
+        HLOG_ERR("Failed to issue `SELECT_NETWORK %d` command\n",
+                netid);
+        return ERR_DEVICE_CONTROLLER;
+    }
+
+    ret = wifi_command(ctxt, "RECONNECT", ctxt->buf, &len);
+    if (ret) {
+        HLOG_ERR("Failed to issue RECONNECT command\n");
+        return ERR_DEVICE_CONTROLLER;
+    }
+
     return 0;
 }
 
 static int disconnect(struct netdev_context *ctxt)
 {
-    (void)ctxt;
+    if (ctxt->status == NULL || ctxt->status->bssid == NULL) {
+        /* not connected */
+        return 0;
+    }
+
+    size_t len = WIFI_MSG_BUF_SIZE;
+    int ret = wifi_command(ctxt, "DISCONNECT", ctxt->buf, &len);
+    if (ret) {
+        HLOG_ERR("Failed to issue DISCONNECT command\n");
+        return ERR_DEVICE_CONTROLLER;
+    }
+
+    wifi_reset_status(ctxt);
     return 0;
 }
 
@@ -221,6 +312,10 @@ static struct netdev_context *netdev_context_new(void)
 
 static void netdev_context_delete(struct netdev_context *ctxt)
 {
+    wifi_reset_status(ctxt);
+    if (ctxt->status)
+        free(ctxt->status);
+
     kvlist_free(&ctxt->saved_networks);
 
     wifi_event_free(ctxt);
