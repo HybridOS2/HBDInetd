@@ -100,6 +100,8 @@ static bool escape_nonascii_chars(const char *ssid, char *escaped)
                 escaped[i++] = h_val + 'a' - 0xa;
             }
         }
+
+        ssid++;
     }
 
     escaped[i] = 0;
@@ -211,36 +213,34 @@ int wifi_parse_scan_results(struct list_head *hotspots,
 
         start = end + 1;
         end = strstr(start, "\n");
+        size_t len = end - start;
+
         if (end) {
-            size_t len = end - start;
-            size_t nr_chars = 0;
-            if (len == 0)
-                goto failed;
-
-            one->ssid = malloc(len + 1);
-            if (unescape_hex(start, len, one->ssid)) {
-                goto failed;
-            }
-            else if (!pcutils_string_check_utf8(one->ssid, -1, &nr_chars, NULL)
-                    || nr_chars == 0) {
-                goto failed;
-            }
-
-            list_add_tail(hotspots, &one->ln);
+            len = end - start;
         }
         else {
-            size_t len = strlen(start);
-            if (len == 0)
-                goto failed;
-
-            one->ssid = malloc(len + 1);
-            if (unescape_hex(start, len, one->ssid)) {
-                goto failed;
-            }
-
-            list_add_tail(hotspots, &one->ln);
-            break;
+            len = strlen(start);
         }
+
+        if (len == 0) {
+            goto failed;
+        }
+
+        size_t nr_chars = 0;
+        if (len == 0)
+            goto failed;
+
+        one->ssid = malloc(len + 1);
+        if (unescape_hex(start, len, one->ssid)) {
+            goto failed;
+        }
+        else if (!pcutils_string_check_utf8(one->ssid, -1, &nr_chars, NULL)
+                || nr_chars == 0) {
+            goto failed;
+        }
+
+        one->escaped_ssid = escape_quotes_for_ssid(one->ssid);
+        list_add_tail(hotspots, &one->ln);
     }
 
     return 0;
@@ -523,6 +523,7 @@ static int wifi_parse_status(struct wifi_status *status,
             }
 
             status->ssid = strdup(ssid);
+            status->escaped_ssid = escape_quotes_for_ssid(status->ssid);
         }
         else if (strncasecmp(start, STATUS_KEY_PAIRWISE_CIPHER, len) == 0) {
             start = end + 1;

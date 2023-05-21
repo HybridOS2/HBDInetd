@@ -64,17 +64,37 @@ static int on_scan_results(hbdbus_conn *conn,
     size_t reply_len = WIFI_MSG_BUF_SIZE;
     int ret = wifi_command(ctxt, "SCAN_RESULTS", ctxt->buf, &reply_len);
     if (ret) {
-        ctxt->cmd_failure_count++;
         HLOG_ERR("Failed when getting scan results: %d\n", ret);
         goto failed;
     }
 
-    wifi_parse_scan_results(&ctxt->hotspots, ctxt->buf, reply_len);
+    if (wifi_parse_scan_results(&ctxt->hotspots, ctxt->buf, reply_len)) {
+        HLOG_ERR("Failed when parsing scan results\n");
+        goto failed;
+    }
+
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
+    if (pcutils_printbuf_init(pb)) {
+        HLOG_ERR("Failed when initializing print buffer\n");
+        goto failed;
+    }
+
+    pcutils_printbuf_strappend(pb, "{\"success\":true,\"hotspots\":[");
+    print_hotspots(&ctxt->hotspots, pb);
+    pcutils_printbuf_strappend(pb, "]");
+
+    ret = hbdbus_fire_event(conn, BUBBLE_WIFISCANFINISHED, pb->buf);
+    free(pb->buf);
+    if (ret) {
+        goto fatal;
+    }
     return 0;
 
 failed:
     ret = hbdbus_fire_event(conn, BUBBLE_WIFISCANFINISHED,
             "{\"success\":false,\"hotspots\":null}");
+
+fatal:
     if (ret) {
         HLOG_ERR("Failed when firing event: %s\n", BUBBLE_WIFISCANFINISHED);
     }

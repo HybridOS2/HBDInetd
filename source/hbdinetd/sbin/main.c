@@ -400,7 +400,6 @@ int main(int argc, char **argv)
         else {
             format_current_time(_new_clock, sizeof(_new_clock) - 1);
             if (strcmp(_new_clock, curr_time)) {
-                hbdbus_fire_event(conn, "clock", _new_clock);
                 strcpy(curr_time, _new_clock);
             }
         }

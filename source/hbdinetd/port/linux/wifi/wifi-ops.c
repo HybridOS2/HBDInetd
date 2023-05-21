@@ -34,102 +34,6 @@
 
 #define US_100MS    100000
 
-#if 0
-    char *start = NULL;
-    char *end = NULL;
-    start = strstr(reply, "wpa_state=");
-    if (start) {
-        start += strlen("wpa_state=");
-        end = strstr(start, "\n");
-        if (end) {
-            if (strncasecmp(start, "COMPLETED", strlen("COMPLETED"))) {
-                errcode = ENONET;
-                goto done;
-            }
-        }
-        else {
-            errcode = ENONET;
-            goto done;
-        }
-    }
-    else {
-        errcode = ENONET;
-        goto done;
-    }
-
-    // bssid
-    start = strstr(end, "bssid=");
-    if (start) {
-        start += strlen("bssid=");
-        end = strstr(start, "\n");
-        if (end) {
-            size_t len = end - start;
-            pcutils_printbuf_strappend(pb, "\"bssid\":\"");
-            pcutils_printbuf_memappend_fast(pb, start, len);
-            pcutils_printbuf_strappend(pb, "\",");
-        }
-    }
-
-    if (start == NULL || end == NULL) {
-        pcutils_printbuf_strappend(pb, "\"bssid\":null,");
-        goto done;
-    }
-
-    // frenquency
-    start = strstr(end, "freq=");
-    if (start) {
-        start += strlen("freq=");
-        end = strstr(start, "\n");
-        if (end) {
-            size_t len = end - start;
-            pcutils_printbuf_strappend(pb, "\"frenquency\":\"");
-            pcutils_printbuf_memappend_fast(pb, start, len);
-            pcutils_printbuf_strappend(pb, " MHz\",");
-        }
-    }
-
-    if (start == NULL || end == NULL) {
-        pcutils_printbuf_strappend(pb, "\"frenquency\":null,");
-        goto done;
-    }
-
-    // ssid
-    start = strstr(end, "ssid=");
-    if (start) {
-        start += strlen("ssid=");
-        end = strstr(start, "\n");
-        if (end) {
-            size_t len = end - start;
-            pcutils_printbuf_strappend(pb, "\"ssid\":\"");
-            pcutils_printbuf_memappend_fast(pb, start, len);
-            pcutils_printbuf_strappend(pb, "\",");
-        }
-    }
-
-    if (start == NULL || end == NULL) {
-        pcutils_printbuf_strappend(pb, "\"ssid\":null,");
-        goto done;
-    }
-
-    // encryptionType
-    start = strstr(end, "key_mgmt=");
-    if (start) {
-        start += strlen("key_mgmt=");
-        end = strstr(start, "\n");
-        if (end) {
-            size_t len = end - start;
-            pcutils_printbuf_strappend(pb, "\"encryptionType\":\"");
-            pcutils_printbuf_memappend_fast(pb, start, len);
-            pcutils_printbuf_strappend(pb, "\",");
-        }
-    }
-
-    if (start == NULL || end == NULL) {
-        pcutils_printbuf_strappend(pb, "\"encryptionType\":null,");
-        goto done;
-    }
-#endif
-
 static int connect(struct netdev_context *ctxt,
         const char *ssid, const char *bssid,
         const char *keymgmt, const char *passphrase)
@@ -433,6 +337,39 @@ int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
                    bytes);
        }
     } while (true);
+
+    /* check if signal level changed */
+    if (netdev->ctxt->status && netdev->ctxt->status->bssid) {
+        time_t t = purc_monotonic_time_after(0);
+        if (t >= netdev->ctxt->last_update_time + DEF_UPDATE_INTERVAL) {
+
+            int level = wifi_get_signal_level_by_bssid(netdev->ctxt,
+                    netdev->ctxt->status->bssid);
+            if (netdev->ctxt->status->signal_level != level) {
+
+                struct pcutils_printbuf my_buff, *pb = &my_buff;
+                if (pcutils_printbuf_init(pb)) {
+                    HLOG_ERR("Failed when initializing print buffer\n");
+                    return ENOMEM;
+                }
+
+                pcutils_printbuf_format(pb,
+                        "{\"bssid\":\"%s\","
+                         "\"ssid\":\"%s\","
+                         "\"signalLevel\":%d}",
+                         netdev->ctxt->status->bssid,
+                         netdev->ctxt->status->escaped_ssid ?
+                            netdev->ctxt->status->escaped_ssid :
+                            netdev->ctxt->status->ssid,
+                         netdev->ctxt->status->signal_level);
+                hbdbus_fire_event(conn, BUBBLE_WIFISIGNALSTRENGTHCHANGED,
+                        pb->buf);
+                free(pb->buf);
+            }
+
+            netdev->ctxt->last_update_time = t;
+        }
+    }
 
     return 0;
 }

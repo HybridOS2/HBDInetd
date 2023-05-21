@@ -66,6 +66,7 @@ struct netdev_context;
 struct wifi_hotspot {
     char *bssid;
     char *ssid;
+    char *escaped_ssid; /* NULL if no quotes */
     char *capabilities;
     unsigned int frequency;
     int signal_level;
@@ -206,7 +207,8 @@ struct wifi_status {
 #define WIFI_STATUS_STRING_FIELDS       6
 
     char *bssid;            /* NULL if not connected */
-    char *ssid;
+    char *ssid;             /* Not NULL if bssid is not NULL */
+    char *escaped_ssid;     /* NULL if no quotes */
     char *pairwise_cipher;  /* CCMP */
     char *group_cipher;     /* CCMP */
     char *key_mgmt;         /* WPA-PSK */
@@ -291,6 +293,9 @@ const char *get_error_message(int errcode);
 struct network_device *check_network_device_ex(struct run_info *info,
         const char *method_param, int expect_type,
         const char *extra_key, purc_variant_t *extra_value, int *errcode);
+
+char *escape_quotes_for_ssid(const char *ssid);
+
 int print_frequency(unsigned int frequency, char *buf, size_t buf_sz);
 int print_hotspots(const struct list_head *hotspots,
         struct pcutils_printbuf *pb);

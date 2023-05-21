@@ -117,6 +117,30 @@ failed:
     return NULL;
 }
 
+char *escape_quotes_for_ssid(const char *ssid)
+{
+    if (strchr(ssid, '"') == NULL)
+        return NULL;
+
+    struct pcutils_printbuf my_buf, *pb = &my_buf;
+
+    if (pcutils_printbuf_init(pb)) {
+        HLOG_ERR("Failed when initializing print buffer\n");
+        return NULL;
+    }
+
+    while (*ssid) {
+        if (*ssid == '"') {
+            pcutils_printbuf_memappend_fast(pb, "\\", 1);
+        }
+        pcutils_printbuf_memappend_fast(pb, ssid, 1);
+
+        ssid++;
+    }
+
+    return pb->buf;
+}
+
 int print_frequency(unsigned int frequency, char *buf, size_t buf_sz)
 {
     const char *format = "%.0f Hz";

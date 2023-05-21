@@ -18,22 +18,6 @@
 ** GNU General Public License for more details.
 ** You should have received a copy of the GNU General Public License
 ** along with this program.  If not, see http://www.gnu.org/licenses/.
-**
-** This file is derived from Android:
-**
-** Copyright (C) 2008 The Android Open Source Project
-**
-** Licensed under the Apache License, Version 2.0 (the "License");
-** you may not use this file except in compliance with the License.
-** You may obtain a copy of the License at
-**
-**      http://www.apache.org/licenses/LICENSE-2.0
-**
-** Unless required by applicable law or agreed to in writing, software
-** distributed under the License is distributed on an "AS IS" BASIS,
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-** See the License for the specific language governing permissions and
-** limitations under the License.
 */
 
 #ifndef _hbdinetd_port_linux_wifi_wifi_h
@@ -57,13 +41,15 @@
 #define WIFI_MSG_BUF_SIZE                   4096
 #define MAX_RETRIES_ON_AUTH_FAILURE         3
 
-#define DEF_SCAN_INTERVAL                   60  /* seconds */
+#define DEF_UPDATE_INTERVAL                 10  /* seconds */
 
 struct netdev_context {
     struct network_device *netdev;
     struct wpa_ctrl *ctrl_conn;
     struct wpa_ctrl *monitor_conn;
     int exit_sockets[2];
+
+    time_t last_update_time;
 
     unsigned auth_failure_count;
     unsigned cmd_failure_count;
