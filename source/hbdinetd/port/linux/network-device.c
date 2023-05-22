@@ -72,6 +72,7 @@ static int get_device_type(struct network_device * netdev,
     }
 
     struct iwreq wrq;
+    memset(&wrq, 0, sizeof(wrq));
     strncpy(wrq.ifr_name, ifname, IFNAMSIZ - 1);
     int ret = ioctl(fd, SIOCGIWNAME, &wrq);
     if (ret == 0) {
@@ -79,10 +80,12 @@ static int get_device_type(struct network_device * netdev,
         netdev->on = wifi_device_on;
         netdev->off = wifi_device_off;
         netdev->check = wifi_device_check;
+        netdev->terminate = wifi_device_terminate;
         goto done;
     }
     else {
         struct ifreq ifr;
+        memset(&ifr, 0, sizeof(ifr));
         strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
         ret = ioctl(fd, SIOCGIFHWADDR, &ifr);
         if (ret == 0) {
@@ -102,6 +105,10 @@ done:
 
 void cleanup_network_device(struct network_device *netdev)
 {
+    if (netdev->terminate) {
+        netdev->terminate(netdev);
+    }
+
     if (netdev->hwaddr) {
         free(netdev->hwaddr);
         netdev->hwaddr = NULL;

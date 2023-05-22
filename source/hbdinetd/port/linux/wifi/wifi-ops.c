@@ -160,9 +160,24 @@ static int stop_scan(struct netdev_context *ctxt)
 }
 
 static const struct list_head *
-get_hotspot_list_head(struct netdev_context *ctxt)
+get_hotspot_list(struct netdev_context *ctxt)
 {
+    size_t reply_len = WIFI_MSG_BUF_SIZE;
+    int ret = wifi_command(ctxt, "SCAN_RESULTS", ctxt->buf, &reply_len);
+    if (ret) {
+        HLOG_ERR("Failed when getting scan results: %d\n", ret);
+        goto failed;
+    }
+
+    if (wifi_parse_scan_results(&ctxt->hotspots, ctxt->buf, reply_len)) {
+        HLOG_ERR("Failed when parsing scan results\n");
+        goto failed;
+    }
+
     return &ctxt->hotspots;
+
+failed:
+    return NULL;
 }
 
 static const struct wifi_status *
@@ -176,7 +191,7 @@ static struct wifi_device_ops wifi_ops = {
     disconnect,
     start_scan,
     stop_scan,
-    get_hotspot_list_head,
+    get_hotspot_list,
     get_status,
 };
 
@@ -305,8 +320,8 @@ failed:
 
 int wifi_device_off(hbdbus_conn *conn, struct network_device *netdev)
 {
-    if (netdev->ctxt == NULL || netdev->ctxt->ctrl_conn == NULL)
-        return EPERM;
+    if (netdev->ctxt == NULL)
+        return ENOENT;
 
     revoke_wifi_interfaces(conn);
 
@@ -385,5 +400,29 @@ int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
     }
 
     return 0;
+}
+
+void wifi_device_terminate(struct network_device *netdev)
+{
+    if (netdev->ctxt == NULL)
+        return;
+
+    wifi_reset_status(netdev->ctxt);
+    if (netdev->ctxt->status)
+        free(netdev->ctxt->status);
+
+    kvlist_free(&netdev->ctxt->saved_networks);
+
+    wifi_event_free(netdev->ctxt);
+
+    wifi_reset_hotspots(&netdev->ctxt->hotspots);
+
+    if (netdev->ctxt->ctrl_conn) {
+        wifi_close_supplicant_connection(netdev->ctxt);
+    }
+
+    free(netdev->ctxt->buf);
+    free(netdev->ctxt);
+    netdev->ctxt = NULL;
 }
 

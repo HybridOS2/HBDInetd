@@ -232,7 +232,7 @@ struct wifi_device_ops {
     int (*disconnect)(struct netdev_context *);
     int (*start_scan)(struct netdev_context *);
     int (*stop_scan)(struct netdev_context *);
-    const struct list_head *(*get_hotspot_list_head)(struct netdev_context *);
+    const struct list_head *(*get_hotspot_list)(struct netdev_context *);
     const struct wifi_status *(*get_status)(struct netdev_context *);
 };
 
@@ -253,6 +253,7 @@ typedef struct network_device {
     int (*on)(hbdbus_conn *conn, struct network_device* netdev);
     int (*off)(hbdbus_conn *conn, struct network_device* netdev);
     int (*check)(hbdbus_conn *conn, struct network_device* netdev);
+    void (*terminate)(struct network_device* netdev);
 
     /* the following fields will be managed by the device engine */
     time_t              last_time_checked;
@@ -287,6 +288,7 @@ int update_network_device_info(struct run_info *info, const char *ifname);
 int wifi_device_on(hbdbus_conn *conn, struct network_device *netdev);
 int wifi_device_off(hbdbus_conn *conn, struct network_device *netdev);
 int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev);
+void wifi_device_terminate(struct network_device *netdev);
 
 /* utils.c */
 const char *get_error_message(int errcode);

@@ -31,6 +31,19 @@
 #include "wifi.h"
 #include "helpers.h"
 
+static void release_hotspot(struct wifi_hotspot *one)
+{
+    if (one->bssid)
+        free(one->bssid);
+    if (one->ssid)
+        free(one->ssid);
+    if (one->capabilities)
+        free(one->capabilities);
+    if (one->escaped_ssid)
+        free(one->escaped_ssid);
+    free(one);
+}
+
 void wifi_reset_hotspots(struct list_head *hotspots)
 {
     struct list_head *p, *n;
@@ -38,7 +51,7 @@ void wifi_reset_hotspots(struct list_head *hotspots)
         struct wifi_hotspot *hotspot;
         hotspot = list_entry(p, struct wifi_hotspot, ln);
         list_del(&hotspot->ln);
-        free(hotspot);
+        release_hotspot(hotspot);
     }
 }
 
@@ -213,8 +226,7 @@ int wifi_parse_scan_results(struct list_head *hotspots,
 
         start = end + 1;
         end = strstr(start, "\n");
-        size_t len = end - start;
-
+        size_t len;
         if (end) {
             len = end - start;
         }
@@ -222,42 +234,43 @@ int wifi_parse_scan_results(struct list_head *hotspots,
             len = strlen(start);
         }
 
-        if (len == 0) {
-            goto failed;
-        }
-
         size_t nr_chars = 0;
-        if (len == 0)
-            goto failed;
+        if (len == 0) {
+            HLOG_WARN("Ignore hotspot with empty SSID\n");
+            release_hotspot(one);
+            one = NULL;
+            continue;
+        }
 
         one->ssid = malloc(len + 1);
         if (unescape_hex(start, len, one->ssid)) {
-            goto failed;
+            HLOG_WARN("Ignore bad escaped SSID\n");
+            release_hotspot(one);
+            one = NULL;
+            continue;
         }
         else if (!pcutils_string_check_utf8(one->ssid, -1, &nr_chars, NULL)
                 || nr_chars == 0) {
-            goto failed;
+            HLOG_WARN("Ignore bad UTF8-encoded SSID: %s\n", one->ssid);
+            release_hotspot(one);
+            one = NULL;
+            continue;
+        }
+        else {
+            HLOG_INFO("Nomalized valid UTF-8 SSID: %s\n", one->ssid);
         }
 
         one->escaped_ssid = escape_quotes_for_ssid(one->ssid);
-        list_add_tail(hotspots, &one->ln);
+        list_add_tail(&one->ln, hotspots);
     }
 
     return 0;
 
 failed:
-    HLOG_WARN("Bad format or encoding in scan result: %s\n", start);
-    if (one) {
-        if (one->bssid)
-            free(one->bssid);
-        if (one->ssid)
-            free(one->ssid);
-        if (one->capabilities)
-            free(one->capabilities);
-        free(one);
-    }
-
-    return -1;
+    HLOG_WARN("Ignored some results\n");
+    if (one)
+        release_hotspot(one);
+    return 0;
 }
 
 int wifi_parse_networks(struct kvlist *networks,

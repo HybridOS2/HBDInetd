@@ -88,7 +88,7 @@ static char *wifiStartScanHotspots(hbdbus_conn* conn,
     }
 
     const struct list_head *hotspots;
-    hotspots = netdev->wifi_ops->get_hotspot_list_head(netdev->ctxt);
+    hotspots = netdev->wifi_ops->get_hotspot_list(netdev->ctxt);
     if (hotspots == NULL) {
         goto done;
     }
@@ -142,7 +142,7 @@ static char *wifiGetHotspotList(hbdbus_conn* conn,
     }
 
     const struct list_head *hotspots;
-    hotspots = netdev->wifi_ops->get_hotspot_list_head(netdev->ctxt);
+    hotspots = netdev->wifi_ops->get_hotspot_list(netdev->ctxt);
     if (hotspots == NULL) {
         goto done;
     }

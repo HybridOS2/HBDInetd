@@ -589,7 +589,8 @@ int wifi_command(struct netdev_context *ctxt,
     }
 
     reply[*reply_len - 1] = '\0';
-    HLOG_INFO("Results of command: %s:\n%s\n", cmd, reply);
+    HLOG_INFO("Results of command: %s (length: %u):\n%s\n",
+            cmd, (unsigned)*reply_len, reply);
     return 0;
 }
 
