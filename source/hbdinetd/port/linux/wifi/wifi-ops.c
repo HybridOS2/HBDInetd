@@ -89,6 +89,14 @@ static int connect(struct netdev_context *ctxt,
             return ERR_DEVICE_CONTROLLER;
         }
     }
+    else {
+        netid = wifi_add_network(ctxt, ssid, keymgmt, passphrase);
+        if (netid < 0) {
+            HLOG_ERR("Failed to add new network: %s (key_mgmt: %s)\n",
+                    ssid, keymgmt);
+            return ERR_DEVICE_CONTROLLER;
+        }
+    }
 
     if (ctxt->status && ctxt->status->bssid) {
         /* disconnect first if connected */
@@ -120,7 +128,25 @@ select:
         return ERR_DEVICE_CONTROLLER;
     }
 
-    return 0;
+    unsigned count = 10;
+    do {
+        TEMP_FAILURE_RETRY(usleep(500000)); // 0.5s
+
+        wifi_update_status(ctxt);
+        if (ctxt->status) {
+            if (ctxt->status->wpa_state == WPA_STATE_COMPLETED) {
+                // TODO SAVE_CONFIG
+                return 0;
+            }
+        }
+    } while (--count);
+
+    if (ctxt->status &&
+            ctxt->status->wpa_state == WPA_STATE_AUTHENTICATING) {
+        return ERR_WPA_WRONG_PASSPHRASE;
+    }
+
+    return ERR_WPA_TIMEOUT;
 }
 
 static int disconnect(struct netdev_context *ctxt)

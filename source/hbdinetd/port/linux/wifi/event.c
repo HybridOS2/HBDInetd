@@ -252,8 +252,10 @@ int wifi_event_handle_message(hbdbus_conn *conn,
     if (msg[0] == '\0')
         return 0;
 
+    HLOG_INFO("Got an event: %s\n", msg);
     if (strncmp(msg, "WPA:", 4) == 0) {
         if (strstr(msg, "pre-shared key may be incorrect")) {
+
             ctxt->auth_failure_count++;
             if (ctxt->auth_failure_count >= MAX_RETRIES_ON_AUTH_FAILURE) {
 

@@ -100,6 +100,7 @@ enum {
 #define ERR_WPA_INVALID_PASSPHRASE      -5
 #define ERR_WPA_INVALID_KEYMGMT         -6
 #define ERR_WPA_WRONG_PASSPHRASE        -7
+#define ERR_WPA_TIMEOUT                 -8
 
 // for network changed
 #define NETWORK_CHANGED_NAME            ((0x01) << 0)

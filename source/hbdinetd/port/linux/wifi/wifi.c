@@ -527,7 +527,7 @@ wifi_wait_on_socket(struct netdev_context *ctxt, char *buf, size_t buflen)
 int
 wifi_wait_for_event(struct netdev_context *ctxt, char *buf, size_t buflen)
 {
-    return wifi_wait_on_socket(ctxt, buf, buflen);
+    return wifi_wait_on_socket(ctxt, buf, buflen - 1);
 }
 
 static void wifi_close_sockets(struct netdev_context *ctxt)

@@ -36,12 +36,13 @@
 const char *error_messages[] = {
     "Ok",                                       // ERR_OK
     "Error when interacting with data bus.",    // ERR_DATA_BUS
-    "Error in device controller."               // ERR_DEVICE_CONTROLLER
-    "Two many failures occurred."               // ERR_TWO_MANY_FAILURES
-    "Invalid SSID."                             // ERR_WPA_INVALID_SSID
-    "Invalid passphrase."                       // ERR_WPA_INVALID_PASSPHRASE
-    "Invalid key management method."            // ERR_WPA_INVALID_KEYMGMT
-    "Wrong passphrase."                         // ERR_WPA_WRONG_PASSPHRASE
+    "Error in device controller.",              // ERR_DEVICE_CONTROLLER
+    "Two many failures occurred.",              // ERR_TWO_MANY_FAILURES
+    "Invalid SSID.",                            // ERR_WPA_INVALID_SSID
+    "Invalid passphrase.",                      // ERR_WPA_INVALID_PASSPHRASE
+    "Invalid key management method.",           // ERR_WPA_INVALID_KEYMGMT
+    "Wrong passphrase.",                        // ERR_WPA_WRONG_PASSPHRASE
+    "Timeout.",                                 // ERR_WPA_TIMEOUT
 };
 
 const char *get_error_message(int errcode)
