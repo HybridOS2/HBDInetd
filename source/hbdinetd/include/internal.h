@@ -66,7 +66,7 @@ struct netdev_context;
 struct wifi_hotspot {
     char *bssid;
     char *ssid;
-    char *escaped_ssid; /* NULL if no quotes */
+    char *escaped_ssid; /* NULL if not escaped */
     char *capabilities;
     unsigned int frequency;
     int signal_level;
@@ -209,7 +209,7 @@ struct wifi_status {
 
     char *bssid;            /* NULL if not connected */
     char *ssid;             /* Not NULL if bssid is not NULL */
-    char *escaped_ssid;     /* NULL if no quotes */
+    char *escaped_ssid;     /* NULL if not escaped */
     char *pairwise_cipher;  /* CCMP */
     char *group_cipher;     /* CCMP */
     char *key_mgmt;         /* WPA-PSK */

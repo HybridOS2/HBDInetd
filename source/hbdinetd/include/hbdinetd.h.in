@@ -97,12 +97,12 @@ enum {
 #define ERR_DATA_BUS                    -1
 #define ERR_DEVICE_CONTROLLER           -2
 #define ERR_TWO_MANY_FAILURES           -3
-#define ERR_WPA_INVALID_SSID            -4
-#define ERR_WPA_INVALID_PASSPHRASE      -5
-#define ERR_WPA_INVALID_KEYMGMT         -6
-#define ERR_WPA_WRONG_PASSPHRASE        -7
-#define ERR_WPA_TIMEOUT                 -8
-#define ERR_SEE_EVENT                   -9
+#define ERR_UNCERTAIN_RESULT            -4
+#define ERR_WPA_INVALID_SSID            -5
+#define ERR_WPA_INVALID_PASSPHRASE      -6
+#define ERR_WPA_INVALID_KEYMGMT         -7
+#define ERR_WPA_WRONG_PASSPHRASE        -8
+#define ERR_WPA_TIMEOUT                 -9
 
 // for network changed
 #define NETWORK_CHANGED_NAME            ((0x01) << 0)

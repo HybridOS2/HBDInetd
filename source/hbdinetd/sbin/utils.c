@@ -38,6 +38,7 @@ const char *error_messages[] = {
     "Error when interacting with data bus.",    // ERR_DATA_BUS
     "Error in device controller.",              // ERR_DEVICE_CONTROLLER
     "Two many failures occurred.",              // ERR_TWO_MANY_FAILURES
+    "Uncertain result; see event.",             // ERR_UNCERTAIN_RESULT
     "Invalid SSID.",                            // ERR_WPA_INVALID_SSID
     "Invalid passphrase.",                      // ERR_WPA_INVALID_PASSPHRASE
     "Invalid key management method.",           // ERR_WPA_INVALID_KEYMGMT

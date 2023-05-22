@@ -162,9 +162,9 @@ select:
     }
 #endif
 
-    unsigned count = 10;
+    unsigned count = 10;    /* total 3s */
     do {
-        TEMP_FAILURE_RETRY(usleep(300000)); // 0.3s
+        TEMP_FAILURE_RETRY(usleep(200000)); // 0.2s
 
         wifi_update_status(ctxt);
         switch (ctxt->status->wpa_state) {
@@ -191,7 +191,7 @@ select:
         return ERR_WPA_WRONG_PASSPHRASE;
     }
 
-    return ERR_WPA_TIMEOUT;
+    return ERR_UNCERTAIN_RESULT;
 }
 
 static int disconnect(struct netdev_context *ctxt)
