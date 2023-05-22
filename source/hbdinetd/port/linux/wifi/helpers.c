@@ -845,7 +845,7 @@ int wifi_update_network(struct netdev_context *ctxt, int netid,
             return -1;
         }
     }
-    else if (strcmp(keymgmt, "WEP") == 0) {
+    else if (strcmp(keymgmt, "NONE") == 0) {
         sprintf(cmd, "SET_NETWORK %d key_mgmt NONE", netid);
         max_len = WIFI_MSG_BUF_SIZE;
         if (wifi_command(ctxt, cmd, results, &max_len)) {

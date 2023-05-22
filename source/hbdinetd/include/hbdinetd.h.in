@@ -40,9 +40,9 @@
 #define METHOD_NET_GET_DEVICE_STATUS    "getDeviceStatus"
 
 // methods for WiFi device
-#define METHOD_WIFI_START_SCAN          "wifiStartScanHotspots"
+#define METHOD_WIFI_START_SCAN          "wifiStartScan"
 #define METHOD_WIFI_GET_HOTSPOTS        "wifiGetHotspotList"
-#define METHOD_WIFI_STOP_SCAN           "wifiStopScanHotspots"
+#define METHOD_WIFI_STOP_SCAN           "wifiStopScan"
 #define METHOD_WIFI_CONNECT_AP          "wifiConnect"
 #define METHOD_WIFI_DISCONNECT_AP       "wifiDisconnect"
 #define METHOD_WIFI_GET_NETWORK_INFO    "wifiGetNetworkInfo"
@@ -56,9 +56,10 @@
 // events for WiFi device
 #define BUBBLE_WIFICONNECTED                "WiFiConnected"
 #define BUBBLE_WIFICONFIGURED               "WiFiConfigured"
+#define BUBBLE_WIFIFAILEDCONNATTEMPT        "WiFiFailedConnAttempt"
 #define BUBBLE_WIFIDISCONNECTED             "WiFiDisconnected"
 #define BUBBLE_WIFISCANFINISHED             "WiFiScanFinished"
-#define BUBBLE_WIFISIGNALSTRENGTHCHANGED    "WiFiSignalStrengthChanged"
+#define BUBBLE_WIFISIGNALLEVELCHANGED       "WiFiSignalLevelChanged"
 
 // events for Ethernet Device
 // events for Mobile Device
@@ -101,6 +102,7 @@ enum {
 #define ERR_WPA_INVALID_KEYMGMT         -6
 #define ERR_WPA_WRONG_PASSPHRASE        -7
 #define ERR_WPA_TIMEOUT                 -8
+#define ERR_SEE_EVENT                   -9
 
 // for network changed
 #define NETWORK_CHANGED_NAME            ((0x01) << 0)

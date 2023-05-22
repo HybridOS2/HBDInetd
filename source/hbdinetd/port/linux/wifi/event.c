@@ -178,6 +178,18 @@ fatal:
     return ret;
 }
 
+static int on_ssid_temp_disabled(hbdbus_conn *conn,
+        struct netdev_context *ctxt, const char *data, int len)
+{
+    (void)conn;
+    (void)ctxt;
+    (void)data;
+    (void)len;
+    /* TODO: if the network is newly added, remove it */
+
+    return 0;
+}
+
 static int on_terminating(hbdbus_conn *conn,
         struct netdev_context *ctxt, const char *data, int len)
 {
@@ -218,6 +230,7 @@ static const struct event_handler {
     { "CONNECTED", on_connected },
     { "DISCONNECTED", on_disconnected },
     { "SCAN-RESULTS", on_scan_results },
+    { "SSID-TEMP-DISABLED", on_ssid_temp_disabled },
     { "TERMINATING", on_terminating },
     { "EAP-FAILURE", on_eap_failure },
     { "ASSOC-REJECT", on_assoc_reject },

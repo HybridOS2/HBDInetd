@@ -465,7 +465,7 @@ int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
                             netdev->ctxt->status->escaped_ssid :
                             netdev->ctxt->status->ssid,
                          netdev->ctxt->status->signal_level);
-                hbdbus_fire_event(conn, BUBBLE_WIFISIGNALSTRENGTHCHANGED,
+                hbdbus_fire_event(conn, BUBBLE_WIFISIGNALLEVELCHANGED,
                         pb->buf);
                 free(pb->buf);
             }
