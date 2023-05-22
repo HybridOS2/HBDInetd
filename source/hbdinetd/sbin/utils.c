@@ -148,20 +148,12 @@ char *escape_quotes_for_ssid(const char *ssid)
 
 int print_frequency(unsigned int frequency, char *buf, size_t buf_sz)
 {
-    const char *format = "%.0f Hz";
+    const char *format = "%.0f MHz";
     double val = frequency;
 
     assert(buf_sz > 0);
-    if (frequency > 1000000000) {
+    if (frequency > 1000) {
         format = "%.1f GHz";
-        val /= 1000000000.0;
-    }
-    else if (frequency > 1000000) {
-        format = "%.1f MHz";
-        val /= 1000000.0;
-    }
-    else if (frequency > 1000) {
-        format = "%.1f KHz";
         val /= 1000.0;
     }
 
