@@ -34,11 +34,42 @@
 
 #define US_100MS    100000
 
+/* check wpa/wpa2 passphrase is right */
+static int check_wpa_passphrase(const char *keymgmt, const char *passphrase)
+{
+    if (strcmp(keymgmt, "WPA-PSK") == 0 ||
+            strcmp(keymgmt, "WPA2-PSK") == 0) {
+        size_t len = strlen(passphrase);
+        if (len < 8 || len > 63)
+            return ERR_WPA_INVALID_PASSPHRASE;
+
+        for (int i = 0; passphrase[i]; i++) {
+            if ((passphrase[i] < 32) || (passphrase[i] > 126)) {
+                return ERR_WPA_INVALID_PASSPHRASE;
+            }
+        }
+    }
+    else if (strcmp(keymgmt, "WEP") == 0) {
+    }
+    else if (strcmp(keymgmt, "NONE") == 0) {
+    }
+    else {
+        return ERR_WPA_INVALID_KEYMGMT;
+    }
+
+    return 0;
+}
+
 static int connect(struct netdev_context *ctxt,
         const char *ssid, const char *bssid,
         const char *keymgmt, const char *passphrase)
 {
     int ret;
+
+    if (keymgmt != NULL &&
+            (ret = check_wpa_passphrase(keymgmt, passphrase))) {
+        return ret;
+    }
 
     if (ctxt->status) {
         if (bssid) {
@@ -56,7 +87,7 @@ static int connect(struct netdev_context *ctxt,
     }
 
     int netid = wifi_get_netid_from_ssid(ctxt, ssid);
-    if (keymgmt == NULL || keymgmt[0] == 0) {
+    if (keymgmt == NULL) {
         if (netid >= 0) {   /* if it is a saved network */
             goto select;
         }
@@ -98,6 +129,7 @@ static int connect(struct netdev_context *ctxt,
         }
     }
 
+    wifi_update_status(ctxt);
     if (ctxt->status && ctxt->status->bssid) {
         /* disconnect first if connected */
         size_t len = WIFI_MSG_BUF_SIZE;
@@ -122,27 +154,40 @@ select:
         return ERR_DEVICE_CONTROLLER;
     }
 
+#if 0
     ret = wifi_command(ctxt, "RECONNECT", ctxt->buf, &len);
     if (ret) {
         HLOG_ERR("Failed to issue RECONNECT command\n");
         return ERR_DEVICE_CONTROLLER;
     }
+#endif
 
     unsigned count = 10;
     do {
-        TEMP_FAILURE_RETRY(usleep(500000)); // 0.5s
+        TEMP_FAILURE_RETRY(usleep(300000)); // 0.3s
 
         wifi_update_status(ctxt);
-        if (ctxt->status) {
-            if (ctxt->status->wpa_state == WPA_STATE_COMPLETED) {
-                // TODO SAVE_CONFIG
-                return 0;
+        switch (ctxt->status->wpa_state) {
+        case WPA_STATE_UNKNOWN:
+        case WPA_STATE_INACTIVE:
+        case WPA_STATE_INTERFACE_DISABLED:
+            return ERR_DEVICE_CONTROLLER;
+
+        case WPA_STATE_COMPLETED:
+            len = WIFI_MSG_BUF_SIZE;
+            if (wifi_command(ctxt, "SAVE_CONFIG", ctxt->buf, &len)) {
+                HLOG_WARN("Failed to save config\n");
             }
+            return 0;
+
+        default:
+            break;
         }
+
     } while (--count);
 
-    if (ctxt->status &&
-            ctxt->status->wpa_state == WPA_STATE_AUTHENTICATING) {
+    if (ctxt->status->wpa_state >= WPA_STATE_SCANNING &&
+            ctxt->status->wpa_state < WPA_STATE_COMPLETED) {
         return ERR_WPA_WRONG_PASSPHRASE;
     }
 
@@ -151,6 +196,7 @@ select:
 
 static int disconnect(struct netdev_context *ctxt)
 {
+    wifi_update_status(ctxt);
     if (ctxt->status == NULL || ctxt->status->bssid == NULL) {
         /* not connected */
         return 0;
@@ -209,6 +255,7 @@ failed:
 static const struct wifi_status *
 get_status(struct netdev_context *ctxt)
 {
+    wifi_update_status(ctxt);
     return ctxt->status;
 }
 
@@ -366,6 +413,8 @@ int wifi_device_off(hbdbus_conn *conn, struct network_device *netdev)
 
 int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
 {
+    HLOG_INFO_ONCE("called\n");
+
     if (netdev->ctxt == NULL)
         return EPERM;
 
@@ -385,6 +434,7 @@ int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
            else if (bytes < 0)
                return ECONNRESET;
 
+           HLOG_INFO("Got an event (%d bytes): %s\n", bytes, netdev->ctxt->buf);
            wifi_event_handle_message(conn, netdev->ctxt, netdev->ctxt->buf,
                    bytes);
        }

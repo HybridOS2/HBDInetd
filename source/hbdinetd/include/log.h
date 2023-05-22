@@ -40,12 +40,21 @@
 #ifdef NDEBUG
 #   define HLOG_DEBUG(x, ...)
 #   define HLOG_INFO(x, ...)
+#   define HLOG_INFO_ONCE(x, ...)
 #else
 #   define HLOG_DEBUG(x, ...)   \
         purc_log_debug("%s: " x, __func__, ##__VA_ARGS__)
 
 #   define HLOG_INFO(x, ...)    \
         purc_log_info("%s: " x, __func__, ##__VA_ARGS__)
+
+#   define HLOG_INFO_ONCE(x, ...) do {                          \
+        static bool once = false;                               \
+        if (!once) {                                            \
+            purc_log_info("%s: " x, __func__, ##__VA_ARGS__);   \
+            once = true;                                        \
+        }                                                       \
+    } while (0)
 #endif
 
 #endif /* not defined __log_h_ */

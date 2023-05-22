@@ -94,8 +94,8 @@ static char* openDevice(hbdbus_conn* conn, const char* from_endpoint,
         goto done;
     }
 
-    if (netdev->status == DEVICE_STATUS_RUNNING) {
-        HLOG_INFO("The device %s is already running\n", netdev->ifname);
+    if (netdev->status == DEVICE_STATUS_UNCERTAIN) {
+        HLOG_INFO("The device %s is in uncertain state\n", netdev->ifname);
         errcode = 0;
         goto done;
     }

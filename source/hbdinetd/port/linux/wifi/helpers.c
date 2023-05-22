@@ -296,15 +296,20 @@ int wifi_parse_networks(struct kvlist *networks,
         if (end) {
             size_t len = end - start;
             size_t nr_chars;
+            if (len == 0) {
+                HLOG_INFO("Ignored empty SSID\n");
+                goto next_line;
+            }
+
             char ssid[len + 1];
             if (unescape_hex(start, len, ssid)) {
-                HLOG_ERR("Bad hex encoding: %s\n", start);
-                goto failed;
+                HLOG_INFO("Ignored SSDI with bad hex encoding: %s\n", start);
+                goto next_line;
             }
             else if (!pcutils_string_check_utf8(ssid, -1, &nr_chars, NULL)
                     || nr_chars == 0) {
-                HLOG_ERR("SSID is not a valid UTF-8 string: %s\n", start);
-                goto failed;
+                HLOG_INFO("Ignored invalid UTF-8 SSID: %s\n", ssid);
+                goto next_line;
             }
 
             kvlist_set(networks, ssid, &id);
@@ -324,6 +329,7 @@ int wifi_parse_networks(struct kvlist *networks,
             goto failed;
         }
 
+next_line:
         start = end + 1;
         end = strstr(start, "\n");
         // skip field flags
@@ -512,9 +518,9 @@ static int wifi_parse_status(struct wifi_status *status,
                 len = strlen(start);
 
             status->bssid = strndup(start, len);
+            HLOG_INFO("Got bssid: %s\n", status->bssid);
         }
         else if (strncasecmp(start, "ssid", len) == 0) {
-
             start = end + 1;
             end = strstr(start, "\n");
             if (end)
@@ -536,6 +542,7 @@ static int wifi_parse_status(struct wifi_status *status,
 
             status->ssid = strdup(ssid);
             status->escaped_ssid = escape_quotes_for_ssid(status->ssid);
+            HLOG_INFO("Got ssid: %s\n", status->ssid);
         }
         else if (strncasecmp(start, STATUS_KEY_PAIRWISE_CIPHER, len) == 0) {
             start = end + 1;
@@ -586,6 +593,8 @@ static int wifi_parse_status(struct wifi_status *status,
                 len = strlen(start);
 
             status->wpa_state = wpa_state_from_string(start, len);
+            HLOG_INFO("Got wpa_state: %s\n",
+                    wpa_state_names[status->wpa_state]);
         }
         else if (strncasecmp(start, STATUS_KEY_SUPP_PAE_STATE, len) == 0) {
             start = end + 1;
@@ -620,13 +629,16 @@ static int wifi_parse_status(struct wifi_status *status,
         else {
             start = end + 1;
             end = strstr(start, "\n");
-            if (end)
-                start = end + 1;
-            else {
-                break;
-            }
+        }
+
+        if (end)
+            start = end + 1;
+        else {
+            break;
         }
     }
+
+    return 0;
 
 failed:
     return -1;
@@ -688,13 +700,13 @@ const char *
 wifi_get_keymgmt_from_capabilities(const struct wifi_hotspot *hotspot)
 {
     if (strstr(hotspot->capabilities, "WPA2-PSK"))
-        return "WPA2-PSK";
+        return "WPA-PSK";
     else if (strstr(hotspot->capabilities, "WPA-PSK"))
         return "WPA-PSK";
     else if (strstr(hotspot->capabilities, "WPA2"))
-        return "WPA2";
+        return "WPA-PSK";
     else if (strstr(hotspot->capabilities, "WPA"))
-        return "WPA";
+        return "WPA-PSK";
     else if (strstr(hotspot->capabilities, "WEP"))
         return "WEP";
     else if (strstr(hotspot->capabilities, "NONE"))
@@ -766,16 +778,10 @@ int wifi_update_network(struct netdev_context *ctxt, int netid,
 {
     char cmd[256];
     char escaped_ssid[strlen(ssid) * 2 + 1];
-    bool nonascii = escape_nonascii_chars(ssid, escaped_ssid);
-    const char *cmd_format;
-    if (nonascii) {
-        cmd_format = "SET_NETWORK %d ssid \"%s\"";
-    }
-    else {
-        cmd_format = "SET_NETWORK %d ssid %s";
-    }
+    escape_nonascii_chars(ssid, escaped_ssid);
 
-    int n = snprintf(cmd, sizeof(cmd), cmd_format, netid, escaped_ssid);
+    int n = snprintf(cmd, sizeof(cmd),
+            "SET_NETWORK %d ssid \"%s\"", netid, escaped_ssid);
     if (n < 0 || n >= (int)sizeof(cmd)) {
         HLOG_ERR("Too small buffer for `SET_NETWORK %d ssid %s` command\n",
                 netid, escaped_ssid);
@@ -789,26 +795,20 @@ int wifi_update_network(struct netdev_context *ctxt, int netid,
         return -1;
     }
 
-    n = snprintf(cmd, sizeof(cmd), "SET_NETWORK %d key_mgmt %s",
-            netid, keymgmt);
-    if (n < 0 || n >= (int)sizeof(cmd)) {
-        HLOG_ERR("Too small buffer for `SET_NETWORK %d key_mgmt %s` command\n",
-                netid, keymgmt);
-        return -1;
-    }
+    if (strcmp(keymgmt, "WPA-PSK") == 0 ||
+            strcmp(keymgmt, "WPA2-PSK") == 0) {
+        sprintf(cmd, "SET_NETWORK %d key_mgmt WPA-PSK", netid);
 
-    max_len = WIFI_MSG_BUF_SIZE;
-    if (wifi_command(ctxt, cmd, results, &max_len)) {
-        HLOG_ERR("Failed `%s` command\n", cmd);
-        return -1;
-    }
+        max_len = WIFI_MSG_BUF_SIZE;
+        if (wifi_command(ctxt, cmd, results, &max_len)) {
+            HLOG_ERR("Failed `%s` command\n", cmd);
+            return -1;
+        }
 
-    if (strncmp(keymgmt, "PSA", 3) == 0) {
-        n = snprintf(cmd, sizeof(cmd), "SET_NETWORK %d psk %s",
+        n = snprintf(cmd, sizeof(cmd), "SET_NETWORK %d psk \"%s\"",
                 netid, passphrase);
         if (n < 0 || n >= (int)sizeof(cmd)) {
-            HLOG_ERR("Too small buffer for `SET_NETWORK %d psk %s` command\n",
-                    netid, passphrase);
+            HLOG_ERR("Too small buffer for `psk` command\n");
             return -1;
         }
 
@@ -818,7 +818,54 @@ int wifi_update_network(struct netdev_context *ctxt, int netid,
             return -1;
         }
     }
+    else if (strcmp(keymgmt, "WEP") == 0) {
+        sprintf(cmd, "SET_NETWORK %d key_mgmt NONE", netid);
+        max_len = WIFI_MSG_BUF_SIZE;
+        if (wifi_command(ctxt, cmd, results, &max_len)) {
+            HLOG_ERR("Failed `%s` command\n", cmd);
+            return -1;
+        }
 
+        n = sprintf(cmd, "SET_NETWORK %d wep_key0 \"%s\"", netid, passphrase);
+        if (n < 0 || n >= (int)sizeof(cmd)) {
+            HLOG_ERR("Too small buffer for `wep_key0` command\n");
+            return -1;
+        }
+
+        max_len = WIFI_MSG_BUF_SIZE;
+        if (wifi_command(ctxt, cmd, results, &max_len)) {
+            HLOG_ERR("Failed `%s` command\n", cmd);
+            return -1;
+        }
+
+        sprintf(cmd, "SET_NETWORK %d auth_alg OPEN SHARED", netid);
+        max_len = WIFI_MSG_BUF_SIZE;
+        if (wifi_command(ctxt, cmd, results, &max_len)) {
+            HLOG_ERR("Failed `%s` command\n", cmd);
+            return -1;
+        }
+    }
+    else if (strcmp(keymgmt, "WEP") == 0) {
+        sprintf(cmd, "SET_NETWORK %d key_mgmt NONE", netid);
+        max_len = WIFI_MSG_BUF_SIZE;
+        if (wifi_command(ctxt, cmd, results, &max_len)) {
+            HLOG_ERR("Failed `%s` command\n", cmd);
+            return -1;
+        }
+    }
+    else {
+        HLOG_ERR("Unknown key_mgmt: `%s`\n", keymgmt);
+        return -1;
+    }
+
+    sprintf(cmd, "SET_NETWORK %d scan_ssid 1", netid);
+    max_len = WIFI_MSG_BUF_SIZE;
+    if (wifi_command(ctxt, cmd, results, &max_len)) {
+        HLOG_ERR("Failed `%s` command\n", cmd);
+        return -1;
+    }
+
+    /* TODO: set priority for network: SET_NETWORK %d priority %d */
     return 0;
 }
 
@@ -835,6 +882,15 @@ int wifi_add_network(struct netdev_context *ctxt, const char *ssid,
     int netid = atoi(results);
     assert(netid >= 0);
 
-    return wifi_update_network(ctxt, netid, ssid, keymgmt, passphrase);
+    if (wifi_update_network(ctxt, netid, ssid, keymgmt, passphrase)) {
+        char cmd[64];
+        sprintf(cmd, "REMOVE_NETWORK %d", netid);
+
+        max_len = WIFI_MSG_BUF_SIZE;
+        wifi_command(ctxt, cmd, results, &max_len);
+        return -1;
+    }
+
+    return netid;
 }
 

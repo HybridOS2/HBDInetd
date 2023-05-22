@@ -79,6 +79,7 @@ struct wifi_hotspot {
 
 #define STATUS_KEY_BSSID            "bssid"
 #define STATUS_KEY_SSID             "ssid"
+#define STATUS_KEY_ID               "id"
 #define STATUS_KEY_PAIRWISE_CIPHER  "pairwise_cipher"
 #define STATUS_KEY_GROUP_CIPHER     "group_cipher"
 #define STATUS_KEY_KEY_MGMT         "key_mgmt"

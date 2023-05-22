@@ -137,15 +137,6 @@ void dump_json_object(FILE *fp, purc_variant_t v)
     }
 }
 
-static void format_current_time(char* buff, size_t sz)
-{
-    struct tm tm;
-    time_t curr_time = time(NULL);
-
-    localtime_r(&curr_time, &tm);
-    strftime(buff, sz, "%H:%M", &tm);
-}
-
 /* Command line help. */
 static void print_usage(FILE *fp)
 {
@@ -288,7 +279,6 @@ int main(int argc, char **argv)
     hbdbus_conn* conn;
     fd_set rfds;
     struct timeval tv;
-    char curr_time [16];
 
     ret = read_option_args(argc, argv);
     if (ret > 0)
@@ -365,18 +355,15 @@ int main(int argc, char **argv)
 
     register_common_interfaces(conn);
 
-    format_current_time(curr_time, sizeof(curr_time) - 1);
-
     maxfd = cnnfd;
     do {
         int retval;
-        char _new_clock [16];
 
         FD_ZERO(&rfds);
         FD_SET(cnnfd, &rfds);
 
         tv.tv_sec = 0;
-        tv.tv_usec = 200 * 1000;
+        tv.tv_usec = 100 * 1000;    // 100ms
         retval = select(maxfd + 1, &rfds, NULL, NULL, &tv);
 
         if (retval == -1) {
@@ -398,9 +385,15 @@ int main(int argc, char **argv)
             }
         }
         else {
-            format_current_time(_new_clock, sizeof(_new_clock) - 1);
-            if (strcmp(_new_clock, curr_time)) {
-                strcpy(curr_time, _new_clock);
+            /* check netdevice here */
+            const char* name;
+            void *data;
+            kvlist_for_each(&run_info.devices, name, data) {
+                struct network_device *netdev;
+                netdev = *(struct network_device **)data;
+                if (netdev->check) {
+                    netdev->check(conn, netdev);
+                }
             }
         }
 

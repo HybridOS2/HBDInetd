@@ -278,6 +278,8 @@ int wifi_event_handle_message(hbdbus_conn *conn,
 
             left -= event_len;
             void *data = kvlist_get(&ctxt->event_handlers, event_name);
+            free(event_name);
+
             if (data == NULL) {
                 HLOG_WARN("Unknown event name: %s\n", event_name);
             }
@@ -292,7 +294,6 @@ int wifi_event_handle_message(hbdbus_conn *conn,
                     HLOG_WARN("Ignore event: %s\n", event_name);
                 }
             }
-            free(event_name);
         }
         else {
             HLOG_WARN("Bad event message: %s\n", msg);

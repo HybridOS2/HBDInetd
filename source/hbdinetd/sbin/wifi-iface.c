@@ -335,8 +335,9 @@ static char *wifiDisconnect(hbdbus_conn* conn, const char* from_endpoint,
         goto done;
     }
 
-    if (netdev->status == DEVICE_STATUS_RUNNING) {
-        errcode = ENONET;
+    if (netdev->status == DEVICE_STATUS_UNCERTAIN) {
+        HLOG_INFO("The device %s is in uncertain state\n", netdev->ifname);
+        errcode = EPERM;
         goto done;
     }
 

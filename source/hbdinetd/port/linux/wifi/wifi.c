@@ -129,7 +129,7 @@ static int update_ctrl_interface(struct netdev_context *ctxt,
     if (stat(config_file, &sb) != 0)
         return -1;
 
-    pbuf = (char *)malloc(sb.st_size + IFACE_VALUE_MAX);
+    pbuf = (char *)calloc(1, sb.st_size + IFACE_VALUE_MAX);
     if (!pbuf)
         return 0;
     srcfd = TEMP_FAILURE_RETRY(open(config_file, O_RDONLY));
@@ -405,6 +405,7 @@ int wifi_send_command(struct netdev_context *ctxt,
         return -1;
     }
 
+    reply[0] = 0;
     ret = wpa_ctrl_request(ctxt->ctrl_conn, cmd, strlen(cmd), reply, reply_len,
             NULL);
     if (ret == -2) {
@@ -413,13 +414,19 @@ int wifi_send_command(struct netdev_context *ctxt,
         TEMP_FAILURE_RETRY(write(ctxt->exit_sockets[0], "T", 1));
         return -2;
     }
-    else if (ret < 0 || strncmp(reply, "FAIL", 4) == 0) {
+    else if (ret < 0) {
+        HLOG_ERR("'%s' command failed (%d).\n", cmd, ret);
+        return -1;
+    }
+    else if (strncmp(reply, "FAIL", 4) == 0) {
+        HLOG_ERR("'%s' command failed explicitly.\n", cmd);
         return -1;
     }
 
     if (strncmp(cmd, "PING", 4) == 0) {
         reply[*reply_len] = '\0';
     }
+
     return 0;
 }
 
