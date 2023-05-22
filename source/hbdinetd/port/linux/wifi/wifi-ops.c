@@ -434,7 +434,6 @@ int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
            else if (bytes < 0)
                return ECONNRESET;
 
-           HLOG_INFO("Got an event (%d bytes): %s\n", bytes, netdev->ctxt->buf);
            wifi_event_handle_message(conn, netdev->ctxt, netdev->ctxt->buf,
                    bytes);
        }
