@@ -297,7 +297,9 @@ struct network_device *check_network_device_ex(struct run_info *info,
         const char *method_param, int expect_type,
         const char *extra_key, purc_variant_t *extra_value, int *errcode);
 
-char *escape_quotes_for_ssid(const char *ssid);
+size_t escape_ssid(const char *ssid, char *escaped);
+ssize_t unescape_ssid(const char *escaped, size_t len, char *dst);
+char *escape_ssid_alloc(const char *ssid);
 
 int print_frequency(unsigned int frequency, char *buf, size_t buf_sz);
 int print_hotspots(const struct list_head *hotspots,

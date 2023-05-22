@@ -81,99 +81,6 @@ int wifi_get_netid_from_ssid(struct netdev_context *ctxt, const char *ssid)
     return -1;
 }
 
-static bool escape_nonascii_chars(const char *ssid, char *escaped)
-{
-    bool nonascii = false;
-    size_t i = 0;
-    while (*ssid != '\0') {
-        unsigned char ch = (unsigned char)*ssid;
-
-        if (ch <= 0x7f) {
-            /* ascii character */
-           escaped[i++] = ch;
-        }
-        else {
-            nonascii = true;
-            // escaped[i++] = '\\';
-            // escaped[i++] = 'x';
-
-            unsigned char h_val = (ch & 0xf0) >> 4;
-            if (h_val < 0x0a) {
-                escaped[i++] = h_val + '0';
-            }
-            else {
-                escaped[i++] = h_val + + 'a' - 0xa;
-            }
-
-            unsigned char l_val = ch & 0x0f;
-            if (l_val < 0x0a) {
-                escaped[i++] = h_val + '0';
-            }
-            else {
-                escaped[i++] = h_val + 'a' - 0xa;
-            }
-        }
-
-        ssid++;
-    }
-
-    escaped[i] = 0;
-    return nonascii;
-}
-
-static int unescape_hex(const char *src, size_t len, char *dst)
-{
-    size_t i = 0;
-    size_t j = 0;
-    unsigned char byte = 0;
-
-    for (i = 0, j = 0; i < len; i++, j++) {
-        if (src[i] == '\\') {
-            i++;
-            if (i >= len)
-                goto bad_encoding;
-
-            if (src[i] == 'x') {
-                i++;
-                if (i >= len)
-                    goto bad_encoding;
-
-                char ch = tolower(src[i]);
-                if ((ch >= '0') && (ch <= '9'))
-                    byte = (ch - '0') << 4;
-                else if ((ch >= 'a') && (ch <= 'f'))
-                    byte = (ch - 'a' + 0x0a) << 4;
-
-                i++;
-                if (i >= len)
-                    goto bad_encoding;
-
-                ch = tolower(src[i]);
-                if ((ch >= '0') && (ch <= '9'))
-                    byte |= (ch - '0');
-                else if ((ch >= 'a') && (ch <= 'f'))
-                    byte |= (ch - 'a' + 0x0a);
-
-                dst[j] = byte;
-            }
-            else if (src[i] == '\\') {
-                dst[j] = '\\';
-            }
-            else {
-                goto bad_encoding;
-            }
-        }
-        else
-            dst[j] = src[i];
-    }
-    dst[j] = 0;
-
-    return 0;
-
-bad_encoding:
-    return -1;
-}
-
 int wifi_parse_scan_results(struct list_head *hotspots,
         const char *results, size_t max_len)
 {
@@ -243,7 +150,7 @@ int wifi_parse_scan_results(struct list_head *hotspots,
         }
 
         one->ssid = malloc(len + 1);
-        if (unescape_hex(start, len, one->ssid)) {
+        if (unescape_ssid(start, len, one->ssid) <= 0) {
             HLOG_WARN("Ignore bad escaped SSID\n");
             release_hotspot(one);
             one = NULL;
@@ -260,7 +167,7 @@ int wifi_parse_scan_results(struct list_head *hotspots,
             HLOG_INFO("Nomalized valid UTF-8 SSID: %s\n", one->ssid);
         }
 
-        one->escaped_ssid = escape_quotes_for_ssid(one->ssid);
+        one->escaped_ssid = escape_ssid_alloc(one->ssid);
         list_add_tail(&one->ln, hotspots);
     }
 
@@ -302,7 +209,7 @@ int wifi_parse_networks(struct kvlist *networks,
             }
 
             char ssid[len + 1];
-            if (unescape_hex(start, len, ssid)) {
+            if (unescape_ssid(start, len, ssid) < 0) {
                 HLOG_INFO("Ignored SSDI with bad hex encoding: %s\n", start);
                 goto next_line;
             }
@@ -530,7 +437,7 @@ static int wifi_parse_status(struct wifi_status *status,
 
             size_t nr_chars;
             char ssid[len + 1];
-            if (unescape_hex(start, len, ssid)) {
+            if (unescape_ssid(start, len, ssid) < 0) {
                 HLOG_ERR("Bad hex encoding: %s\n", start);
                 goto failed;
             }
@@ -541,7 +448,7 @@ static int wifi_parse_status(struct wifi_status *status,
             }
 
             status->ssid = strdup(ssid);
-            status->escaped_ssid = escape_quotes_for_ssid(status->ssid);
+            status->escaped_ssid = escape_ssid_alloc(status->ssid);
             HLOG_INFO("Got ssid: %s\n", status->ssid);
         }
         else if (strncasecmp(start, STATUS_KEY_PAIRWISE_CIPHER, len) == 0) {
@@ -777,8 +684,8 @@ int wifi_update_network(struct netdev_context *ctxt, int netid,
         const char *ssid, const char *keymgmt, const char *passphrase)
 {
     char cmd[256];
-    char escaped_ssid[strlen(ssid) * 2 + 1];
-    escape_nonascii_chars(ssid, escaped_ssid);
+    char escaped_ssid[strlen(ssid) * 4 + 1];
+    escape_ssid(ssid, escaped_ssid);
 
     int n = snprintf(cmd, sizeof(cmd),
             "SET_NETWORK %d ssid \"%s\"", netid, escaped_ssid);

@@ -123,28 +123,156 @@ failed:
     return NULL;
 }
 
-char *escape_quotes_for_ssid(const char *ssid)
+size_t escape_ssid(const char *ssid, char *escaped)
 {
-    if (strchr(ssid, '"') == NULL)
-        return NULL;
+    size_t i = 0;
+    while (*ssid != '\0') {
+        unsigned char ch = (unsigned char)*ssid;
 
-    struct pcutils_printbuf my_buf, *pb = &my_buf;
-
-    if (pcutils_printbuf_init(pb)) {
-        HLOG_ERR("Failed when initializing print buffer\n");
-        return NULL;
-    }
-
-    while (*ssid) {
-        if (*ssid == '"') {
-            pcutils_printbuf_memappend_fast(pb, "\\", 1);
+        if (ch <= 0x7f) {
+            switch (ch) {
+            case '\"':
+                escaped[i++] = '\\';
+                escaped[i++] = '\"';
+                break;
+            case '\\':
+                escaped[i++] = '\\';
+                escaped[i++] = '\\';
+                break;
+            case '\033':
+                escaped[i++] = '\\';
+                escaped[i++] = 'e';
+                break;
+            case '\n':
+                escaped[i++] = '\\';
+                escaped[i++] = 'n';
+                break;
+            case '\r':
+                escaped[i++] = '\\';
+                escaped[i++] = 'r';
+                break;
+            case '\t':
+                escaped[i++] = '\\';
+                escaped[i++] = 't';
+                break;
+            default:
+                escaped[i++] = ch;
+                break;
+            }
         }
-        pcutils_printbuf_memappend_fast(pb, ssid, 1);
+        else {
+            escaped[i++] = '\\';
+            escaped[i++] = 'x';
+
+            unsigned char h_val = (ch & 0xf0) >> 4;
+            if (h_val < 0x0a) {
+                escaped[i++] = h_val + '0';
+            }
+            else {
+                escaped[i++] = h_val + + 'a' - 0xa;
+            }
+
+            unsigned char l_val = ch & 0x0f;
+            if (l_val < 0x0a) {
+                escaped[i++] = h_val + '0';
+            }
+            else {
+                escaped[i++] = h_val + 'a' - 0xa;
+            }
+        }
 
         ssid++;
     }
 
-    return pb->buf;
+    escaped[i] = 0;
+    return i;
+}
+
+ssize_t unescape_ssid(const char *escaped, size_t len, char *dst)
+{
+    size_t i = 0;
+    size_t j = 0;
+    unsigned char byte = 0;
+
+    for (i = 0; i < len; i++) {
+        if (escaped[i] == '\\') {
+            i++;
+            if (i >= len)
+                goto bad_encoding;
+
+            if (escaped[i] == 'x') {
+                i++;
+                if (i >= len)
+                    goto bad_encoding;
+
+                char ch = tolower(escaped[i]);
+                if ((ch >= '0') && (ch <= '9'))
+                    byte = (ch - '0') << 4;
+                else if ((ch >= 'a') && (ch <= 'f'))
+                    byte = (ch - 'a' + 0x0a) << 4;
+                else
+                    goto bad_encoding;
+
+                i++;
+                if (i >= len)
+                    goto bad_encoding;
+
+                ch = tolower(escaped[i]);
+                if ((ch >= '0') && (ch <= '9'))
+                    byte |= (ch - '0');
+                else if ((ch >= 'a') && (ch <= 'f'))
+                    byte |= (ch - 'a' + 0x0a);
+                else
+                    goto bad_encoding;
+
+                dst[j++] = byte;
+            }
+            else if (escaped[i] == '\\') {
+                dst[j++] = '\\';
+            }
+            else if (escaped[i] == '"') {
+                dst[j++] = '"';
+            }
+            else if (escaped[i] == '\\') {
+                dst[j++] = '\\';
+            }
+            else if (escaped[i] == 'e') {
+                dst[j++] = '\033';
+            }
+            else if (escaped[i] == 'n') {
+                dst[j++] = '\n';
+            }
+            else if (escaped[i] == 'r') {
+                dst[j++] = '\r';
+            }
+            else if (escaped[i] == 't') {
+                dst[j++] = '\t';
+            }
+            else {
+                goto bad_encoding;
+            }
+        }
+        else
+            dst[j++] = escaped[i];
+    }
+
+    dst[j] = 0;
+    return j;
+
+bad_encoding:
+    return -1;
+}
+
+char *escape_ssid_alloc(const char *ssid)
+{
+    size_t len = strlen(ssid);
+    char escaped[len * 4 + 1];
+
+    size_t escaped_len = escape_ssid(ssid, escaped);
+    if (escaped_len == len)
+        return NULL;
+
+    return strdup(escaped);
 }
 
 int print_frequency(unsigned int frequency, char *buf, size_t buf_sz)

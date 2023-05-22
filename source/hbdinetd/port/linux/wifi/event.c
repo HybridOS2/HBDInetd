@@ -178,19 +178,74 @@ fatal:
     return ret;
 }
 
+/* event data format:
+    id=%d ssid="%s" auth_failures=%u duration=%d reason=%s */
 static int on_ssid_temp_disabled(hbdbus_conn *conn,
         struct netdev_context *ctxt, const char *data, int len)
 {
-    (void)conn;
+    int netid;
+    char *escaped_ssid = NULL;
+    int ret;
+    char ssid[len + 1];
+
+    const char *p = strchr(data, '=');
+    if (p == NULL) {
+        goto bad_data;
+    }
+
+    netid = atoi(p);
+    if (netid < 0) {
+        goto bad_data;
+    }
+
+    const char *start_ssid = strchr(data, '"');
+    const char *end_ssid = strrchr(data, '"');
+    if (start_ssid == NULL || end_ssid == NULL || end_ssid == start_ssid) {
+        goto bad_data;
+    }
+
+    start_ssid += 1;
+    escaped_ssid = strndup(start_ssid, end_ssid - start_ssid);
+    size_t my_len = strlen(escaped_ssid);
+    if (unescape_ssid(escaped_ssid, my_len, ssid) < 0) {
+        goto bad_data;
+    }
+
+    const char *reason = strrchr(data, '=');
+    if (reason == NULL) {
+        goto bad_data;
+    }
+    reason++;
+
+    /* 1) Fire WiFiFaileConnAttempt event. */
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
+    if (pcutils_printbuf_init(pb)) {
+        HLOG_ERR("Failed when initializing print buffer\n");
+        goto failed;
+    }
+
+    pcutils_printbuf_format(pb,
+            "{\"ssid\":\"%s\","
+            "\"reason\":\"%s\"}",
+            escaped_ssid, reason);
+
+    ret = hbdbus_fire_event(conn, BUBBLE_WIFIFAILEDCONNATTEMPT, pb->buf);
+    free(pb->buf);
+
+    if (escaped_ssid)
+        free(escaped_ssid);
+
+    /* 2) If the network is newly added, remove it. */
     (void)ctxt;
-    (void)data;
-    (void)len;
 
-    /* TODO:
-       1) Fire WiFiFaileConnAttempt event.
-       2) If the network is newly added, remove it. */
+    return ret;
 
-    return 0;
+bad_data:
+    HLOG_WARN("Bad event data: %s\n", data);
+failed:
+    if (escaped_ssid)
+        free(escaped_ssid);
+    return -1;
 }
 
 static int on_terminating(hbdbus_conn *conn,
