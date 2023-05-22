@@ -185,7 +185,10 @@ static int on_ssid_temp_disabled(hbdbus_conn *conn,
     (void)ctxt;
     (void)data;
     (void)len;
-    /* TODO: if the network is newly added, remove it */
+
+    /* TODO:
+       1) Fire WiFiFaileConnAttempt event.
+       2) If the network is newly added, remove it. */
 
     return 0;
 }
