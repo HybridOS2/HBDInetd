@@ -331,7 +331,6 @@ int wifi_load_saved_networks(struct netdev_context *ctxt)
         return -1;
     }
 
-    HLOG_INFO("Result of LIST_NETWORKS:\n%s\n", reply);
     if (wifi_parse_networks(&ctxt->saved_networks, reply, reply_len))
         return -1;
 
@@ -652,8 +651,6 @@ int wifi_update_status(struct netdev_context *ctxt)
         HLOG_ERR("Failed STATUS\n");
         return -1;
     }
-
-    HLOG_INFO("Result of STATUS:\n%s\n", reply);
 
     if (wifi_parse_status(ctxt->status, reply, reply_len)) {
         HLOG_ERR("Failed parsing STATUS\n");

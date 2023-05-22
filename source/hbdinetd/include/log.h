@@ -24,6 +24,8 @@
 #ifndef __log_h_
 #define __log_h_
 
+#undef NDEBUG
+
 #include <purc/purc-helpers.h>
 
 #define HLOG_ERR(x, ...)   \
@@ -35,11 +37,16 @@
 #define HLOG_NOTE(x, ...)    \
     purc_log_notice("%s: " x, __func__, ##__VA_ARGS__)
 
-#define HLOG_DEBUG(x, ...)   \
-    purc_log_debug("%s: " x, __func__, ##__VA_ARGS__)
+#ifdef NDEBUG
+#   define HLOG_DEBUG(x, ...)
+#   define HLOG_INFO(x, ...)
+#else
+#   define HLOG_DEBUG(x, ...)   \
+        purc_log_debug("%s: " x, __func__, ##__VA_ARGS__)
 
-#define HLOG_INFO(x, ...)    \
-    purc_log_info("%s: " x, __func__, ##__VA_ARGS__)
+#   define HLOG_INFO(x, ...)    \
+        purc_log_info("%s: " x, __func__, ##__VA_ARGS__)
+#endif
 
 #endif /* not defined __log_h_ */
 

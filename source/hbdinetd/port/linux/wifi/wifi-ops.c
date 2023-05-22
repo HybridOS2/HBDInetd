@@ -237,10 +237,10 @@ static void netdev_context_delete(struct netdev_context *ctxt)
 
 int wifi_device_on(hbdbus_conn *conn, struct network_device *netdev)
 {
-    (void)conn;
-
-    if (netdev->ctxt)
+    if (netdev->ctxt) {
+        HLOG_WARN("The WiFi device %s is already on!\n", netdev->ifname);
         return 0;
+    }
 
     netdev->ctxt = netdev_context_new();
     if (netdev->ctxt == NULL) {
@@ -254,7 +254,8 @@ int wifi_device_on(hbdbus_conn *conn, struct network_device *netdev)
         ret = netdev_config_iface_up(netdev->ifname, netdev);
         if (ret) {
             HLOG_ERR("Failed to make WiFi device up; you may consult `rfkill`!\n");
-            return errno;
+            ret = errno;
+            goto failed;
         }
     }
 
@@ -268,7 +269,6 @@ int wifi_device_on(hbdbus_conn *conn, struct network_device *netdev)
             TEMP_FAILURE_RETRY(usleep(US_100MS * 2));
             ret = wifi_connect_to_supplicant(netdev->ctxt);
             if (ret == 0) {
-                HLOG_INFO("Connected to wpa_supplicant!\n");
                 break;
             }
             nr_tries++;
@@ -276,39 +276,50 @@ int wifi_device_on(hbdbus_conn *conn, struct network_device *netdev)
 
         if (ret) {
             HLOG_ERR("Give up after 10 retries to connect to wpa_supplicant!\n");
+            ret = ERR_DEVICE_CONTROLLER;
+            goto failed;
         }
     }
 
+    HLOG_INFO("Connected to wpa_supplicant!\n");
+
     if (wifi_load_saved_networks(netdev->ctxt)) {
+        ret = ERR_DEVICE_CONTROLLER;
         goto failed;
     }
 
+    HLOG_INFO("Loaded saved networks!\n");
+    if (register_wifi_interfaces(conn)) {
+        ret = ERR_DATA_BUS;
+        goto failed;
+    }
+
+    HLOG_INFO("Switch %s on successfully!\n", netdev->ifname);
     return 0;
 
 failed:
     netdev_context_delete(netdev->ctxt);
     netdev->ctxt = NULL;
-    return ERR_DEVICE_CONTROLLER;
+    return ret;
 }
 
 int wifi_device_off(hbdbus_conn *conn, struct network_device *netdev)
 {
-    (void)conn;
-
     if (netdev->ctxt == NULL || netdev->ctxt->ctrl_conn == NULL)
         return EPERM;
 
-    int ret;
+    revoke_wifi_interfaces(conn);
 
     netdev_context_delete(netdev->ctxt);
     netdev->ctxt = NULL;
 
-    ret = netdev_config_iface_down(netdev->ifname, netdev);
+    int ret = netdev_config_iface_down(netdev->ifname, netdev);
     if (ret) {
         HLOG_ERR("Failed to make WiFi device down!\n");
         return errno;
     }
 
+    HLOG_INFO("Switch %s off successfully!\n", netdev->ifname);
     return 0;
 }
 

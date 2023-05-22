@@ -325,8 +325,8 @@ int wifi_start_supplicant(struct netdev_context *ctxt, int p2p_supported)
 int wifi_stop_supplicant(struct netdev_context *ctxt)
 {
     (void)ctxt;
-//      system("/etc/wifi/wifi stop");                        // gengyue
-      return 0;
+    stop_daemon(WIFI_SUPP_PID_FILE);
+    return 0;
 }
 
 #define SUPPLICANT_TIMEOUT      3000000  // microseconds
@@ -575,6 +575,8 @@ int wifi_command(struct netdev_context *ctxt,
     size_t my_len = *reply_len;
     --my_len;
     if (wifi_send_command(ctxt, cmd, reply, &my_len)) {
+        HLOG_WARN("Failed command: %s\n", cmd);
+        ctxt->cmd_failure_count++;
         return -1;
     }
 
@@ -587,6 +589,7 @@ int wifi_command(struct netdev_context *ctxt,
     }
 
     reply[*reply_len - 1] = '\0';
+    HLOG_INFO("Results of command: %s:\n%s\n", cmd, reply);
     return 0;
 }
 

@@ -93,11 +93,13 @@ enum {
 
 // errors
 #define ERR_OK                          0
-#define ERR_DEVICE_CONTROLLER           -1
-#define ERR_TWO_MANY_FAILURES           -2
-#define ERR_WPA_INVALID_SSID            -3
-#define ERR_WPA_INVALID_PASSPHRASE      -4
-#define ERR_WPA_INVALID_KEYMGMT         -5
+#define ERR_DATA_BUS                    -1
+#define ERR_DEVICE_CONTROLLER           -2
+#define ERR_TWO_MANY_FAILURES           -3
+#define ERR_WPA_INVALID_SSID            -4
+#define ERR_WPA_INVALID_PASSPHRASE      -5
+#define ERR_WPA_INVALID_KEYMGMT         -6
+#define ERR_WPA_WRONG_PASSPHRASE        -7
 
 // for network changed
 #define NETWORK_CHANGED_NAME            ((0x01) << 0)

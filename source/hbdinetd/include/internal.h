@@ -302,6 +302,7 @@ int print_hotspots(const struct list_head *hotspots,
 
 /* pathname will be the first argument. */
 int start_daemon(const char *pathname, const char *arg, ...);
+int stop_daemon(const char *pidfile);
 
 /* common-iface.c */
 int register_common_interfaces(hbdbus_conn *conn);

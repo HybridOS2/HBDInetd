@@ -27,16 +27,21 @@
 #include <errno.h>
 #include <stdarg.h>
 
+#include <sys/stat.h>
 #include <sys/types.h>
+#include <fcntl.h>
 #include <unistd.h>
+#include <signal.h>
 
 const char *error_messages[] = {
     "Ok",                                       // ERR_OK
+    "Error when interacting with data bus.",    // ERR_DATA_BUS
     "Error in device controller."               // ERR_DEVICE_CONTROLLER
     "Two many failures occurred."               // ERR_TWO_MANY_FAILURES
     "Invalid SSID."                             // ERR_WPA_INVALID_SSID
     "Invalid passphrase."                       // ERR_WPA_INVALID_PASSPHRASE
     "Invalid key management method."            // ERR_WPA_INVALID_KEYMGMT
+    "Wrong passphrase."                         // ERR_WPA_WRONG_PASSPHRASE
 };
 
 const char *get_error_message(int errcode)
@@ -253,7 +258,7 @@ int start_daemon(const char *pathname, const char *arg, ...)
 
     p = (char *)arg;
     size_t i = 0;
-    argv[i++] = pathname;
+    argv[i++] = (char *)pathname;
     nr_args--;
     while (nr_args) {
         argv[i++] = p;
@@ -286,4 +291,31 @@ int start_daemon(const char *pathname, const char *arg, ...)
 #ifndef __clang__
 #pragma GCC diagnostic pop
 #endif
+
+int stop_daemon(const char *pid_file)
+{
+    int fd = open(pid_file, O_RDONLY);
+    if (fd >= 0) {
+        char buf[64];
+
+        ssize_t n = read(fd, buf, sizeof(buf) - 1);
+        if (n < 0)
+            goto failed;
+
+        close(fd);
+        fd = -1;
+
+        buf[n] = 0;
+        long pid = strtol(buf, NULL, 10);
+        if (pid <= 0)
+            goto failed;
+
+        return kill((pid_t)pid, SIGKILL);
+    }
+
+failed:
+    if (fd >= 0)
+        close(fd);
+    return -1;
+}
 

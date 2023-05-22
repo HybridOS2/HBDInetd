@@ -90,10 +90,12 @@ static char* openDevice(hbdbus_conn* conn, const char* from_endpoint,
     netdev = check_network_device(info, method_param, DEVICE_TYPE_UNKNOWN,
             &errcode);
     if (netdev == NULL) {
+        errcode = ENOENT;
         goto done;
     }
 
     if (netdev->status == DEVICE_STATUS_RUNNING) {
+        HLOG_INFO("The device %s is already running\n", netdev->ifname);
         errcode = 0;
         goto done;
     }
