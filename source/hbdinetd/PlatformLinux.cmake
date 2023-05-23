@@ -20,9 +20,6 @@ list(APPEND hbdinetd_SOURCES
     "${HBDINETD_DIR}/port/linux/wifi/wifi.c"
     "${HBDINETD_DIR}/port/linux/wifi/event.c"
     "${HBDINETD_DIR}/port/linux/wifi/helpers.c"
-#    "${HBDINETD_DIR}/port/linux/wifi/wpa-supplicant-conf.c"
-#    "${HBDINETD_DIR}/port/linux/wifi/wifi_state_machine.c"
-#    "${HBDINETD_DIR}/port/linux/wifi/wifimanager.c"
 )
 
 install(FILES
