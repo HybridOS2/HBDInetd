@@ -243,7 +243,7 @@ get_hotspot_list(struct netdev_context *ctxt, int *curr_netid)
         goto failed;
     }
 
-    if (wifi_parse_scan_results(&ctxt->hotspots, ctxt->buf, reply_len)) {
+    if (wifi_parse_scan_results(ctxt, ctxt->buf, reply_len)) {
         HLOG_ERR("Failed when parsing scan results\n");
         goto failed;
     }

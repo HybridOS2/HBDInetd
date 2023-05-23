@@ -97,7 +97,7 @@ int wifi_get_netid_from_ssid(struct netdev_context *ctxt, const char *ssid)
     return -1;
 }
 
-int wifi_parse_scan_results(struct list_head *hotspots,
+int wifi_parse_scan_results(struct netdev_context *ctxt,
         const char *results, size_t max_len)
 {
     const char *start = results;
@@ -184,7 +184,8 @@ int wifi_parse_scan_results(struct list_head *hotspots,
         }
 
         one->escaped_ssid = pcutils_escape_string_for_json(one->ssid);
-        list_add_tail(&one->ln, hotspots);
+        one->netid = wifi_get_netid_from_ssid(ctxt, one->ssid);
+        list_add_tail(&one->ln, &ctxt->hotspots);
     }
 
     return 0;
@@ -820,6 +821,10 @@ int wifi_update_hotspot_by_bssid(struct netdev_context *ctxt,
         }
     }
 
+    if (hotspot->ssid)
+        hotspot->netid = wifi_get_netid_from_ssid(ctxt, hotspot->ssid);
+    else
+        hotspot->netid = -1;
     return 0;
 
 failed:
@@ -969,3 +974,10 @@ int wifi_remove_network(struct netdev_context *ctxt, int netid)
 
     return 0;
 }
+
+int wifi_issue_dhcp_request(struct netdev_context *ctxt)
+{
+    (void)ctxt;
+    return 0;
+}
+

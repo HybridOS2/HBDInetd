@@ -50,6 +50,11 @@ static int on_connected(hbdbus_conn *conn,
 
     /* Save config */
     if (ctxt->new_netid >= 0) {
+        if (ctxt->status->ssid) {
+            kvlist_set(&ctxt->saved_networks,
+                    ctxt->status->ssid, &ctxt->new_netid);
+        }
+
         size_t len = WIFI_MSG_BUF_SIZE;
         if (wifi_command(ctxt, "SAVE_CONFIG", ctxt->buf, &len)) {
             HLOG_WARN("Failed to save config\n");
@@ -58,6 +63,7 @@ static int on_connected(hbdbus_conn *conn,
     }
 
     /* TODO: Issue DHCP request */
+    wifi_issue_dhcp_request(ctxt);
 
     if (ctxt->status && ctxt->status->bssid) {
         struct pcutils_printbuf my_buff, *pb = &my_buff;
@@ -153,7 +159,7 @@ static int on_scan_results(hbdbus_conn *conn,
         goto failed;
     }
 
-    if (wifi_parse_scan_results(&ctxt->hotspots, ctxt->buf, reply_len)) {
+    if (wifi_parse_scan_results(ctxt, ctxt->buf, reply_len)) {
         HLOG_ERR("Failed when parsing scan results\n");
         goto failed;
     }
