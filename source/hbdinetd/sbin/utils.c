@@ -124,6 +124,35 @@ failed:
     return NULL;
 }
 
+size_t convert_to_hex_string(const char *src, char *hex)
+{
+    size_t i = 0;
+    unsigned char ch;
+    while ((ch = *src)) {
+
+        unsigned char h_val = (ch & 0xf0) >> 4;
+        if (h_val < 0x0a) {
+            hex[i++] = '0' + h_val;
+        }
+        else {
+            hex[i++] = 'a' + (h_val - 0xa);
+        }
+
+        unsigned char l_val = ch & 0x0f;
+        if (l_val < 0x0a) {
+            hex[i++] = '0' + l_val;
+        }
+        else {
+            hex[i++] = 'a' + (l_val - 0xa);
+        }
+
+        src++;
+    }
+
+    hex[i] = 0;
+    return i;
+}
+
 size_t escape_string_to_literal_text(const char *src, char *escaped)
 {
     size_t i = 0;
@@ -167,18 +196,18 @@ size_t escape_string_to_literal_text(const char *src, char *escaped)
 
             unsigned char h_val = (ch & 0xf0) >> 4;
             if (h_val < 0x0a) {
-                escaped[i++] = h_val + '0';
+                escaped[i++] = '0' + h_val;
             }
             else {
-                escaped[i++] = h_val + + 'a' - 0xa;
+                escaped[i++] = 'a' + (h_val - 0xa);
             }
 
             unsigned char l_val = ch & 0x0f;
-            if (l_val < 0x0a) {
-                escaped[i++] = h_val + '0';
+            if (h_val < 0x0a) {
+                escaped[i++] = '0' + l_val;
             }
             else {
-                escaped[i++] = h_val + 'a' - 0xa;
+                escaped[i++] = 'a' + (l_val - 0xa);
             }
         }
 
@@ -321,7 +350,7 @@ int print_hotspots(const struct list_head *hotspots,
                 "\"signalLevel\":%d,"
                 "\"isConnected\":%s"
                 "},",
-                hotspot->bssid,
+                hotspot->escaped_ssid ? hotspot->escaped_ssid : hotspot->bssid,
                 hotspot->ssid,
                 frequency,
                 hotspot->capabilities,

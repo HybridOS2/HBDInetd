@@ -448,7 +448,8 @@ static int wifi_parse_status(struct wifi_status *status,
             }
 
             status->ssid = strdup(ssid);
-            status->escaped_ssid = escape_string_to_literal_text_alloc(status->ssid);
+            status->escaped_ssid =
+                escape_string_to_literal_text_alloc(status->ssid);
             HLOG_INFO("Got ssid: %s\n", status->ssid);
         }
         else if (strncasecmp(start, STATUS_KEY_PAIRWISE_CIPHER, len) == 0) {
@@ -684,14 +685,15 @@ int wifi_update_network(struct netdev_context *ctxt, int netid,
         const char *ssid, const char *keymgmt, const char *passphrase)
 {
     char cmd[256];
-    char escaped_ssid[strlen(ssid) * 4 + 1];
-    escape_string_to_literal_text(ssid, escaped_ssid);
+
+    char hex_ssid[strlen(ssid) * 2 + 1];
+    convert_to_hex_string(ssid, hex_ssid);
 
     int n = snprintf(cmd, sizeof(cmd),
-            "SET_NETWORK %d ssid \"%s\"", netid, escaped_ssid);
+            "SET_NETWORK %d ssid %s", netid, hex_ssid);
     if (n < 0 || n >= (int)sizeof(cmd)) {
         HLOG_ERR("Too small buffer for `SET_NETWORK %d ssid %s` command\n",
-                netid, escaped_ssid);
+                netid, hex_ssid);
         return -1;
     }
 
@@ -712,8 +714,9 @@ int wifi_update_network(struct netdev_context *ctxt, int netid,
             return -1;
         }
 
-        n = snprintf(cmd, sizeof(cmd), "SET_NETWORK %d psk \"%s\"",
-                netid, passphrase);
+        char hex_psk[strlen(passphrase) * 2 + 1];
+        convert_to_hex_string(passphrase, hex_psk);
+        n = snprintf(cmd, sizeof(cmd), "SET_NETWORK %d psk %s", netid, hex_psk);
         if (n < 0 || n >= (int)sizeof(cmd)) {
             HLOG_ERR("Too small buffer for `psk` command\n");
             return -1;
@@ -733,7 +736,9 @@ int wifi_update_network(struct netdev_context *ctxt, int netid,
             return -1;
         }
 
-        n = sprintf(cmd, "SET_NETWORK %d wep_key0 \"%s\"", netid, passphrase);
+        char hex_key[strlen(passphrase) * 2 + 1];
+        convert_to_hex_string(passphrase, hex_key);
+        n = sprintf(cmd, "SET_NETWORK %d wep_key0 %s", netid, hex_key);
         if (n < 0 || n >= (int)sizeof(cmd)) {
             HLOG_ERR("Too small buffer for `wep_key0` command\n");
             return -1;
@@ -765,12 +770,14 @@ int wifi_update_network(struct netdev_context *ctxt, int netid,
         return -1;
     }
 
+#if 0
     sprintf(cmd, "SET_NETWORK %d scan_ssid 1", netid);
     max_len = WIFI_MSG_BUF_SIZE;
     if (wifi_command(ctxt, cmd, results, &max_len)) {
         HLOG_ERR("Failed `%s` command\n", cmd);
         return -1;
     }
+#endif
 
     /* TODO: set priority for network: SET_NETWORK %d priority %d */
     return 0;

@@ -297,6 +297,7 @@ struct network_device *check_network_device_ex(struct run_info *info,
         const char *method_param, int expect_type,
         const char *extra_key, purc_variant_t *extra_value, int *errcode);
 
+size_t convert_to_hex_string(const char *src, char *hex);
 size_t escape_string_to_literal_text(const char *src, char *escaped);
 ssize_t unescape_literal_text(const char *escaped, size_t len, char *dst);
 char *escape_string_to_literal_text_alloc(const char *src);

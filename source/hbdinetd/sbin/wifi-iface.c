@@ -434,7 +434,7 @@ static char *wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint,
             "\"keyMgmt\":\"%s\","
             "\"signalLevel\":%d,",
             hotspot->bssid,
-            hotspot->ssid,
+            hotspot->escaped_ssid ? hotspot->escaped_ssid : hotspot->ssid,
             frequency,
             status->key_mgmt,
             hotspot->signal_level);
