@@ -150,7 +150,7 @@ int wifi_parse_scan_results(struct list_head *hotspots,
         }
 
         one->ssid = malloc(len + 1);
-        if (unescape_ssid(start, len, one->ssid) <= 0) {
+        if (unescape_literal_text(start, len, one->ssid) <= 0) {
             HLOG_WARN("Ignore bad escaped SSID\n");
             release_hotspot(one);
             one = NULL;
@@ -167,7 +167,7 @@ int wifi_parse_scan_results(struct list_head *hotspots,
             HLOG_INFO("Nomalized valid UTF-8 SSID: %s\n", one->ssid);
         }
 
-        one->escaped_ssid = escape_ssid_alloc(one->ssid);
+        one->escaped_ssid = escape_string_to_literal_text_alloc(one->ssid);
         list_add_tail(&one->ln, hotspots);
     }
 
@@ -209,7 +209,7 @@ int wifi_parse_networks(struct kvlist *networks,
             }
 
             char ssid[len + 1];
-            if (unescape_ssid(start, len, ssid) < 0) {
+            if (unescape_literal_text(start, len, ssid) < 0) {
                 HLOG_INFO("Ignored SSDI with bad hex encoding: %s\n", start);
                 goto next_line;
             }
@@ -437,7 +437,7 @@ static int wifi_parse_status(struct wifi_status *status,
 
             size_t nr_chars;
             char ssid[len + 1];
-            if (unescape_ssid(start, len, ssid) < 0) {
+            if (unescape_literal_text(start, len, ssid) < 0) {
                 HLOG_ERR("Bad hex encoding: %s\n", start);
                 goto failed;
             }
@@ -448,7 +448,7 @@ static int wifi_parse_status(struct wifi_status *status,
             }
 
             status->ssid = strdup(ssid);
-            status->escaped_ssid = escape_ssid_alloc(status->ssid);
+            status->escaped_ssid = escape_string_to_literal_text_alloc(status->ssid);
             HLOG_INFO("Got ssid: %s\n", status->ssid);
         }
         else if (strncasecmp(start, STATUS_KEY_PAIRWISE_CIPHER, len) == 0) {
@@ -685,7 +685,7 @@ int wifi_update_network(struct netdev_context *ctxt, int netid,
 {
     char cmd[256];
     char escaped_ssid[strlen(ssid) * 4 + 1];
-    escape_ssid(ssid, escaped_ssid);
+    escape_string_to_literal_text(ssid, escaped_ssid);
 
     int n = snprintf(cmd, sizeof(cmd),
             "SET_NETWORK %d ssid \"%s\"", netid, escaped_ssid);

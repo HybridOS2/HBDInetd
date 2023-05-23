@@ -207,7 +207,7 @@ static int on_ssid_temp_disabled(hbdbus_conn *conn,
     start_ssid += 1;
     escaped_ssid = strndup(start_ssid, end_ssid - start_ssid);
     size_t my_len = strlen(escaped_ssid);
-    if (unescape_ssid(escaped_ssid, my_len, ssid) < 0) {
+    if (unescape_literal_text(escaped_ssid, my_len, ssid) < 0) {
         goto bad_data;
     }
 

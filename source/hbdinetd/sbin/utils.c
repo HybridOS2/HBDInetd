@@ -124,11 +124,11 @@ failed:
     return NULL;
 }
 
-size_t escape_ssid(const char *ssid, char *escaped)
+size_t escape_string_to_literal_text(const char *src, char *escaped)
 {
     size_t i = 0;
-    while (*ssid != '\0') {
-        unsigned char ch = (unsigned char)*ssid;
+    while (*src != '\0') {
+        unsigned char ch = (unsigned char)*src;
 
         if (ch <= 0x7f) {
             switch (ch) {
@@ -182,14 +182,14 @@ size_t escape_ssid(const char *ssid, char *escaped)
             }
         }
 
-        ssid++;
+        src++;
     }
 
     escaped[i] = 0;
     return i;
 }
 
-ssize_t unescape_ssid(const char *escaped, size_t len, char *dst)
+ssize_t unescape_literal_text(const char *escaped, size_t len, char *dst)
 {
     size_t i = 0;
     size_t j = 0;
@@ -264,12 +264,12 @@ bad_encoding:
     return -1;
 }
 
-char *escape_ssid_alloc(const char *ssid)
+char *escape_string_to_literal_text_alloc(const char *src)
 {
-    size_t len = strlen(ssid);
+    size_t len = strlen(src);
     char escaped[len * 4 + 1];
 
-    size_t escaped_len = escape_ssid(ssid, escaped);
+    size_t escaped_len = escape_string_to_literal_text(src, escaped);
     if (escaped_len == len)
         return NULL;
 
