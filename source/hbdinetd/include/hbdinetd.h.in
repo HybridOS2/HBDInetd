@@ -58,6 +58,8 @@
 #define BUBBLE_WIFICONFIGURED               "WiFiConfigured"
 #define BUBBLE_WIFIFAILEDCONNATTEMPT        "WiFiFailedConnAttempt"
 #define BUBBLE_WIFIDISCONNECTED             "WiFiDisconnected"
+#define BUBBLE_WIFIHOTSPOTFOUND             "WiFiHotspotFound"
+#define BUBBLE_WIFIHOTSPOTLOST              "WiFiHotspotLost"
 #define BUBBLE_WIFISCANFINISHED             "WiFiScanFinished"
 #define BUBBLE_WIFISIGNALLEVELCHANGED       "WiFiSignalLevelChanged"
 

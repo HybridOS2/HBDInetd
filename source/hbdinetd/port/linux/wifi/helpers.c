@@ -31,7 +31,7 @@
 #include "wifi.h"
 #include "helpers.h"
 
-static void release_hotspot(struct wifi_hotspot *one)
+void wifi_release_one_hotspot(struct wifi_hotspot *one)
 {
     if (one->bssid)
         free(one->bssid);
@@ -51,11 +51,27 @@ void wifi_reset_hotspots(struct list_head *hotspots)
         struct wifi_hotspot *hotspot;
         hotspot = list_entry(p, struct wifi_hotspot, ln);
         list_del(&hotspot->ln);
-        release_hotspot(hotspot);
+        wifi_release_one_hotspot(hotspot);
     }
 }
 
-const struct wifi_hotspot *
+struct wifi_hotspot *
+wifi_get_hotspot_by_bssid(struct netdev_context *ctxt, const char *bssid)
+{
+    struct list_head *p;
+    list_for_each(p, &ctxt->hotspots) {
+        struct wifi_hotspot *hotspot;
+        hotspot = list_entry(p, struct wifi_hotspot, ln);
+
+        if (strcmp(bssid, hotspot->bssid) == 0) {
+            return hotspot;
+        }
+    }
+
+    return NULL;
+}
+
+struct wifi_hotspot *
 wifi_get_hotspot_by_ssid(struct netdev_context *ctxt, const char *ssid)
 {
     struct list_head *p;
@@ -144,7 +160,7 @@ int wifi_parse_scan_results(struct list_head *hotspots,
         size_t nr_chars = 0;
         if (len == 0) {
             HLOG_WARN("Ignore hotspot with empty SSID\n");
-            release_hotspot(one);
+            wifi_release_one_hotspot(one);
             one = NULL;
             continue;
         }
@@ -152,14 +168,14 @@ int wifi_parse_scan_results(struct list_head *hotspots,
         one->ssid = malloc(len + 1);
         if (unescape_literal_text(start, len, one->ssid) <= 0) {
             HLOG_WARN("Ignore bad escaped SSID\n");
-            release_hotspot(one);
+            wifi_release_one_hotspot(one);
             one = NULL;
             continue;
         }
         else if (!pcutils_string_check_utf8(one->ssid, -1, &nr_chars, NULL)
                 || nr_chars == 0) {
             HLOG_WARN("Ignore bad UTF8-encoded SSID: %s\n", one->ssid);
-            release_hotspot(one);
+            wifi_release_one_hotspot(one);
             one = NULL;
             continue;
         }
@@ -167,7 +183,7 @@ int wifi_parse_scan_results(struct list_head *hotspots,
             HLOG_INFO("Nomalized valid UTF-8 SSID: %s\n", one->ssid);
         }
 
-        one->escaped_ssid = escape_string_to_literal_text_alloc(one->ssid);
+        one->escaped_ssid = pcutils_escape_string_for_json(one->ssid);
         list_add_tail(&one->ln, hotspots);
     }
 
@@ -176,7 +192,7 @@ int wifi_parse_scan_results(struct list_head *hotspots,
 failed:
     HLOG_WARN("Ignored some results\n");
     if (one)
-        release_hotspot(one);
+        wifi_release_one_hotspot(one);
     return 0;
 }
 
@@ -416,7 +432,7 @@ static int wifi_parse_status(struct wifi_status *status,
             break;
 
         size_t len = end - start;
-        if (strncasecmp(start, "bssid", len) == 0) {
+        if (strncasecmp2ltr(start, "bssid", len) == 0) {
             start = end + 1;
             end = strstr(start, "\n");
             if (end)
@@ -427,7 +443,7 @@ static int wifi_parse_status(struct wifi_status *status,
             status->bssid = strndup(start, len);
             HLOG_INFO("Got bssid: %s\n", status->bssid);
         }
-        else if (strncasecmp(start, "ssid", len) == 0) {
+        else if (strncasecmp2ltr(start, "ssid", len) == 0) {
             start = end + 1;
             end = strstr(start, "\n");
             if (end)
@@ -449,10 +465,10 @@ static int wifi_parse_status(struct wifi_status *status,
 
             status->ssid = strdup(ssid);
             status->escaped_ssid =
-                escape_string_to_literal_text_alloc(status->ssid);
+                pcutils_escape_string_for_json(status->ssid);
             HLOG_INFO("Got ssid: %s\n", status->ssid);
         }
-        else if (strncasecmp(start, STATUS_KEY_PAIRWISE_CIPHER, len) == 0) {
+        else if (strncasecmp2ltr(start, STATUS_KEY_PAIRWISE_CIPHER, len) == 0) {
             start = end + 1;
             end = strstr(start, "\n");
             if (end)
@@ -462,7 +478,7 @@ static int wifi_parse_status(struct wifi_status *status,
 
             status->pairwise_cipher = strndup(start, len);
         }
-        else if (strncasecmp(start, STATUS_KEY_GROUP_CIPHER, len) == 0) {
+        else if (strncasecmp2ltr(start, STATUS_KEY_GROUP_CIPHER, len) == 0) {
             start = end + 1;
             end = strstr(start, "\n");
             if (end)
@@ -472,7 +488,7 @@ static int wifi_parse_status(struct wifi_status *status,
 
             status->group_cipher = strndup(start, len);
         }
-        else if (strncasecmp(start, STATUS_KEY_KEY_MGMT, len) == 0) {
+        else if (strncasecmp2ltr(start, STATUS_KEY_KEY_MGMT, len) == 0) {
             start = end + 1;
             end = strstr(start, "\n");
             if (end)
@@ -482,7 +498,7 @@ static int wifi_parse_status(struct wifi_status *status,
 
             status->key_mgmt = strndup(start, len);
         }
-        else if (strncasecmp(start, STATUS_KEY_IP_ADDRESS, len) == 0) {
+        else if (strncasecmp2ltr(start, STATUS_KEY_IP_ADDRESS, len) == 0) {
             start = end + 1;
             end = strstr(start, "\n");
             if (end)
@@ -492,7 +508,7 @@ static int wifi_parse_status(struct wifi_status *status,
 
             status->ip_address = strndup(start, len);
         }
-        else if (strncasecmp(start, STATUS_KEY_WPA_STATE, len) == 0) {
+        else if (strncasecmp2ltr(start, STATUS_KEY_WPA_STATE, len) == 0) {
             start = end + 1;
             end = strstr(start, "\n");
             if (end)
@@ -504,7 +520,7 @@ static int wifi_parse_status(struct wifi_status *status,
             HLOG_INFO("Got wpa_state: %s\n",
                     wpa_state_names[status->wpa_state]);
         }
-        else if (strncasecmp(start, STATUS_KEY_SUPP_PAE_STATE, len) == 0) {
+        else if (strncasecmp2ltr(start, STATUS_KEY_SUPP_PAE_STATE, len) == 0) {
             start = end + 1;
             end = strstr(start, "\n");
             if (end)
@@ -514,7 +530,7 @@ static int wifi_parse_status(struct wifi_status *status,
 
             status->supp_pae_state = supp_pae_state_from_string(start, len);
         }
-        else if (strncasecmp(start, STATUS_KEY_SUPP_PORT_STATUS, len) == 0) {
+        else if (strncasecmp2ltr(start, STATUS_KEY_SUPP_PORT_STATUS, len) == 0) {
             start = end + 1;
             end = strstr(start, "\n");
             if (end)
@@ -524,7 +540,7 @@ static int wifi_parse_status(struct wifi_status *status,
 
             status->supp_port_status = supp_port_status_from_string(start, len);
         }
-        else if (strncasecmp(start, STATUS_KEY_EAP_STATE, len) == 0) {
+        else if (strncasecmp2ltr(start, STATUS_KEY_EAP_STATE, len) == 0) {
             start = end + 1;
             end = strstr(start, "\n");
             if (end)
@@ -590,15 +606,16 @@ int wifi_update_status(struct netdev_context *ctxt)
         return -1;
     }
 
+    if (ctxt->status->bssid) {
+        ctxt->status->hotspot =
+            wifi_get_hotspot_by_bssid(ctxt, ctxt->status->bssid);
+        if (ctxt->status->hotspot == NULL) {
+            HLOG_ERR("BSS %s is not in the hotspot list\n", ctxt->status->bssid);
+        }
+    }
+
     if (ctxt->status->ssid) {
-        void *data = kvlist_get(&ctxt->saved_networks, ctxt->status->ssid);
-        if (data) {
-            ctxt->status->netid = *(int *)data;
-        }
-        else {
-            HLOG_WARN("Current network is not saved one: %s\n",
-                    ctxt->status->ssid);
-        }
+        ctxt->status->netid = wifi_get_netid_from_ssid(ctxt, ctxt->status->ssid);
     }
 
     return 0;
@@ -626,7 +643,7 @@ wifi_get_keymgmt_from_capabilities(const struct wifi_hotspot *hotspot)
 int wifi_get_signal_level_by_bssid(struct netdev_context *ctxt,
         const char *bssid)
 {
-    char cmd[64];
+    char cmd[128];
     int n = snprintf(cmd, sizeof(cmd), "BSS %s", bssid);
     if (n < 0 || n >= (int)sizeof(cmd)) {
         HLOG_ERR("Too small buffer for `BSS %s` command\n", bssid);
@@ -646,7 +663,7 @@ int wifi_get_signal_level_by_bssid(struct netdev_context *ctxt,
         end = strstr(start, "=");
         if (end) {
             size_t len = end - start;
-            if (strncasecmp(start, "level", len) == 0) {
+            if (strncasecmp2ltr(start, "level", len) == 0) {
                 start = end + 1;
                 end = strstr(start, "\n");
                 if (end == NULL)
@@ -676,6 +693,134 @@ int wifi_get_signal_level_by_bssid(struct netdev_context *ctxt,
             break;
         }
     }
+
+failed:
+    return -1;
+}
+
+int wifi_update_hotspot_by_bssid(struct netdev_context *ctxt,
+        struct wifi_hotspot *hotspot, const char *bssid)
+{
+    char cmd[128];
+    int n = snprintf(cmd, sizeof(cmd), "BSS %s", bssid);
+    if (n < 0 || n >= (int)sizeof(cmd)) {
+        HLOG_ERR("Too small buffer for `BSS %s` command\n", bssid);
+        return -1;
+    }
+
+    char *results = ctxt->buf;
+    size_t max_len = WIFI_MSG_BUF_SIZE;
+    if (wifi_command(ctxt, cmd, results, &max_len)) {
+        HLOG_ERR("Failed `BSS %s` command\n", bssid);
+        return -1;
+    }
+
+    const char *start = results;
+    const char *end = NULL;
+    while (start) {
+        end = strstr(start, "=");
+        if (end) {
+            size_t len = end - start;
+            if (strncasecmp2ltr(start, "freq", len) == 0) {
+                start = end + 1;
+                end = strstr(start, "\n");
+                if (end == NULL)
+                    len = end - start;
+                else {
+                    len = strlen(start);
+                }
+
+                if (len == 0) {
+                    goto failed;
+                }
+
+                if (hotspot->frequency == 0) {
+                    hotspot->frequency = atoi(start);
+                }
+            }
+            else if (strncasecmp2ltr(start, "flags", len) == 0) {
+                start = end + 1;
+                end = strstr(start, "\n");
+                if (end == NULL)
+                    len = end - start;
+                else {
+                    len = strlen(start);
+                }
+
+                if (len == 0) {
+                    goto failed;
+                }
+
+                if (hotspot->capabilities == NULL) {
+                    hotspot->capabilities = strndup(start, len);
+                }
+            }
+            else if (strncasecmp2ltr(start, "level", len) == 0) {
+                start = end + 1;
+                end = strstr(start, "\n");
+                if (end == NULL)
+                    len = end - start;
+                else {
+                    len = strlen(start);
+                }
+
+                if (len == 0) {
+                    goto failed;
+                }
+
+                hotspot->signal_level = atoi(start);
+            }
+            else if (strncasecmp2ltr(start, "ssid", len) == 0) {
+                start = end + 1;
+                end = strstr(start, "\n");
+                if (end == NULL)
+                    len = end - start;
+                else {
+                    len = strlen(start);
+                }
+
+                if (len == 0) {
+                    goto failed;
+                }
+
+                if (hotspot->ssid == NULL) {
+                    size_t nr_chars;
+                    hotspot->ssid = malloc(len + 1);
+                    if (unescape_literal_text(start, len, hotspot->ssid) <= 0) {
+                        HLOG_WARN("Ignore bad escaped SSID\n");
+                        goto failed;
+                    }
+                    else if (!pcutils_string_check_utf8(hotspot->ssid, -1,
+                                &nr_chars, NULL) || nr_chars == 0) {
+                        HLOG_WARN("Ignore bad UTF8-encoded SSID: %s\n",
+                                hotspot->ssid);
+                        goto failed;
+                    }
+                    else {
+                        HLOG_INFO("Nomalized valid UTF-8 SSID: %s\n",
+                                hotspot->ssid);
+                    }
+
+                    hotspot->escaped_ssid =
+                        pcutils_escape_string_for_json(hotspot->ssid);
+                }
+            }
+            else {
+                start = end + 1;
+                end = strstr(start, "\n");
+                if (end)
+                    start = end + 1;
+                else {
+                    break;
+                }
+            }
+        }
+        else {
+            break;
+        }
+    }
+
+    return 0;
 
 failed:
     return -1;
@@ -797,7 +942,7 @@ int wifi_add_network(struct netdev_context *ctxt, const char *ssid,
     assert(netid >= 0);
 
     if (wifi_update_network(ctxt, netid, ssid, keymgmt, passphrase)) {
-        char cmd[64];
+        char cmd[128];
         sprintf(cmd, "REMOVE_NETWORK %d", netid);
 
         max_len = WIFI_MSG_BUF_SIZE;
@@ -810,7 +955,7 @@ int wifi_add_network(struct netdev_context *ctxt, const char *ssid,
 
 int wifi_remove_network(struct netdev_context *ctxt, int netid)
 {
-    char cmd[64];
+    char cmd[128];
 
     assert(netid >= 0);
 

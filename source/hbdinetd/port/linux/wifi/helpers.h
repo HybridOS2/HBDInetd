@@ -33,8 +33,11 @@ extern "C" {
 struct wifi_hotspot;
 struct netdev_context;
 
+void wifi_release_one_hotspot(struct wifi_hotspot *one);
 void wifi_reset_hotspots(struct list_head *hotspots);
-const struct wifi_hotspot *
+struct wifi_hotspot *
+wifi_get_hotspot_by_bssid(struct netdev_context *ctxt, const char *bssid);
+struct wifi_hotspot *
 wifi_get_hotspot_by_ssid(struct netdev_context *ctxt, const char *ssid);
 
 int wifi_load_saved_networks(struct netdev_context *ctxt);
@@ -51,6 +54,8 @@ int wifi_parse_networks(struct kvlist *networks,
 const char *
 wifi_get_keymgmt_from_capabilities(const struct wifi_hotspot *hotspot);
 
+int wifi_update_hotspot_by_bssid(struct netdev_context *ctxt,
+        struct wifi_hotspot *hotspot, const char *bssid);
 int wifi_get_signal_level_by_bssid(struct netdev_context *ctxt,
         const char *bssid);
 

@@ -234,7 +234,7 @@ static int stop_scan(struct netdev_context *ctxt)
 }
 
 static const struct list_head *
-get_hotspot_list(struct netdev_context *ctxt)
+get_hotspot_list(struct netdev_context *ctxt, int *curr_netid)
 {
     size_t reply_len = WIFI_MSG_BUF_SIZE;
     int ret = wifi_command(ctxt, "SCAN_RESULTS", ctxt->buf, &reply_len);
@@ -247,6 +247,9 @@ get_hotspot_list(struct netdev_context *ctxt)
         HLOG_ERR("Failed when parsing scan results\n");
         goto failed;
     }
+
+    if (curr_netid)
+        *curr_netid = ctxt->status->netid;
 
     return &ctxt->hotspots;
 

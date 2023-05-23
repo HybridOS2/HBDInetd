@@ -329,34 +329,44 @@ failed:
     return -1;
 }
 
-int print_hotspots(const struct list_head *hotspots,
+int print_one_hotspot(const struct wifi_hotspot *hotspot, int curr_netid,
+        struct pcutils_printbuf *pb)
+{
+    char frequency[64];
+    print_frequency(hotspot->frequency, frequency, sizeof(frequency));
+
+    pcutils_printbuf_format(pb,
+            "{"
+            "\"bssid\":\"%s\","
+            "\"ssid\":\"%s\","
+            "\"frequency\":\"%s\","
+            "\"capabilities\":\"%s\","
+            "\"signalLevel\":%d,"
+            "\"isSaved\":%s,"
+            "\"isConnected\":%s"
+            "}",
+            hotspot->escaped_ssid ? hotspot->escaped_ssid : hotspot->bssid,
+            hotspot->ssid,
+            frequency,
+            hotspot->capabilities,
+            hotspot->signal_level,
+            (hotspot->netid >= 0) ? "true":"false",
+            (curr_netid >= 0 && curr_netid == hotspot->netid) ? "true":"false");
+    return 0;
+}
+
+int print_hotspot_list(const struct list_head *hotspots, int curr_netid,
         struct pcutils_printbuf *pb)
 {
     size_t nr_hotspots = 0;
-    struct list_head *p;
 
+    struct list_head *p;
     list_for_each(p, hotspots) {
         struct wifi_hotspot *hotspot;
         hotspot = list_entry(p, struct wifi_hotspot, ln);
 
-        char frequency[64];
-        print_frequency(hotspot->frequency, frequency, sizeof(frequency));
-
-        pcutils_printbuf_format(pb,
-                "{"
-                "\"bssid\":\"%s\","
-                "\"ssid\":\"%s\","
-                "\"frequency\":\"%s\","
-                "\"capabilities\":\"%s\","
-                "\"signalLevel\":%d,"
-                "\"isConnected\":%s"
-                "},",
-                hotspot->escaped_ssid ? hotspot->escaped_ssid : hotspot->bssid,
-                hotspot->ssid,
-                frequency,
-                hotspot->capabilities,
-                hotspot->signal_level,
-                hotspot->is_connected ? "true": "false");
+        print_one_hotspot(hotspot, curr_netid, pb);
+        pcutils_printbuf_strappend(pb, ",");
 
         nr_hotspots++;
     }

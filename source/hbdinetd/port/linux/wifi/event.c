@@ -165,7 +165,7 @@ static int on_scan_results(hbdbus_conn *conn,
     }
 
     pcutils_printbuf_strappend(pb, "{\"success\":true,\"hotspots\":[");
-    print_hotspots(&ctxt->hotspots, pb);
+    print_hotspot_list(&ctxt->hotspots, ctxt->status->netid, pb);
     pcutils_printbuf_strappend(pb, "]");
 
     ret = hbdbus_fire_event(conn, BUBBLE_WIFISCANFINISHED, pb->buf);
@@ -188,14 +188,100 @@ fatal:
 }
 
 /* event data format:
+   <bss-entry-id> <bssid>
+   34 00:11:22:33:44:55 */
+static int on_bss_added(hbdbus_conn *conn,
+        struct netdev_context *ctxt, const char *data, int len)
+{
+    (void)len;
+
+    const char *bssid;
+    bssid = strrchr(data, ' ');
+    if (bssid == NULL)
+        goto bad_data;
+
+    struct wifi_hotspot *hotspot, *newone = NULL;
+    hotspot = wifi_get_hotspot_by_bssid(ctxt, bssid);
+    if (hotspot == NULL) {
+        hotspot = newone = calloc(1, sizeof(*newone));
+        if (hotspot == NULL) {
+            HLOG_ERR("Failed to allocate memory for new hotspot\n");
+            goto failed;
+        }
+    }
+
+    if (wifi_update_hotspot_by_bssid(ctxt, hotspot, bssid)) {
+        goto failed;
+    }
+
+    if (newone) {
+        list_add_tail(&newone->ln, &ctxt->hotspots);
+        newone = NULL;
+
+        struct pcutils_printbuf my_buff, *pb = &my_buff;
+        if (pcutils_printbuf_init(pb)) {
+            HLOG_ERR("Failed when initializing print buffer\n");
+            goto failed;
+        }
+
+        print_one_hotspot(newone, ctxt->status->netid, pb);
+
+        hbdbus_fire_event(conn, BUBBLE_WIFIHOTSPOTFOUND, pb->buf);
+        free(pb->buf);
+    }
+
+    return 0;
+
+bad_data:
+    HLOG_WARN("Bad event data: %s\n", data);
+failed:
+    if (newone)
+        wifi_release_one_hotspot(newone);
+    return -1;
+};
+
+static int on_bss_removed(hbdbus_conn *conn,
+        struct netdev_context *ctxt, const char *data, int len)
+{
+    (void)len;
+
+    const char *bssid;
+    bssid = strrchr(data, ' ');
+    if (bssid == NULL)
+        goto bad_data;
+
+    struct wifi_hotspot *hotspot;
+    hotspot = wifi_get_hotspot_by_bssid(ctxt, bssid);
+    if (hotspot) {
+        if (hotspot->netid >= 0 && ctxt->status->netid) {
+            wifi_update_status(ctxt);
+        }
+
+        list_del(&hotspot->ln);
+        wifi_release_one_hotspot(hotspot);
+    }
+    else {
+        HLOG_WARN("BSS (%s) is not recorded\n", bssid);
+    }
+
+    /* It's safe to reuse the buffer in context */
+    sprintf(ctxt->buf, "{\"bssid\": \"%s\"}", bssid);
+    hbdbus_fire_event(conn, BUBBLE_WIFIHOTSPOTLOST, ctxt->buf);
+    return 0;
+
+bad_data:
+    HLOG_WARN("Bad event data: %s\n", data);
+    return -1;
+};
+
+/* event data format:
     id=%d ssid="%s" auth_failures=%u duration=%d reason=%s */
 static int on_ssid_temp_disabled(hbdbus_conn *conn,
         struct netdev_context *ctxt, const char *data, int len)
 {
+    (void)len;
     int netid;
-    char *escaped_ssid = NULL;
     int ret;
-    char ssid[len + 1];
 
     const char *p = strchr(data, '=');
     if (p == NULL) {
@@ -214,11 +300,14 @@ static int on_ssid_temp_disabled(hbdbus_conn *conn,
     }
 
     start_ssid += 1;
-    escaped_ssid = strndup(start_ssid, end_ssid - start_ssid);
+    char *escaped_ssid = strndup(start_ssid, end_ssid - start_ssid);
     size_t my_len = strlen(escaped_ssid);
+    char *ssid = ctxt->buf;
     if (unescape_literal_text(escaped_ssid, my_len, ssid) < 0) {
         goto bad_data;
     }
+    free(escaped_ssid);
+    escaped_ssid = pcutils_escape_string_for_json(ssid);
 
     const char *reason = strrchr(data, '=');
     if (reason == NULL) {
@@ -267,7 +356,9 @@ static int on_terminating(hbdbus_conn *conn,
     (void)ctxt;
     (void)data;
     (void)len;
-    /* TODO */
+
+    HLOG_WARN("WAP terminated, turn off the device: %s\n", ctxt->netdev->ifname);
+    wifi_device_off(conn, ctxt->netdev);
     return 0;
 }
 
@@ -278,7 +369,9 @@ static int on_eap_failure(hbdbus_conn *conn,
     (void)ctxt;
     (void)data;
     (void)len;
+
     /* TODO */
+    HLOG_WARN("called, but not implemented\n");
     return 0;
 }
 
@@ -289,7 +382,9 @@ static int on_assoc_reject(hbdbus_conn *conn,
     (void)ctxt;
     (void)data;
     (void)len;
+
     /* TODO */
+    HLOG_WARN("called, but not implemented\n");
     return 0;
 }
 
@@ -300,6 +395,8 @@ static const struct event_handler {
     { "CONNECTED", on_connected },
     { "DISCONNECTED", on_disconnected },
     { "SCAN-RESULTS", on_scan_results },
+    { "BSS-ADDED", on_bss_added },
+    { "BSS-REMOVED", on_bss_removed },
     { "SSID-TEMP-DISABLED", on_ssid_temp_disabled },
     { "TERMINATING", on_terminating },
     { "EAP-FAILURE", on_eap_failure },
@@ -335,10 +432,11 @@ int wifi_event_handle_message(hbdbus_conn *conn,
     if (msg[0] == '\0')
         return 0;
 
-    HLOG_INFO("Got an event: %s\n", msg);
     if (strncmp(msg, "WPA:", 4) == 0) {
         if (strstr(msg, "pre-shared key may be incorrect")) {
+            HLOG_WARN("pre-shared key\n");
 
+#if 0
             ctxt->auth_failure_count++;
             if (ctxt->auth_failure_count >= MAX_RETRIES_ON_AUTH_FAILURE) {
 
@@ -348,6 +446,7 @@ int wifi_event_handle_message(hbdbus_conn *conn,
 
                 ctxt->auth_failure_count = 0;
             }
+#endif
         }
     }
     else if (strncmp(msg, "CTRL-EVENT-", 11) == 0) {

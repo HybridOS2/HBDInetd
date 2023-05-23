@@ -29,7 +29,6 @@
 #include "kvlist.h"
 
 #define PATH_WPA_SUPPLICANT     "/sbin/wpa_supplicant"
-#define PATH_DHCLIENT           "/sbin/dhclient"
 
 #define WIFI_SUPP_CTRL_DIR      "/var/run/wpa_supplicant-hbd"
 #define WIFI_SUPP_PID_FILE      "/var/run/wpa_supplicant-hbd/pid"
@@ -37,6 +36,12 @@
 #define WIFI_SUPP_CONFIG_FILE   "/etc/wpa_supplicant-hbd.conf"
 #define WIFI_SUPP_CONFIG_TEMPLATE   \
     "/app/" HBDINETD_APP_NAME "/share/doc/wpa_supplicant.conf"
+
+#define PATH_DHCLIENT           "/sbin/dhclient"
+#define DHCLIENT_CONF_FILE      "/etc/dhcp/dhclient-hbd.conf"
+#define DHCLIENT_LESS_FILE      "/etc/dhcp/dhclient-hbd.leases"
+#define DHCLIENT_PID_FILE       "/var/run/dhclient-hbd.pid"
+#define DHCLIENT_SCRIPT_FILE    "/sbin/dhclient-script"
 
 #define WIFI_MSG_BUF_SIZE                   4096
 #define MAX_RETRIES_ON_AUTH_FAILURE         3

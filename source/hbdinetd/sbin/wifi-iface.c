@@ -88,12 +88,13 @@ static char *wifiStartScanHotspots(hbdbus_conn* conn,
     }
 
     const struct list_head *hotspots;
-    hotspots = netdev->wifi_ops->get_hotspot_list(netdev->ctxt);
+    int curr_netid;
+    hotspots = netdev->wifi_ops->get_hotspot_list(netdev->ctxt, &curr_netid);
     if (hotspots == NULL) {
         goto done;
     }
 
-    print_hotspots(hotspots, pb);
+    print_hotspot_list(hotspots, curr_netid, pb);
 
     if (wait_seconds < 0.1) {
         netdev->wifi_ops->start_scan(netdev->ctxt);
@@ -142,12 +143,13 @@ static char *wifiGetHotspotList(hbdbus_conn* conn,
     }
 
     const struct list_head *hotspots;
-    hotspots = netdev->wifi_ops->get_hotspot_list(netdev->ctxt);
+    int curr_netid;
+    hotspots = netdev->wifi_ops->get_hotspot_list(netdev->ctxt, &curr_netid);
     if (hotspots == NULL) {
         goto done;
     }
 
-    print_hotspots(hotspots, pb);
+    print_hotspot_list(hotspots, curr_netid, pb);
 
 done:
     pcutils_printbuf_format(pb, "],\"errCode\":%d, \"errMsg\":\"%s\"}",

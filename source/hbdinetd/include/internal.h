@@ -66,13 +66,13 @@ struct netdev_context;
 struct wifi_hotspot {
     char *bssid;
     char *ssid;
-    char *escaped_ssid; /* NULL if not escaped */
+    char *escaped_ssid; /* Use ssid if this is NULL */
     char *capabilities;
     unsigned int frequency;
     int signal_level;
 
-    unsigned is_saved:1;
-    unsigned is_connected:1;
+    /* < 0 if not saved */
+    int netid;
 
     struct list_head ln;
 };
@@ -209,7 +209,7 @@ struct wifi_status {
 
     char *bssid;            /* NULL if not connected */
     char *ssid;             /* Not NULL if bssid is not NULL */
-    char *escaped_ssid;     /* NULL if not escaped */
+    char *escaped_ssid;     /* Use ssid if this is NULL */
     char *pairwise_cipher;  /* CCMP */
     char *group_cipher;     /* CCMP */
     char *key_mgmt;         /* WPA-PSK */
@@ -233,7 +233,7 @@ struct wifi_device_ops {
     int (*disconnect)(struct netdev_context *);
     int (*start_scan)(struct netdev_context *);
     int (*stop_scan)(struct netdev_context *);
-    const struct list_head *(*get_hotspot_list)(struct netdev_context *);
+    const struct list_head *(*get_hotspot_list)(struct netdev_context *, int *);
     const struct wifi_status *(*get_status)(struct netdev_context *);
 };
 
@@ -303,7 +303,9 @@ ssize_t unescape_literal_text(const char *escaped, size_t len, char *dst);
 char *escape_string_to_literal_text_alloc(const char *src);
 
 int print_frequency(unsigned int frequency, char *buf, size_t buf_sz);
-int print_hotspots(const struct list_head *hotspots,
+int print_one_hotspot(const struct wifi_hotspot *hotspot, int curr_netid,
+        struct pcutils_printbuf *pb);
+int print_hotspot_list(const struct list_head *hotspots, int curr_netid,
         struct pcutils_printbuf *pb);
 
 /* pathname will be the first argument. */
@@ -337,6 +339,14 @@ check_network_device(struct run_info *info,
     return check_network_device_ex(info,
         method_param, expect_type, NULL, NULL, errcode);
 }
+
+#define strncmp2ltr(str, literal, len) \
+    ((len > (sizeof(literal "") - 1)) ? 1 :  \
+        (len < (sizeof(literal "") - 1) ? -1 : strncmp(str, literal, len)))
+
+#define strncasecmp2ltr(str, literal, len) \
+    ((len > (sizeof(literal "") - 1)) ? 1 :  \
+        (len < (sizeof(literal "") - 1) ? -1 : strncasecmp(str, literal, len)))
 
 /* Evaluate EXPRESSION, and repeat as long as it returns -1 with `errno'
     set to EINTR.  */
