@@ -58,6 +58,7 @@ int wifi_add_network(struct netdev_context *ctxt, const char *ssid,
         const char *keymgmt, const char *passphrase);
 int wifi_update_network(struct netdev_context *ctxt, int netid,
         const char *ssid, const char *keymgmt, const char *passphrase);
+int wifi_remove_network(struct netdev_context *ctxt, int netid);
 
 #ifdef __cplusplus
 };  // extern "C"

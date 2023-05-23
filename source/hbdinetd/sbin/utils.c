@@ -42,8 +42,9 @@ const char *error_messages[] = {
     "Invalid SSID.",                            // ERR_WPA_INVALID_SSID
     "Invalid passphrase.",                      // ERR_WPA_INVALID_PASSPHRASE
     "Invalid key management method.",           // ERR_WPA_INVALID_KEYMGMT
-    "Wrong passphrase.",                        // ERR_WPA_WRONG_PASSPHRASE
-    "Timeout.",                                 // ERR_WPA_TIMEOUT
+    "Wrong passphrase or key.",                 // ERR_WPA_WRONG_PASSPHRASE
+    "Timeout.",                                 // ERR_TIMEOUT
+    "There already is an unresolved attempt.",  // ERR_UNRESOLVED_ATTEMPT
 };
 
 const char *get_error_message(int errcode)

@@ -49,12 +49,17 @@ struct netdev_context {
     struct wpa_ctrl *monitor_conn;
     int exit_sockets[2];
 
-    time_t last_update_time;
+    /* the new network id if >= 0. */
+    int new_netid;
 
     unsigned auth_failure_count;
     unsigned cmd_failure_count;
 
-    char *buf;  /* the buffer use for event or respones. */
+    /* the buffer use for event or reply. */
+    char *buf;
+
+    time_t last_update_time;
+
     struct list_head hotspots;
     struct kvlist event_handlers;
     struct kvlist saved_networks;

@@ -66,6 +66,10 @@ static int connect(struct netdev_context *ctxt,
 {
     int ret;
 
+    if (ctxt->new_netid >= 0) {
+        return ERR_UNRESOLVED_ATTEMPT;
+    }
+
     if (keymgmt != NULL &&
             (ret = check_wpa_passphrase(keymgmt, passphrase))) {
         return ret;
@@ -127,6 +131,8 @@ static int connect(struct netdev_context *ctxt,
                     ssid, keymgmt);
             return ERR_DEVICE_CONTROLLER;
         }
+
+        ctxt->new_netid = netid;
     }
 
     wifi_update_status(ctxt);
@@ -174,10 +180,6 @@ select:
             return ERR_DEVICE_CONTROLLER;
 
         case WPA_STATE_COMPLETED:
-            len = WIFI_MSG_BUF_SIZE;
-            if (wifi_command(ctxt, "SAVE_CONFIG", ctxt->buf, &len)) {
-                HLOG_WARN("Failed to save config\n");
-            }
             return 0;
 
         default:
@@ -298,6 +300,8 @@ static struct netdev_context *netdev_context_new(void)
 
         kvlist_init(&ctxt->saved_networks, get_id_len);
     }
+
+    ctxt->new_netid = -1;
 
     return ctxt;
 }

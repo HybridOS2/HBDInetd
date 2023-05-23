@@ -808,3 +808,19 @@ int wifi_add_network(struct netdev_context *ctxt, const char *ssid,
     return netid;
 }
 
+int wifi_remove_network(struct netdev_context *ctxt, int netid)
+{
+    char cmd[64];
+
+    assert(netid >= 0);
+
+    sprintf(cmd, "REMOVE_NETWORK %d", netid);
+    char *results = ctxt->buf;
+    size_t max_len = WIFI_MSG_BUF_SIZE;
+    if (wifi_command(ctxt, cmd, results, &max_len)) {
+        HLOG_ERR("Failed `%s` command\n", cmd);
+        return -1;
+    }
+
+    return 0;
+}

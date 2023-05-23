@@ -48,7 +48,16 @@ static int on_connected(hbdbus_conn *conn,
         goto fatal;
     }
 
-    /* TODO: Save config and issue DHCP request */
+    /* Save config */
+    if (ctxt->new_netid >= 0) {
+        size_t len = WIFI_MSG_BUF_SIZE;
+        if (wifi_command(ctxt, "SAVE_CONFIG", ctxt->buf, &len)) {
+            HLOG_WARN("Failed to save config\n");
+        }
+        ctxt->new_netid = -1;
+    }
+
+    /* TODO: Issue DHCP request */
 
     if (ctxt->status && ctxt->status->bssid) {
         struct pcutils_printbuf my_buff, *pb = &my_buff;
@@ -236,7 +245,10 @@ static int on_ssid_temp_disabled(hbdbus_conn *conn,
         free(escaped_ssid);
 
     /* 2) If the network is newly added, remove it. */
-    (void)ctxt;
+    if (ctxt->new_netid >= 0) {
+        wifi_remove_network(ctxt, ctxt->new_netid);
+        ctxt->new_netid = -1;
+    }
 
     return ret;
 
