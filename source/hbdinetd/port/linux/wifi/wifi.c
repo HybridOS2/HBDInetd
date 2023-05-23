@@ -56,7 +56,7 @@ static const char IFNAME[]              = "IFNAME=";
 #define IFNAMELEN            (sizeof(IFNAME) - 1)
 static const char WPA_EVENT_IGNORE[]    = "CTRL-EVENT-IGNORE ";
 
-int ensure_entropy_file_exists(void)
+static int ensure_entropy_file_exists(void)
 {
     int ret;
     int destfd;
@@ -583,5 +583,96 @@ int wifi_command(struct netdev_context *ctxt,
     HLOG_INFO("Results of command: %s (length: %u):\n%s\n",
             cmd, (unsigned)*reply_len, reply);
     return 0;
+}
+
+static int ensure_conf_dir_exists(struct netdev_context *ctxt,
+        const char *conf_dir)
+{
+    (void)ctxt;
+
+    int ret = access(conf_dir, R_OK | W_OK | X_OK);
+    if ((ret == 0) || (errno == EACCES)) {
+        if ((ret != 0) && (chmod(conf_dir, 0770) != 0)) {
+            HLOG_ERR("Cannot set RW to \"%s\": %s\n", conf_dir, strerror(errno));
+            return -1;
+        }
+    }
+    else if (errno == ENOENT) {
+        if (mkdir(conf_dir, 0770)) {
+            HLOG_ERR("Cannot create \"%s\": %s\n", conf_dir, strerror(errno));
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+static int ensure_config_file_exists_alt(struct netdev_context *ctxt,
+        const char *config_file)
+{
+    (void)ctxt;
+    int destfd;
+    int ret;
+
+    ret = access(config_file, R_OK | W_OK);
+    if ((ret == 0) || (errno == EACCES)) {
+        if ((ret != 0) &&
+                (chmod(config_file, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP) != 0)) {
+            HLOG_ERR("Cannot set RW to \"%s\": %s\n", config_file, strerror(errno));
+            return -1;
+        }
+    }
+    else if (errno != ENOENT) {
+        HLOG_ERR("Cannot access \"%s\": %s\n", config_file, strerror(errno));
+        return -1;
+    }
+
+    destfd = TEMP_FAILURE_RETRY(open(config_file, O_CREAT|O_RDWR, 0660));
+    if (destfd < 0) {
+        HLOG_ERR("Cannot create \"%s\": %s\n", config_file, strerror(errno));
+        return -1;
+    }
+
+    return 0;
+}
+
+int wifi_issue_dhcp_request(struct netdev_context *ctxt)
+{
+    if (ensure_conf_dir_exists(ctxt, DHCLIENT_CONF_DIR))
+        goto failed;
+
+    if (ensure_config_file_exists_alt(ctxt, DHCLIENT_CONF_FILE))
+        goto failed;
+
+    /* shutdown dhclient */
+    if (start_daemon(PATH_DHCLIENT,
+                "-x",
+                "-pf " DHCLIENT_PID_FILE,
+                NULL)) {
+        HLOG_ERR("Failed start_daemon(%s)\n", PATH_DHCLIENT);
+        return -1;
+    }
+
+    TEMP_FAILURE_RETRY(usleep(300000));
+
+    /* start dhclient */
+    if (start_daemon(PATH_DHCLIENT,
+                "-4",
+                // "-nw",
+                // "-q",
+                "-lf " DHCLIENT_LESS_FILE,
+                "-pf " DHCLIENT_PID_FILE,
+                "-cf " DHCLIENT_CONF_FILE,
+                "-sf " DHCLIENT_SCRIPT_FILE,
+                ctxt->netdev->ifname,
+                NULL)) {
+        HLOG_ERR("Failed start_daemon(%s)\n", PATH_DHCLIENT);
+        return -1;
+    }
+
+    return 0;
+
+failed:
+    return -1;
 }
 

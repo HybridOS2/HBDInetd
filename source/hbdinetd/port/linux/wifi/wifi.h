@@ -38,6 +38,7 @@
     "/app/" HBDINETD_APP_NAME "/share/doc/wpa_supplicant.conf"
 
 #define PATH_DHCLIENT           "/sbin/dhclient"
+#define DHCLIENT_CONF_DIR       "/etc/dhcp/"
 #define DHCLIENT_CONF_FILE      "/etc/dhcp/dhclient-hbd.conf"
 #define DHCLIENT_LESS_FILE      "/etc/dhcp/dhclient-hbd.leases"
 #define DHCLIENT_PID_FILE       "/var/run/dhclient-hbd.pid"
@@ -193,10 +194,8 @@ int do_dhcp_request(struct netdev_context *ctxt,
  */
 const char *get_dhcp_error_string(struct netdev_context *ctxt);
 
-/**
- * Check and create if necessary initial entropy file
- */
-int ensure_entropy_file_exists(void);
+/** issue dhcp request by calling dhclient */
+int wifi_issue_dhcp_request(struct netdev_context *ctxt);
 
 /**
  * PATH_MAX

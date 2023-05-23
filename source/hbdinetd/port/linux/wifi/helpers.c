@@ -975,9 +975,3 @@ int wifi_remove_network(struct netdev_context *ctxt, int netid)
     return 0;
 }
 
-int wifi_issue_dhcp_request(struct netdev_context *ctxt)
-{
-    (void)ctxt;
-    return 0;
-}
-
