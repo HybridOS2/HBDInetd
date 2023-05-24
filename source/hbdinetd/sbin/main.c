@@ -75,17 +75,20 @@ static int setup_signals(void)
     sa.sa_handler = handle_signal_action;
 
     if (sigaction(SIGINT, &sa, 0) != 0) {
-        HLOG_ERR("Failed to call sigaction for SIGINT: %s\n", strerror (errno));
+        HLOG_ERR("Failed to call sigaction for SIGINT: %s\n",
+                strerror(errno));
         return -1;
     }
 
     if (sigaction(SIGPIPE, &sa, 0) != 0) {
-        HLOG_ERR("Failed to call sigaction for SIGPIPE: %s\n", strerror (errno));
+        HLOG_ERR("Failed to call sigaction for SIGPIPE: %s\n",
+                strerror(errno));
         return -1;
     }
 
     if (sigaction(SIGCHLD, &sa, 0) != 0) {
-        HLOG_ERR("Failed to call sigaction for SIGCHLD: %s\n", strerror (errno));
+        HLOG_ERR("Failed to call sigaction for SIGCHLD: %s\n",
+                strerror (errno));
         return -1;
     }
 
@@ -273,12 +276,89 @@ daemonize(void)
     return 0;
 }
 
+static int my_wait_message(int timeout_ms)
+{
+    size_t count = 0;
+
+    if (purc_inst_holding_messages_count(&count))
+        return -1;
+
+    if (count == 0) {
+        if (timeout_ms > 1000) {
+            pcutils_sleep(timeout_ms / 1000);
+        }
+
+        if (timeout_ms > 0) {
+            unsigned int ms = timeout_ms % 1000;
+            if (ms) {
+                pcutils_usleep(ms * 1000);
+            }
+        }
+
+        if (purc_inst_holding_messages_count(&count))
+            return -1;
+    }
+
+    return (count > 0) ? 1 : 0;
+}
+
+static int shutdown_dhclient_runner(purc_atom_t rid_dhcli)
+{
+    int err_code = PURC_ERROR_OK;
+
+    /* say bye to the renderer thread */
+    pcrdr_msg *shutdown_msg = pcrdr_make_request_message(
+            PCRDR_MSG_TARGET_INSTANCE, rid_dhcli,
+            DHCLI_OP_SHUTDOWN,
+            PCRDR_REQUESTID_NORETURN,
+            purc_get_endpoint(NULL),
+            PCRDR_MSG_ELEMENT_TYPE_VOID, NULL,
+            NULL, PCRDR_MSG_DATA_TYPE_VOID, NULL, 0);
+
+    if (shutdown_msg) {
+        size_t n = purc_inst_move_message(rid_dhcli, shutdown_msg);
+        pcrdr_release_message(shutdown_msg);
+        if (n == 0) {
+            err_code = PCRDR_ERROR_UNEXPECTED;
+            goto failed;
+        }
+    }
+    else {
+        err_code = PURC_ERROR_OUT_OF_MEMORY;
+        goto failed;
+    }
+
+    int left_ms = PCRDR_DEF_TIME_EXPECTED * 1000;
+    while (left_ms > 0) {
+        if (my_wait_message(10) == 0)
+            left_ms -= 10;
+        else
+            break;
+    }
+
+    if (left_ms <= 0) {
+        err_code = PCRDR_ERROR_TIMEOUT;
+        goto failed;
+    }
+
+    pcrdr_msg *msg = purc_inst_take_away_message(0);
+    if (msg == NULL) {
+        err_code = PCRDR_ERROR_UNEXPECTED;
+        goto failed;
+    }
+    pcrdr_release_message(msg);
+
+failed:
+    return err_code;
+}
+
 int main(int argc, char **argv)
 {
     int cnnfd = -1, maxfd, ret;
     hbdbus_conn* conn;
     fd_set rfds;
     struct timeval tv;
+    purc_atom_t rid_dhcli;
 
     ret = read_option_args(argc, argv);
     if (ret > 0)
@@ -286,7 +366,7 @@ int main(int argc, char **argv)
     else if (ret < 0)
         return EXIT_FAILURE;
 
-    purc_log_facility_k facility = PURC_LOG_FACILITY_STDOUT;
+    run_info.log_facility = PURC_LOG_FACILITY_STDOUT;
     if (run_info.daemon) {
         if (daemonize()) {
             fprintf(stderr, "Failed to daemonize HBDInetd: %s\n",
@@ -296,10 +376,10 @@ int main(int argc, char **argv)
         else {
             uid_t euid = geteuid();
             if (euid == 0) {
-                facility = PURC_LOG_FACILITY_SYSLOG;
+                run_info.log_facility = PURC_LOG_FACILITY_SYSLOG;
             }
             else {
-                facility = PURC_LOG_FACILITY_FILE;
+                run_info.log_facility = PURC_LOG_FACILITY_FILE;
             }
         }
     }
@@ -314,6 +394,12 @@ int main(int argc, char **argv)
         strcpy(run_info.runner_name, HBDINETD_RUNNER_MAIN);
     }
 
+    if ((rid_dhcli = dhcli_start(&run_info)) == 0) {
+        fprintf(stderr,
+                "Failed to initialize the built-in DHCP client runner\n");
+        return EXIT_FAILURE;
+    }
+
     ret = purc_init_ex(PURC_MODULE_EJSON, run_info.app_name,
             run_info.runner_name, NULL);
     if (ret != PURC_ERROR_OK) {
@@ -322,11 +408,15 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
+    purc_inst_create_move_buffer(PCINST_MOVE_BUFFER_FLAG_NONE, 16);
+
     if (run_info.verbose) {
-        purc_enable_log_ex(PURC_LOG_MASK_DEFAULT | PURC_LOG_MASK_INFO, facility);
+        purc_enable_log_ex(PURC_LOG_MASK_DEFAULT | PURC_LOG_MASK_INFO,
+                run_info.log_facility);
     }
     else {
-        purc_enable_log_ex(PURC_LOG_MASK_DEFAULT, facility);
+        purc_enable_log_ex(PURC_LOG_MASK_DEFAULT,
+                run_info.log_facility);
     }
 
     run_info.dump_stm = purc_rwstream_new_for_dump(stderr, cb_stdio_write);
@@ -339,11 +429,10 @@ int main(int argc, char **argv)
 
     cnnfd = hbdbus_connect_via_unix_socket(HBDBUS_US_PATH,
             run_info.app_name, run_info.runner_name, &conn);
-
     if (cnnfd < 0) {
-        fprintf(stderr, "Failed to connect to HBDInetd server: %s\n",
+        HLOG_ERR("Failed to connect to HBDBus server: %s\n",
                 hbdbus_get_err_message(cnnfd));
-        goto failed;
+        goto failed_hbdbus;
     }
 
     purc_assemble_endpoint_name(hbdbus_conn_own_host_name(conn),
@@ -402,6 +491,8 @@ int main(int argc, char **argv)
 
 failed:
     revoke_common_interfaces(conn);
+
+failed_hbdbus:
     if (cnnfd >= 0)
         hbdbus_disconnect(conn);
 
@@ -409,8 +500,16 @@ failed:
     if (run_info.dump_stm)
         purc_rwstream_destroy(run_info.dump_stm);
 
+    if ((ret = shutdown_dhclient_runner(rid_dhcli))) {
+        HLOG_ERR("Failed to shutdown dhclient runner: %s\n",
+            purc_get_error_message(ret));
+    }
 
+    purc_inst_destroy_move_buffer();
     purc_cleanup();
+
+    if (rid_dhcli)
+        dhcli_sync_exit();
 
     return EXIT_SUCCESS;
 }

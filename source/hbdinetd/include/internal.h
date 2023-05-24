@@ -35,6 +35,8 @@ struct run_info {
     bool running;
     bool daemon;
     bool verbose;
+    purc_log_facility_k log_facility;
+
     time_t shutdown_time;
 
     char app_name[PURC_LEN_APP_NAME + 1];
@@ -319,6 +321,11 @@ void revoke_common_interfaces(hbdbus_conn *conn);
 /* wifi-iface.c */
 int register_wifi_interfaces(hbdbus_conn *conn);
 void revoke_wifi_interfaces(hbdbus_conn *conn);
+
+/* dhclient.c */
+#define DHCLI_OP_SHUTDOWN   "shutdown"
+purc_atom_t dhcli_start(const struct run_info *mainrun);
+void dhcli_sync_exit(void);
 
 #ifdef __cplusplus
 }
