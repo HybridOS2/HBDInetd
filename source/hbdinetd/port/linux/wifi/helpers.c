@@ -864,9 +864,10 @@ int wifi_update_network(struct netdev_context *ctxt, int netid,
             return -1;
         }
 
-        char hex_psk[strlen(passphrase) * 2 + 1];
-        convert_to_hex_string(passphrase, hex_psk);
-        n = snprintf(cmd, sizeof(cmd), "SET_NETWORK %d psk %s", netid, hex_psk);
+        char escaped_psk[strlen(passphrase) * 2 + 1];
+        escape_string_to_literal_text(passphrase, escaped_psk);
+        n = snprintf(cmd, sizeof(cmd), "SET_NETWORK %d psk \"%s\"",
+                netid, escaped_psk);
         if (n < 0 || n >= (int)sizeof(cmd)) {
             HLOG_ERR("Too small buffer for `psk` command\n");
             return -1;
@@ -886,9 +887,9 @@ int wifi_update_network(struct netdev_context *ctxt, int netid,
             return -1;
         }
 
-        char hex_key[strlen(passphrase) * 2 + 1];
-        convert_to_hex_string(passphrase, hex_key);
-        n = sprintf(cmd, "SET_NETWORK %d wep_key0 %s", netid, hex_key);
+        char escaped_key[strlen(passphrase) * 2 + 1];
+        escape_string_to_literal_text(passphrase, escaped_key);
+        n = sprintf(cmd, "SET_NETWORK %d wep_key0 \"%s\"", netid, escaped_key);
         if (n < 0 || n >= (int)sizeof(cmd)) {
             HLOG_ERR("Too small buffer for `wep_key0` command\n");
             return -1;

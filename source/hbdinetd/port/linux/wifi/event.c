@@ -204,6 +204,7 @@ static int on_bss_added(hbdbus_conn *conn,
     bssid = strrchr(data, ' ');
     if (bssid == NULL)
         goto bad_data;
+    bssid++;
 
     struct wifi_hotspot *hotspot, *newone = NULL;
     hotspot = wifi_get_hotspot_by_bssid(ctxt, bssid);
@@ -220,11 +221,17 @@ static int on_bss_added(hbdbus_conn *conn,
     }
 
     if (newone) {
+        if (newone->ssid == NULL || newone->bssid == NULL) {
+            HLOG_ERR("Failed to get hotspot info for `%s`\n", bssid);
+            wifi_release_one_hotspot(newone);
+            goto failed;
+        }
+
         list_add_tail(&newone->ln, &ctxt->hotspots);
-        newone = NULL;
 
         struct pcutils_printbuf my_buff, *pb = &my_buff;
         if (pcutils_printbuf_init(pb)) {
+            newone = NULL;
             HLOG_ERR("Failed when initializing print buffer\n");
             goto failed;
         }
@@ -233,6 +240,7 @@ static int on_bss_added(hbdbus_conn *conn,
 
         hbdbus_fire_event(conn, BUBBLE_WIFIHOTSPOTFOUND, pb->buf);
         free(pb->buf);
+        newone = NULL;
     }
 
     return 0;
