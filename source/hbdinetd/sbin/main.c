@@ -306,11 +306,10 @@ static int shutdown_dhclient_runner(purc_atom_t rid_dhcli)
 {
     int err_code = PURC_ERROR_OK;
 
-    /* say bye to the renderer thread */
     pcrdr_msg *shutdown_msg = pcrdr_make_request_message(
             PCRDR_MSG_TARGET_INSTANCE, rid_dhcli,
             DHCLI_OP_SHUTDOWN,
-            PCRDR_REQUESTID_NORETURN,
+            NULL,
             purc_get_endpoint(NULL),
             PCRDR_MSG_ELEMENT_TYPE_VOID, NULL,
             NULL, PCRDR_MSG_DATA_TYPE_VOID, NULL, 0);
@@ -352,13 +351,107 @@ failed:
     return err_code;
 }
 
+int issue_dhcp_request(hbdbus_conn *conn, const char *ifname)
+{
+    struct run_info *info = hbdbus_conn_get_user_data(conn);
+    int err_code = PURC_ERROR_OK;
+
+    pcrdr_msg *msg = pcrdr_make_request_message(
+            PCRDR_MSG_TARGET_INSTANCE, info->rid_dhcli,
+            DHCLI_OP_CONFIG,
+            PCRDR_REQUESTID_NORETURN,
+            purc_get_endpoint(NULL),
+            PCRDR_MSG_ELEMENT_TYPE_ID, ifname,
+            NULL, PCRDR_MSG_DATA_TYPE_VOID, NULL, 0);
+
+    if (msg) {
+        size_t n = purc_inst_move_message(info->rid_dhcli, msg);
+        pcrdr_release_message(msg);
+        if (n == 0) {
+            err_code = PCRDR_ERROR_UNEXPECTED;
+            goto failed;
+        }
+    }
+
+failed:
+    return err_code;
+}
+
+static void
+handle_event_from_other_runners(hbdbus_conn *conn, const pcrdr_msg *msg)
+{
+    const char *event_name;
+    event_name = purc_variant_get_string_const(msg->eventName);
+
+    const char *ifname = NULL;
+    ifname = purc_variant_get_string_const(msg->elementValue);
+
+    const char *reason = NULL;
+    reason = purc_variant_get_string_const(msg->property);
+
+    HLOG_INFO("got an event message:\n");
+    HLOG_INFO("    type:            %d\n", msg->type);
+    HLOG_INFO("    target:          %d\n", msg->target);
+    HLOG_INFO("    targetValue:     %d\n", (int)msg->targetValue);
+    HLOG_INFO("    eventName:       %s\n", event_name);
+    HLOG_INFO("    elementValue:    %s\n", ifname);
+    HLOG_INFO("    properttValue:   %s\n", reason);
+    HLOG_INFO("    sourceURI:       %s\n",
+            purc_variant_get_string_const(msg->sourceURI));
+    HLOG_INFO("    data:            %s\n",
+            msg->data ? purc_variant_get_string_const(msg->data) : "(void)");
+
+    void *data = kvlist_get(&run_info.devices, ifname);
+    if (data == NULL) {
+        HLOG_ERR("Not a managed network interface: %s\n", ifname);
+        return;
+    }
+
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
+    if (pcutils_printbuf_init(pb)) {
+        HLOG_ERR("Failed when initializing print buffer\n");
+        return;
+    }
+
+    const char *event = NULL;
+    if (strcmp(event_name, DHCLI_EV_SUCCEEDED) == 0) {
+        pcutils_printbuf_format(pb,
+                "{"
+                    "\"device\":\"%s\","
+                    "\"method\":\"dhcp\","
+                    "\"config\":\"%s\""
+                "}",
+              ifname, purc_variant_get_string_const(msg->data));
+        event = BUBBLE_DEVICECONFIGURED;
+    }
+    else if (strcmp(event_name, DHCLI_EV_SUCCEEDED) == 0) {
+        pcutils_printbuf_format(pb,
+                "{"
+                    "\"device\":\"%s\","
+                    "\"method\":\"dhcp\","
+                    "\"reason\":\"%s\""
+                "}",
+                ifname, reason);
+        event = BUBBLE_DEVICECONFIGFAILED;
+    }
+
+    int ret = 0;
+    if (event)
+        ret = hbdbus_fire_event(conn, event, pb->buf);
+
+    free(pb->buf);
+
+    if (ret) {
+        HLOG_ERR("Failed when firing event: %s\n", event);
+    }
+}
+
 int main(int argc, char **argv)
 {
     int cnnfd = -1, maxfd, ret;
     hbdbus_conn* conn;
     fd_set rfds;
     struct timeval tv;
-    purc_atom_t rid_dhcli;
 
     ret = read_option_args(argc, argv);
     if (ret > 0)
@@ -394,7 +487,7 @@ int main(int argc, char **argv)
         strcpy(run_info.runner_name, HBDINETD_RUNNER_MAIN);
     }
 
-    if ((rid_dhcli = dhcli_start(&run_info)) == 0) {
+    if ((run_info.rid_dhcli = dhcli_start(&run_info)) == 0) {
         fprintf(stderr,
                 "Failed to initialize the built-in DHCP client runner\n");
         return EXIT_FAILURE;
@@ -408,7 +501,8 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    purc_inst_create_move_buffer(PCINST_MOVE_BUFFER_FLAG_NONE, 16);
+    run_info.rid = purc_inst_create_move_buffer(PCINST_MOVE_BUFFER_FLAG_NONE,
+            16);
 
     if (run_info.verbose) {
         purc_enable_log_ex(PURC_LOG_MASK_DEFAULT | PURC_LOG_MASK_INFO,
@@ -474,6 +568,8 @@ int main(int argc, char **argv)
             }
         }
         else {
+            size_t n;
+
             /* check netdevice here */
             const char* name;
             void *data;
@@ -483,6 +579,18 @@ int main(int argc, char **argv)
                 if (netdev->check) {
                     netdev->check(conn, netdev);
                 }
+            }
+
+            if (purc_inst_holding_messages_count(&n) == 0 && n > 0) {
+                pcrdr_msg *msg = purc_inst_take_away_message(0);
+                if (msg->type == PCRDR_MSG_TYPE_EVENT) {
+                    handle_event_from_other_runners(conn, msg);
+                }
+                else {
+                    HLOG_WARN("Got a message not intersted in\n");
+                }
+
+                pcrdr_release_message(msg);
             }
         }
 
@@ -500,7 +608,7 @@ failed_hbdbus:
     if (run_info.dump_stm)
         purc_rwstream_destroy(run_info.dump_stm);
 
-    if ((ret = shutdown_dhclient_runner(rid_dhcli))) {
+    if ((ret = shutdown_dhclient_runner(run_info.rid_dhcli))) {
         HLOG_ERR("Failed to shutdown dhclient runner: %s\n",
             purc_get_error_message(ret));
     }
@@ -508,7 +616,7 @@ failed_hbdbus:
     purc_inst_destroy_move_buffer();
     purc_cleanup();
 
-    if (rid_dhcli)
+    if (run_info.rid_dhcli)
         dhcli_sync_exit();
 
     return EXIT_SUCCESS;

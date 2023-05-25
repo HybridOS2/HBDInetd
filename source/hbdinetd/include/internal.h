@@ -35,6 +35,8 @@ struct run_info {
     bool running;
     bool daemon;
     bool verbose;
+    purc_atom_t rid;
+    purc_atom_t rid_dhcli;
     purc_log_facility_k log_facility;
 
     time_t shutdown_time;
@@ -50,8 +52,12 @@ struct run_info {
 
 /* network device description */
 struct hbd_ifaddr {
+    char *fields[0];
+#define HBD_IFADDR_FIELDS_NR    4
+
     char *addr;    /* Address of interface */
     char *netmask; /* Netmask of interface */
+    char *gateway; /* Gateway of interface */
     union {
         char *broadaddr;
         /* Broadcast address of interface */
@@ -323,9 +329,18 @@ int register_wifi_interfaces(hbdbus_conn *conn);
 void revoke_wifi_interfaces(hbdbus_conn *conn);
 
 /* dhclient.c */
+#define DHCLI_OP_CONFIG     "config"
+#define DHCLI_OP_RELEASE    "release"
 #define DHCLI_OP_SHUTDOWN   "shutdown"
+
+#define DHCLI_EV_SUCCEEDED  "succeeded"
+#define DHCLI_EV_FAILED     "failed"
+
 purc_atom_t dhcli_start(const struct run_info *mainrun);
 void dhcli_sync_exit(void);
+
+/* main.c */
+int issue_dhcp_request(hbdbus_conn *conn, const char *ifname);
 
 #ifdef __cplusplus
 }

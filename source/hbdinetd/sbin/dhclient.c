@@ -20,6 +20,9 @@
 ** along with this program.  If not, see http://www.gnu.org/licenses/.
 */
 
+#undef NDEBUG
+
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -36,29 +39,99 @@
 #include "internal.h"
 #include "log.h"
 
-struct this_run_info {
-    unsigned nr_cors;
+#include "netutils/dhcp.h"
+#include "netutils/ifc.h"
+
+struct dhcp_iface {
+    const char *name;
+
+    time_t      config_time;
+    time_t      expire_time;
+    uint32_t    renew_tries;
+
+    uint32_t    addr;
+    uint32_t    srv;
+    uint32_t    lease;
+
+    char       *fields[0];
+#define DHIF_STR_FIELDS_NR  4
+
+    char       *server;
+    char       *dns1;
+    char       *dns2;
+    char       *search;
+
+    struct hbd_ifaddr   ipv4;
+    struct hbd_ifaddr   ipv6;
 };
 
-static int init_instance(struct this_run_info *info)
+struct this_run {
+    purc_atom_t rid_main;
+    struct kvlist ifaces;
+};
+
+static int init_instance(struct this_run *run, purc_atom_t rid_main)
 {
-    (void)info;
+    if (ifc_init())
+        return -1;
+
+    run->rid_main = rid_main;
+    kvlist_init(&run->ifaces, NULL);
     return 0;
 }
 
-static void deinit_instance(struct this_run_info *info)
+static void cleanup_dhcp_iface(struct dhcp_iface *dhif, bool free_itself)
 {
-    (void)info;
+    for (int i = 0; i < DHIF_STR_FIELDS_NR; i++) {
+        if (dhif->fields[i])
+            free(dhif->fields[i]);
+    }
+
+    for (int i = 0; i < HBD_IFADDR_FIELDS_NR; i++) {
+        if (dhif->ipv4.fields[i])
+            free(dhif->ipv4.fields[i]);
+    }
+
+    if (free_itself) {
+        free(dhif);
+    }
+    else {
+        memset(dhif, 0, sizeof(*dhif));
+    }
 }
 
-static void shutdown_handler(struct this_run_info *info,
+static void deinit_instance(struct this_run *run)
+{
+    const char* name;
+    void *data;
+    kvlist_for_each(&run->ifaces, name, data) {
+        struct dhcp_iface *dhif;
+        dhif = *(struct dhcp_iface **)data;
+
+        cleanup_dhcp_iface(dhif, true);
+    }
+
+    kvlist_free(&run->ifaces);
+    ifc_close();
+}
+
+static void shutdown_handler(struct this_run *info,
         const pcrdr_msg *request, pcrdr_msg *response)
 {
-    (void)info;
-
     purc_atom_t endpoint_atom;
     const char *endpoint_name = purc_get_endpoint(&endpoint_atom);
     assert(endpoint_name);  /* must be valid */
+
+    const char *name;
+    void *data;
+    kvlist_for_each(&info->ifaces, name, data) {
+        struct dhcp_iface *dhif;
+        dhif = *(struct dhcp_iface **)data;
+
+        if (dhif->server)
+            dhcp_release_lease(dhif->name, dhif->addr, dhif->srv);
+        cleanup_dhcp_iface(dhif, false);
+    }
 
     response->type = PCRDR_MSG_TYPE_RESPONSE;
     response->requestId = purc_variant_ref(request->requestId);
@@ -69,7 +142,231 @@ static void shutdown_handler(struct this_run_info *info,
     response->data = PURC_VARIANT_INVALID;
 }
 
-static void event_loop(struct this_run_info *info)
+static const char *get_dhcp_result(struct dhcp_iface *dhif)
+{
+    const char *status = NULL;
+
+    uint32_t msg_type;
+    in_addr_t gateway, netmask, dns1, dns2;
+    int ret = dhcp_get_last_conf_info(&msg_type, &dhif->addr, &gateway,
+        &netmask, &dns1, &dns2, &dhif->srv, &dhif->lease);
+    if (ret) {
+        status = dhcp_msg_type_to_name(msg_type);
+        goto failed;
+    }
+
+    dhif->server = strdup(ifc_ipaddr_to_string(dhif->srv));
+    dhif->dns1 = dns1 ? strdup(ifc_ipaddr_to_string(dns1)) : NULL;
+    dhif->dns2 = dns2 ? strdup(ifc_ipaddr_to_string(dns2)) : NULL;
+    dhif->ipv4.addr = strdup(ifc_ipaddr_to_string(dhif->addr));
+    dhif->ipv4.netmask = strdup(ifc_ipaddr_to_string(netmask));
+    dhif->ipv4.gateway = strdup(ifc_ipaddr_to_string(gateway));
+
+    dhif->config_time = purc_monotonic_time_after(0);
+    dhif->expire_time = purc_monotonic_time_after(dhif->lease);
+    dhif->renew_tries = 0;
+
+    HLOG_INFO("Lease: %u\n", dhif->lease);
+    return NULL;
+
+failed:
+    HLOG_ERR("Failed due to %s\n", status);
+    return status;
+}
+
+static char *make_config_json(struct dhcp_iface *dhif)
+{
+    assert(dhif);
+
+    char *result;
+    int ret = asprintf(&result,
+            "{"
+                "\"device\":\"%s\","
+                "\"server\":\"%s\","
+                "\"dns1\":\"%s\","
+                "\"dns2\":\"%s\","
+                "\"search\":\"%s\","
+                "\"inet\":{"
+                    "\"address\":\"%s\","
+                    "\"netmask\":\"%s\","
+                    "\"gateway\":\"%s\""
+                "},"
+                "\"inet6\":{"
+                    "\"address\":\"%s\","
+                    "\"netmask\":\"%s\","
+                    "\"gateway\":\"%s\""
+                "}"
+            "}",
+            dhif->name,
+            dhif->server ? dhif->server : "",
+            dhif->dns1 ? dhif->dns1 : "",
+            dhif->dns2 ? dhif->dns2 : "",
+            dhif->search ? dhif->search : "",
+            dhif->ipv4.addr ? dhif->ipv4.addr : "",
+            dhif->ipv4.netmask ? dhif->ipv4.netmask : "",
+            dhif->ipv4.gateway ? dhif->ipv4.gateway : "",
+            dhif->ipv6.addr ? dhif->ipv6.addr : "",
+            dhif->ipv6.netmask ? dhif->ipv6.netmask : "",
+            dhif->ipv6.gateway ? dhif->ipv6.gateway : "");
+
+    if (ret < 0)
+        return NULL;
+
+    return result;
+}
+
+static void do_config(struct dhcp_iface *dhif, purc_atom_t requester)
+{
+    dhcp_do_overall(dhif->name);
+    const char *status = get_dhcp_result(dhif);
+
+    const char *endpoint_name = purc_get_endpoint(NULL);
+
+    pcrdr_msg *event;
+    event = pcrdr_make_event_message(
+                PCRDR_MSG_TARGET_INSTANCE,
+                requester,
+                status ? DHCLI_EV_FAILED : DHCLI_EV_SUCCEEDED,
+                endpoint_name,
+                PCRDR_MSG_ELEMENT_TYPE_ID, dhif->name,
+                status,
+                PCRDR_MSG_DATA_TYPE_VOID, NULL, 0);
+
+    if (status == NULL) {
+        char *json = make_config_json(dhif);
+        if (json) {
+            event->dataType = PCRDR_MSG_DATA_TYPE_JSON;
+            event->data = purc_variant_make_string_reuse_buff(json,
+                    strlen(json) + 1, false);
+        }
+    }
+
+    purc_inst_move_message(requester, event);
+    pcrdr_release_message(event);
+}
+
+static void release_handler(struct this_run *info, const pcrdr_msg *request)
+{
+    const char *ifname = NULL;
+    if (request->elementType == PCRDR_MSG_ELEMENT_TYPE_ID) {
+        ifname = purc_variant_get_string_const(request->elementValue);
+    }
+
+    assert(ifname);
+
+    void *data;
+    struct dhcp_iface *dhif = NULL;
+    if ((data = kvlist_get(&info->ifaces, ifname))) {
+        dhif = *(struct dhcp_iface **)data;
+    }
+
+    if (dhif == NULL) {
+        HLOG_ERR("Failed due to bad ifname: %s\n", ifname);
+    }
+    else {
+        dhcp_release_lease(ifname, dhif->addr, dhif->srv);
+        cleanup_dhcp_iface(dhif, false);
+        kvlist_remove(&info->ifaces, ifname);
+    }
+}
+
+static void config_handler(struct this_run *info, purc_atom_t requester,
+        const pcrdr_msg *request)
+{
+    const char *ifname = NULL;
+    if (request->elementType == PCRDR_MSG_ELEMENT_TYPE_ID) {
+        ifname = purc_variant_get_string_const(request->elementValue);
+    }
+
+    assert(ifname);
+
+    void *data;
+    struct dhcp_iface *dhif = NULL;
+    if ((data = kvlist_get(&info->ifaces, ifname))) {
+        dhif = *(struct dhcp_iface **)data;
+        cleanup_dhcp_iface(dhif, false);
+    }
+    else {
+        dhif = calloc(1, sizeof(*dhif));
+        if (dhif)
+            dhif->name = kvlist_set_ex(&info->ifaces, ifname, &dhif);
+    }
+
+    if (dhif == NULL || dhif->name == NULL) {
+        HLOG_ERR("Failed due to OOM\n");
+        return;
+    }
+
+    do_config(dhif, requester);
+}
+
+static const char *get_renew_result(struct dhcp_iface *dhif)
+{
+    const char *status = NULL;
+    uint32_t msg_type;
+    in_addr_t gateway, netmask, dns1, dns2;
+    int ret = dhcp_get_last_conf_info(&msg_type, &dhif->addr, &gateway,
+        &netmask, &dns1, &dns2, &dhif->srv, &dhif->lease);
+    if (ret) {
+        status = dhcp_msg_type_to_name(msg_type);
+        goto failed;
+    }
+
+    /* always update DNS servers */
+    if (dhif->dns1) free(dhif->dns1);
+    if (dhif->dns2) free(dhif->dns2);
+    dhif->dns1 = dns1 ? strdup(ifc_ipaddr_to_string(dns1)) : NULL;
+    dhif->dns2 = dns2 ? strdup(ifc_ipaddr_to_string(dns2)) : NULL;
+
+    dhif->config_time = purc_monotonic_time_after(0);
+    dhif->expire_time = purc_monotonic_time_after(dhif->lease);
+    dhif->renew_tries = 0;
+
+    HLOG_INFO("Lease: %u\n", dhif->lease);
+    return NULL;
+
+failed:
+    HLOG_ERR("Failed due to %s\n", status);
+    return status;
+}
+
+static void check_to_renew(struct this_run *info)
+{
+    const char* name;
+    void *data;
+    kvlist_for_each(&info->ifaces, name, data) {
+        struct dhcp_iface *dhif;
+        dhif = *(struct dhcp_iface **)data;
+
+        if (dhif->server == NULL) {
+            continue;
+        }
+
+        struct timespec config_ts = {dhif->config_time, 0 };
+        double elapsed = purc_get_elapsed_seconds(&config_ts, NULL);
+
+        if (dhif->renew_tries > 1 && elapsed >= dhif->lease) {
+            cleanup_dhcp_iface(dhif, false);
+            do_config(dhif, info->rid_main);
+        }
+        else if (dhif->renew_tries > 0 && elapsed >= dhif->lease * 0.875) {
+            if (dhcp_request_renew(dhif->name, dhif->addr, dhif->srv) == 0) {
+                get_renew_result(dhif);
+            }
+            else
+                dhif->renew_tries++;
+        }
+        else if (elapsed >= dhif->lease * 0.5) {
+            if (dhcp_request_renew(dhif->name, dhif->addr, dhif->srv) == 0) {
+                get_renew_result(dhif);
+            }
+            else
+                dhif->renew_tries++;
+        }
+    }
+}
+
+static void event_loop(struct this_run *info)
 {
     size_t n;
     int ret;
@@ -80,7 +377,8 @@ static void event_loop(struct this_run_info *info)
             HLOG_ERR("purc_inst_holding_messages_count failed: %d\n", ret);
         }
         else if (n == 0) {
-            pcutils_usleep(50000); // 50ms.
+            check_to_renew(info);
+            pcutils_usleep(30000); // 30ms.
             continue;
         }
 
@@ -92,23 +390,13 @@ static void event_loop(struct this_run_info *info)
             const char *event_name;
             event_name = purc_variant_get_string_const(msg->eventName);
 
-            if (strcmp(event_name, "quit") == 0 &&
-                    msg->target == PCRDR_MSG_TARGET_INSTANCE &&
-                    msg->targetValue == 0) {
-                HLOG_INFO("got the quit from %s\n",
-                        purc_variant_get_string_const(msg->sourceURI));
-                pcrdr_release_message(msg);
-                break;
-            }
-            else {
-                HLOG_INFO("got an event message not interested in:\n");
-                HLOG_INFO("    type:        %d\n", msg->type);
-                HLOG_INFO("    target:      %d\n", msg->target);
-                HLOG_INFO("    targetValue: %d\n", (int)msg->targetValue);
-                HLOG_INFO("    eventName:   %s\n", event_name);
-                HLOG_INFO("    sourceURI: %s\n",
-                        purc_variant_get_string_const(msg->sourceURI));
-            }
+            HLOG_INFO("got an event message not interested in:\n");
+            HLOG_INFO("    type:        %d\n", msg->type);
+            HLOG_INFO("    target:      %d\n", msg->target);
+            HLOG_INFO("    targetValue: %d\n", (int)msg->targetValue);
+            HLOG_INFO("    eventName:   %s\n", event_name);
+            HLOG_INFO("    sourceURI: %s\n",
+                    purc_variant_get_string_const(msg->sourceURI));
         }
         else if (msg->type == PCRDR_MSG_TYPE_REQUEST) {
             const char* source_uri;
@@ -122,34 +410,48 @@ static void event_loop(struct this_run_info *info)
                 continue;
             }
 
-            const char *op;
-            op = purc_variant_get_string_const(msg->operation);
-
-            HLOG_INFO("Got a request message for operation %s from %s\n",
-                    op, purc_variant_get_string_const(msg->sourceURI));
-
-            pcrdr_msg *response = pcrdr_make_void_message();
-            if (msg->target == PCRDR_MSG_TARGET_INSTANCE &&
-                    strcmp(op, DHCLI_OP_SHUTDOWN) == 0) {
-                shutdown_handler(info, msg, response);
-                purc_inst_move_message(requester, response);
+            if (msg->target != PCRDR_MSG_TARGET_INSTANCE) {
+                HLOG_INFO("Not a request sent to instance.\n");
                 pcrdr_release_message(msg);
-                pcrdr_release_message(response);
-                break;
+                continue;
             }
 
-            /* for other requests, reponse PCRDR_SC_BAD_REQUEST */
-            response->type = PCRDR_MSG_TYPE_RESPONSE;
-            response->requestId = purc_variant_ref(msg->requestId);
-            response->sourceURI = purc_variant_make_string(
-                    purc_get_endpoint(NULL), false);
-            response->retCode = PCRDR_SC_BAD_REQUEST;
-            response->resultValue = 0;
-            response->dataType = PCRDR_MSG_DATA_TYPE_VOID;
-            response->data = PURC_VARIANT_INVALID;
+            const char *op;
+            op = purc_variant_get_string_const(msg->operation);
+            HLOG_INFO("Got a request message for operation `%s` from %s\n",
+                    op, purc_variant_get_string_const(msg->sourceURI));
 
             const char *request_id;
             request_id = purc_variant_get_string_const(msg->requestId);
+
+            pcrdr_msg *response = pcrdr_make_void_message();
+            if (strcmp(op, DHCLI_OP_SHUTDOWN) == 0) {
+                /* for operation `shutdown`, request_id must not be `-` */
+                assert(strcmp(request_id, PCRDR_REQUESTID_NORETURN));
+                shutdown_handler(info, msg, response);
+                purc_inst_move_message(requester, response);
+                pcrdr_release_message(response);
+                pcrdr_release_message(msg);
+                break;
+            }
+            else if (strcmp(op, DHCLI_OP_RELEASE) == 0) {
+                release_handler(info, msg);
+            }
+            else if (strcmp(op, DHCLI_OP_CONFIG) == 0) {
+                config_handler(info, requester, msg);
+            }
+            else {
+                /* for other requests, reponse PCRDR_SC_BAD_REQUEST */
+                response->type = PCRDR_MSG_TYPE_RESPONSE;
+                response->requestId = purc_variant_ref(msg->requestId);
+                response->sourceURI = purc_variant_make_string(
+                        purc_get_endpoint(NULL), false);
+                response->retCode = PCRDR_SC_BAD_REQUEST;
+                response->resultValue = 0;
+                response->dataType = PCRDR_MSG_DATA_TYPE_VOID;
+                response->data = PURC_VARIANT_INVALID;
+            }
+
             if (strcmp(request_id, PCRDR_REQUESTID_NORETURN)) {
                 purc_inst_move_message(requester, response);
             }
@@ -169,7 +471,7 @@ static void event_loop(struct this_run_info *info)
                     purc_get_error_message(last_error));
         }
 
-    } while(true);
+    } while (true);
 }
 
 struct thread_arg {
@@ -182,7 +484,7 @@ static void* dhcli_thread_entry(void* arg)
 {
     struct thread_arg *my_arg = (struct thread_arg *)arg;
     sem_t *sw = my_arg->wait;
-    purc_atom_t rid = 0;
+    purc_atom_t rid_main = my_arg->mainrun->rid, rid = 0;
 
     int ret = purc_init_ex(PURC_MODULE_EJSON,
             HBDINETD_APP_NAME, HBDINETD_RUNNER_DHCLIENT, NULL);
@@ -191,7 +493,6 @@ static void* dhcli_thread_entry(void* arg)
                 PCINST_MOVE_BUFFER_FLAG_NONE, 16);
     }
 
-    fprintf(stderr, "log facility of main run: %d\n", my_arg->mainrun->log_facility);
     if (my_arg->mainrun->verbose) {
         purc_enable_log_ex(PURC_LOG_MASK_DEFAULT | PURC_LOG_MASK_INFO,
                 my_arg->mainrun->log_facility);
@@ -204,9 +505,9 @@ static void* dhcli_thread_entry(void* arg)
     sem_post(sw);
 
     if (rid) {
-        struct this_run_info info;
+        struct this_run info;
 
-        if (init_instance(&info) == 0) {
+        if (init_instance(&info, rid_main) == 0) {
             event_loop(&info);
             deinit_instance(&info);
         }
@@ -246,12 +547,14 @@ ALLOW_DEPRECATED_DECLARATIONS_BEGIN
         HLOG_ERR("Failed to create thread for DHCP client: %s\n",
                 strerror(errno));
         sem_close(arg.wait);
+        sem_unlink(SEM_NAME_SYNC_START);
         goto failed;
     }
     pthread_attr_destroy(&attr);
 
     sem_wait(arg.wait);
     sem_close(arg.wait);
+    sem_unlink(SEM_NAME_SYNC_START);
 ALLOW_DEPRECATED_DECLARATIONS_END
 
     return arg.rid;
@@ -263,7 +566,6 @@ failed:
 
 void dhcli_sync_exit(void)
 {
-    fprintf(stderr, "called: %s\n", __func__);
     pthread_join(dhcli_th, NULL);
 }
 

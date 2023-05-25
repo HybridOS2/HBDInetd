@@ -351,11 +351,27 @@ int register_common_interfaces(hbdbus_conn * conn)
         goto failed;
     }
 
-    errcode = hbdbus_register_event(conn, BUBBLE_NETWORKDEVICECHANGED,
+    errcode = hbdbus_register_event(conn, BUBBLE_DEVICECHANGED,
             HBDINETD_ALLOWED_HOSTS, HBDINETD_ANY_APPS);
     if (errcode) {
         HLOG_ERR("Error for register event %s: %s.\n",
-                BUBBLE_NETWORKDEVICECHANGED, hbdbus_get_err_message(errcode));
+                BUBBLE_DEVICECHANGED, hbdbus_get_err_message(errcode));
+        goto failed;
+    }
+
+    errcode = hbdbus_register_event(conn, BUBBLE_DEVICECONFIGURED,
+            HBDINETD_ALLOWED_HOSTS, HBDINETD_ANY_APPS);
+    if (errcode) {
+        HLOG_ERR("Error for register event %s: %s.\n",
+                BUBBLE_DEVICECONFIGURED, hbdbus_get_err_message(errcode));
+        goto failed;
+    }
+
+    errcode = hbdbus_register_event(conn, BUBBLE_DEVICECONFIGFAILED,
+            HBDINETD_ALLOWED_HOSTS, HBDINETD_ANY_APPS);
+    if (errcode) {
+        HLOG_ERR("Error for register event %s: %s.\n",
+                BUBBLE_DEVICECONFIGFAILED, hbdbus_get_err_message(errcode));
         goto failed;
     }
 
@@ -367,7 +383,9 @@ failed:
 
 void revoke_common_interfaces(hbdbus_conn *conn)
 {
-    hbdbus_revoke_event(conn, BUBBLE_NETWORKDEVICECHANGED);
+    hbdbus_revoke_event(conn, BUBBLE_DEVICECHANGED);
+    hbdbus_revoke_event(conn, BUBBLE_DEVICECONFIGURED);
+    hbdbus_revoke_event(conn, BUBBLE_DEVICECONFIGFAILED);
     hbdbus_revoke_procedure(conn, METHOD_NET_OPEN_DEVICE);
     hbdbus_revoke_procedure(conn, METHOD_NET_CLOSE_DEVICE);
     hbdbus_revoke_procedure(conn, METHOD_NET_GET_DEVICE_STATUS);

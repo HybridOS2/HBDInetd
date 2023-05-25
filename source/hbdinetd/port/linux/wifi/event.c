@@ -62,8 +62,7 @@ static int on_connected(hbdbus_conn *conn,
         ctxt->new_netid = -1;
     }
 
-    /* TODO: Issue DHCP request */
-    wifi_issue_dhcp_request(ctxt);
+    issue_dhcp_request(conn, ctxt->netdev->ifname);
 
     if (ctxt->status && ctxt->status->bssid) {
         struct pcutils_printbuf my_buff, *pb = &my_buff;

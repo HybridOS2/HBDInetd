@@ -33,6 +33,7 @@
 #include <dirent.h>
 
 #include <netutils/ifc.h>
+#include <netutils/dhcp.h>
 
 #include "dhcpmsg.h"
 #include "packet.h"
@@ -79,30 +80,38 @@ typedef struct dhcp_info dhcp_info;
 struct dhcp_info {
     uint32_t type;
 
-    uint32_t ipaddr;
-    uint32_t gateway;
+    in_addr_t ipaddr;
+    in_addr_t gateway;
     uint32_t prefixLength;
 
-    uint32_t dns1;
-    uint32_t dns2;
+    in_addr_t dns1;
+    in_addr_t dns2;
 
-    uint32_t serveraddr;
+    in_addr_t serveraddr;
     uint32_t lease;
 };
 
 static dhcp_info last_good_info;
 
-void get_dhcp_info(uint32_t *ipaddr, uint32_t *gateway, uint32_t *prefixLength,
-                   uint32_t *dns1, uint32_t *dns2, uint32_t *server,
-                   uint32_t *lease)
+int dhcp_get_last_conf_info(uint32_t *msg_type,
+        in_addr_t *ipaddr, in_addr_t *gateway, in_addr_t *netmask,
+        in_addr_t *dns1, in_addr_t *dns2, in_addr_t *server,
+        uint32_t *lease)
 {
+    *msg_type = last_good_info.type;
     *ipaddr = last_good_info.ipaddr;
     *gateway = last_good_info.gateway;
-    *prefixLength = last_good_info.prefixLength;
+    *netmask = ifc_ipv4_prefix_length_to_netmask(last_good_info.prefixLength);
     *dns1 = last_good_info.dns1;
     *dns2 = last_good_info.dns2;
     *server = last_good_info.serveraddr;
     *lease = last_good_info.lease;
+
+    if (last_good_info.type == DHCPACK) {
+        return 0;
+    }
+
+    return -1;
 }
 
 static int dhcp_configure(const char *ifname, dhcp_info *info)
@@ -112,9 +121,9 @@ static int dhcp_configure(const char *ifname, dhcp_info *info)
                          info->dns1, info->dns2);
 }
 
-static const char *dhcp_type_to_name(uint32_t type)
+const char *dhcp_msg_type_to_name(uint32_t type)
 {
-    switch(type) {
+    switch (type) {
     case DHCPDISCOVER: return "discover";
     case DHCPOFFER:    return "offer";
     case DHCPREQUEST:  return "request";
@@ -131,7 +140,7 @@ static void dump_dhcp_info(dhcp_info *info)
 {
     char addr[20], gway[20];
     HLOG_DEBUG("--- dhcp %s (%d) ---",
-            dhcp_type_to_name(info->type), info->type);
+            dhcp_msg_type_to_name(info->type), info->type);
     strcpy(addr, ipaddr(info->ipaddr));
     strcpy(gway, ipaddr(info->gateway));
     HLOG_DEBUG("ip %s gw %s prefixLength %d", addr, gway, info->prefixLength);
@@ -140,7 +149,6 @@ static void dump_dhcp_info(dhcp_info *info)
     HLOG_DEBUG("server %s, lease %d seconds",
             ipaddr(info->serveraddr), info->lease);
 }
-
 
 static int decode_dhcp_msg(dhcp_msg *msg, int len, dhcp_info *info)
 {
@@ -305,7 +313,7 @@ static void dump_dhcp_msg(dhcp_msg *msg, int len)
             hex2str(buf, &x[2], optsz);
         }
         if (x[0] == OPT_MESSAGE_TYPE)
-            name = dhcp_type_to_name(x[2]);
+            name = dhcp_msg_type_to_name(x[2]);
         else
             name = NULL;
         HLOG_DEBUG("op %d len %d {%s} %s", x[0], optsz, buf, name == NULL ? "" : name);
@@ -357,7 +365,7 @@ static int is_valid_reply(dhcp_msg *msg, dhcp_msg *reply, int sz)
 #define TIMEOUT_INITIAL   4000
 #define TIMEOUT_MAX      32000
 
-int dhcp_init_ifc(const char *ifname)
+static int dhcp_init_ifc(const char *ifname)
 {
     dhcp_msg discover_msg;
     dhcp_msg request_msg;
@@ -400,7 +408,8 @@ int dhcp_init_ifc(const char *ifname)
             if (timeout >= TIMEOUT_MAX) {
                 HLOG_ERR("timed out\n");
                 if ( info.type == DHCPOFFER ) {
-                    HLOG_ERR("no acknowledgement from DHCP server\nconfiguring %s with offered parameters\n", ifname);
+                    HLOG_ERR("no acknowledgement from DHCP server\n"
+                            "configuring %s with offered parameters\n", ifname);
                     return dhcp_configure(ifname, &info);
                 }
                 errno = ETIME;
@@ -419,7 +428,8 @@ int dhcp_init_ifc(const char *ifname)
                 break;
             case STATE_REQUESTING:
                 msg = &request_msg;
-                size = init_dhcp_request_msg(msg, hwaddr, xid, info.ipaddr, info.serveraddr);
+                size = init_dhcp_request_msg(msg, hwaddr, xid,
+                        info.ipaddr, info.serveraddr);
                 break;
             default:
                 r = 0;
@@ -489,7 +499,7 @@ int dhcp_init_ifc(const char *ifname)
                 return -1;
             } else {
                 HLOG_ERR("ignoring %s message in state %d\n",
-                         dhcp_type_to_name(info.type), state);
+                         dhcp_msg_type_to_name(info.type), state);
             }
             break;
         }
@@ -498,17 +508,198 @@ int dhcp_init_ifc(const char *ifname)
     return 0;
 }
 
-int dhcp_do(const char *iname)
+int dhcp_do_overall(const char *iname)
 {
     if (ifc_set_addr(iname, 0)) {
-        HLOG_ERR("failed to set ip addr for %s to 0.0.0.0: %s\n", iname, strerror(errno));
+        HLOG_ERR("failed to set ip addr for %s to 0.0.0.0: %s\n",
+                iname, strerror(errno));
         return -1;
     }
 
     if (ifc_up(iname)) {
-        HLOG_ERR("failed to bring up interface %s: %s\n", iname, strerror(errno));
+        HLOG_ERR("failed to bring up interface %s: %s\n",
+                iname, strerror(errno));
         return -1;
     }
 
     return dhcp_init_ifc(iname);
 }
+
+int dhcp_request_renew(const char *ifname,
+        in_addr_t ipaddr, in_addr_t serveraddr)
+{
+    dhcp_msg discover_msg;
+    dhcp_msg request_msg;
+    dhcp_msg reply;
+    dhcp_msg *msg;
+    dhcp_info info;
+    int s, r, size;
+    int valid_reply;
+    uint32_t xid;
+    unsigned char hwaddr[6];
+    struct pollfd pfd;
+    unsigned int state;
+    unsigned int timeout;
+    int if_index;
+
+    xid = (uint32_t) get_msecs();
+
+    if (ifc_get_hwaddr(ifname, hwaddr)) {
+        return fatal("cannot obtain interface address");
+    }
+    if (ifc_get_ifindex(ifname, &if_index)) {
+        return fatal("cannot obtain interface index");
+    }
+
+    s = open_raw_socket(ifname, hwaddr, if_index);
+
+    timeout = TIMEOUT_INITIAL;
+    state = STATE_REQUESTING;
+    info.type = 0;
+    info.ipaddr = ipaddr;
+    info.serveraddr = serveraddr;
+    goto transmit;
+
+    for (;;) {
+        pfd.fd = s;
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+        r = poll(&pfd, 1, timeout);
+
+        if (r == 0) {
+            HLOG_ERR("TIMEOUT\n");
+            if (timeout >= TIMEOUT_MAX) {
+                HLOG_ERR("timed out\n");
+                if ( info.type == DHCPOFFER ) {
+                    HLOG_ERR("no acknowledgement from DHCP server\n"
+                            "configuring %s with offered parameters\n", ifname);
+                    return dhcp_configure(ifname, &info);
+                }
+                errno = ETIME;
+                close(s);
+                return -1;
+            }
+            timeout = timeout * 2;
+
+        transmit:
+            size = 0;
+            msg = NULL;
+            switch(state) {
+            case STATE_SELECTING:
+                msg = &discover_msg;
+                size = init_dhcp_discover_msg(msg, hwaddr, xid);
+                break;
+            case STATE_REQUESTING:
+                msg = &request_msg;
+                size = init_dhcp_request_msg(msg, hwaddr, xid,
+                        info.ipaddr, info.serveraddr);
+                break;
+            default:
+                r = 0;
+            }
+            if (size != 0) {
+                r = send_message(s, if_index, msg, size);
+                if (r < 0) {
+                    HLOG_ERR("error sending dhcp msg: %s\n", strerror(errno));
+                }
+            }
+            continue;
+        }
+
+        if (r < 0) {
+            if ((errno == EAGAIN) || (errno == EINTR)) {
+                continue;
+            }
+            return fatal("poll failed");
+        }
+
+        errno = 0;
+        r = receive_packet(s, &reply);
+        if (r < 0) {
+            if (errno != 0) {
+                HLOG_DEBUG("receive_packet failed (%d): %s", r, strerror(errno));
+                if (errno == ENETDOWN || errno == ENXIO) {
+                    return -1;
+                }
+            }
+            continue;
+        }
+
+        if (HLOG_DEBUG_ENABLED)
+            dump_dhcp_msg(&reply, r);
+        decode_dhcp_msg(&reply, r, &info);
+
+        if (state == STATE_SELECTING) {
+            valid_reply = is_valid_reply(&discover_msg, &reply, r);
+        } else {
+            valid_reply = is_valid_reply(&request_msg, &reply, r);
+        }
+        if (!valid_reply) {
+            HLOG_ERR("invalid reply\n");
+            continue;
+        }
+
+        if (HLOG_DEBUG_ENABLED)
+            dump_dhcp_info(&info);
+
+        switch(state) {
+        case STATE_SELECTING:
+            if (info.type == DHCPOFFER) {
+                state = STATE_REQUESTING;
+                timeout = TIMEOUT_INITIAL;
+                xid++;
+                goto transmit;
+            }
+            break;
+        case STATE_REQUESTING:
+            if (info.type == DHCPACK) {
+                HLOG_ERR("configuring %s\n", ifname);
+                close(s);
+                return dhcp_configure(ifname, &info);
+            } else if (info.type == DHCPNAK) {
+                HLOG_ERR("configuration request denied\n");
+                close(s);
+                return -1;
+            } else {
+                HLOG_ERR("ignoring %s message in state %d\n",
+                         dhcp_msg_type_to_name(info.type), state);
+            }
+            break;
+        }
+    }
+    close(s);
+    return 0;
+}
+
+int dhcp_release_lease(const char *ifname,
+        in_addr_t ipaddr, in_addr_t serveraddr)
+{
+    dhcp_msg release_msg;
+    uint32_t xid;
+    unsigned char hwaddr[6];
+    int if_index;
+    int s, r, size;
+
+    xid = (uint32_t)get_msecs();
+
+    if (ifc_get_hwaddr(ifname, hwaddr)) {
+        return fatal("cannot obtain interface address");
+    }
+    if (ifc_get_ifindex(ifname, &if_index)) {
+        return fatal("cannot obtain interface index");
+    }
+
+    dhcp_msg *msg = &release_msg;
+    s = open_raw_socket(ifname, hwaddr, if_index);
+    size = init_dhcp_release_msg(msg, hwaddr, xid, ipaddr, serveraddr);
+    r = send_message(s, if_index, msg, size);
+    if (r < 0) {
+        HLOG_ERR("error sending dhcp msg: %s\n", strerror(errno));
+        close(s);
+        return -1;
+    }
+
+    close(s);
+    return 0;
+}
+

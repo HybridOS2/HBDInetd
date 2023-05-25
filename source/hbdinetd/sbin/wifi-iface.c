@@ -485,7 +485,6 @@ static const struct procedure {
 
 static const char *events[] = {
     BUBBLE_WIFICONNECTED,
-    BUBBLE_WIFICONFIGURED,
     BUBBLE_WIFIFAILEDCONNATTEMPT,
     BUBBLE_WIFIDISCONNECTED,
     BUBBLE_WIFISCANFINISHED,

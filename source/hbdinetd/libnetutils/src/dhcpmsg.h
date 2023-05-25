@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef _WIFI_DHCP_H_
-#define _WIFI_DHCP_H_
+#ifndef _NETUTILS_DHCPMSG_H_
+#define _NETUTILS_DHCPMSG_H_
 
 #include <sys/types.h>
 
@@ -88,19 +88,11 @@ struct dhcp_msg
 #define OPT_CLIENT_ID        61    /* n <opaque> */
 #define OPT_END              255
 
-/* DHCP message types */
-#define DHCPDISCOVER         1
-#define DHCPOFFER            2
-#define DHCPREQUEST          3
-#define DHCPDECLINE          4
-#define DHCPACK              5
-#define DHCPNAK              6
-#define DHCPRELEASE          7
-#define DHCPINFORM           8
-
 int init_dhcp_discover_msg(dhcp_msg *msg, void *hwaddr, uint32_t xid);
-
 int init_dhcp_request_msg(dhcp_msg *msg, void *hwaddr, uint32_t xid,
                           uint32_t ipaddr, uint32_t serveraddr);
+int init_dhcp_release_msg(dhcp_msg *msg, void *hwaddr, uint32_t xid,
+                          uint32_t ipaddr, uint32_t serveraddr);
 
-#endif
+#endif /* _NETUTILS_DHCPMSG_H_ */
+

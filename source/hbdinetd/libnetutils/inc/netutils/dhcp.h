@@ -21,12 +21,29 @@
 #include <sys/cdefs.h>
 #include <arpa/inet.h>
 
+/* DHCP message types */
+#define DHCPDISCOVER         1
+#define DHCPOFFER            2
+#define DHCPREQUEST          3
+#define DHCPDECLINE          4
+#define DHCPACK              5
+#define DHCPNAK              6
+#define DHCPRELEASE          7
+#define DHCPINFORM           8
+
 __BEGIN_DECLS
 
-extern int dhcp_do(const char *iname);
-extern int dhcp_stop(const char *ifname);
-extern int dhcp_release_lease(const char *ifname);
-extern const char *dhcp_get_errmsg(void);
+extern int dhcp_do_overall(const char *iname);
+extern int dhcp_request_renew(const char *ifname,
+        in_addr_t ipaddr, in_addr_t serveraddr);
+extern int dhcp_release_lease(const char *ifname,
+        in_addr_t ipaddr, in_addr_t serveraddr);
+
+extern int dhcp_get_last_conf_info(uint32_t *msg_type,
+        in_addr_t *ipaddr, in_addr_t *gateway, in_addr_t *netmask,
+        in_addr_t *dns1, in_addr_t *dns2, in_addr_t *server,
+        uint32_t *lease);
+const char *dhcp_msg_type_to_name(uint32_t type);
 
 __END_DECLS
 

@@ -87,7 +87,8 @@ const char *ifc_ipaddr_to_string(in_addr_t addr)
     return inet_ntoa(in_addr);
 }
 
-int ifc_string_to_ip(const char *string, struct sockaddr_storage *ss) {
+int ifc_string_to_ip(const char *string, struct sockaddr_storage *ss)
+{
     struct addrinfo hints, *ai;
     int ret;
 

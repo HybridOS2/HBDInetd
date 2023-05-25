@@ -19,6 +19,8 @@
 #include <string.h>
 #include <netinet/in.h>
 
+#include <netutils/dhcp.h>
+
 #include "dhcpmsg.h"
 
 static void *init_dhcp_msg(dhcp_msg *msg, int type, void *hwaddr, uint32_t xid)
@@ -98,3 +100,33 @@ int init_dhcp_request_msg(dhcp_msg *msg, void *hwaddr, uint32_t xid,
 
     return DHCP_MSG_FIXED_SIZE + (x - msg->options);
 }
+
+int init_dhcp_release_msg(dhcp_msg *msg, void *hwaddr, uint32_t xid,
+                          uint32_t ipaddr, uint32_t serveraddr)
+{
+    uint8_t *x;
+
+    x = init_dhcp_msg(msg, DHCPRELEASE, hwaddr, xid);
+
+    *x++ = OPT_PARAMETER_LIST;
+    *x++ = 4;
+    *x++ = OPT_SUBNET_MASK;
+    *x++ = OPT_GATEWAY;
+    *x++ = OPT_DNS;
+    *x++ = OPT_BROADCAST_ADDR;
+
+    *x++ = OPT_REQUESTED_IP;
+    *x++ = 4;
+    memcpy(x, &ipaddr, 4);
+    x +=  4;
+
+    *x++ = OPT_SERVER_ID;
+    *x++ = 4;
+    memcpy(x, &serveraddr, 4);
+    x += 4;
+
+    *x++ = OPT_END;
+
+    return DHCP_MSG_FIXED_SIZE + (x - msg->options);
+}
+

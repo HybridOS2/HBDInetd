@@ -25,7 +25,7 @@
 
 #define HBDINETD_APP_NAME               "@PROJECT_APP_NAME@"
 #define HBDINETD_RUNNER_MAIN            "main"
-#define HBDINETD_RUNNER_DHCLIENT        "dhclient"
+#define HBDINETD_RUNNER_DHCLIENT        "dhcl"
 
 #define HBDINETD_ALLOWED_HOSTS          "localhost"
 #define HBDINETD_PRIVILEGED_APPS        "cn.fmsoft.hybridos.*"
@@ -51,11 +51,12 @@
 // method for mobile device
 
 // events for global state
-#define BUBBLE_NETWORKDEVICECHANGED         "NetworkDeviceChanged"
+#define BUBBLE_DEVICECHANGED                "DeviceChanged"
+#define BUBBLE_DEVICECONFIGURED             "DeviceConfigured"
+#define BUBBLE_DEVICECONFIGFAILED           "DeviceConfigFailed"
 
 // events for WiFi device
 #define BUBBLE_WIFICONNECTED                "WiFiConnected"
-#define BUBBLE_WIFICONFIGURED               "WiFiConfigured"
 #define BUBBLE_WIFIFAILEDCONNATTEMPT        "WiFiFailedConnAttempt"
 #define BUBBLE_WIFIDISCONNECTED             "WiFiDisconnected"
 #define BUBBLE_WIFIHOTSPOTFOUND             "WiFiHotspotFound"
