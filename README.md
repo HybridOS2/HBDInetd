@@ -4,8 +4,8 @@ The daemon managing network interfaces for HybridOS.
 
 ## Dependencies
 
-- [Linux WPA/WPA2/IEEE 802.1X Supplicant]:
-   + Packages on Ubuntu 22.04 LTS: `wpasupplicant` and `libwpa-client-dev`.
+- Linux WPA/WPA2/IEEE 802.1X Supplicant:
+   + Package on Ubuntu 22.04 LTS: `wpasupplicant`.
    + Source: <http://w1.fi/wpa_supplicant/>
 - [PurC]: <https://github.com/HVML/PurC>
 - [HBDBus]: <https://github.com/HybridOS2/HBDBus>
