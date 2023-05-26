@@ -26,17 +26,7 @@
 
 #include <unistd.h>
 #include <errno.h>
-
-enum {
-    SCAN_STATE_STOPPED = 0,
-    SCAN_STATE_SCANNING,
-};
-
-enum {
-    CONN_STATE_DISCONNECTED = 0,
-    CONN_STATE_TRYING,
-    CONN_STATE_CONNECTED,
-};
+#include <assert.h>
 
 struct wifi_hotspot_candidate {
     const char *bssid;
@@ -45,13 +35,21 @@ struct wifi_hotspot_candidate {
     unsigned int frequency;
     int signal_level;
 
-    unsigned    found:1;
-    unsigned    saved:1;
+    int  netid;
+
+    bool found;
+};
+
+enum scan_state {
+    SCAN_STATE_IDLE = 0,
+    SCAN_STATE_SCANNING,
 };
 
 struct netdev_context {
+    hbdbus_conn *conn;
     struct network_device *netdev;
 
+    enum scan_state scan_state;
     enum wpa_state wpa_state;
 
     /* the next netid */
@@ -60,8 +58,12 @@ struct netdev_context {
     /* the new network id if >= 0. */
     int new_netid;
 
-    /* the trying netid */
+    /* the hotspot trying to connect */
     const struct wifi_hotspot_candidate *trying;
+    char *passphrase;
+
+    unsigned evt_connected:1;
+    unsigned evt_disconnected:1;
 
     time_t last_update_time;
     time_t scan_start_time;
@@ -69,6 +71,26 @@ struct netdev_context {
     struct list_head hotspots;
     struct kvlist saved_networks;
     struct wifi_status *status;
+};
+
+/* PSK or key for all hotspots is: `HybridOS 2.0` */
+#define MY_PASSPHRASE "HybridOS 2.0"
+
+static struct wifi_hotspot_candidate candidates[] = {
+    { "00:09:5b:95:e0:40", "HybridOS",                  "[WPA-PSK-CCMP]",  2412, 0, 0, 0 },
+    { "00:09:5b:95:e0:41", "HybridOS 1",                "[WPA2-PSK-CCMP]", 2412, 0, 0, 0 },
+    { "00:09:5b:95:e0:42", "HybridOS 2",                "[WPA-PSK-CCMP]",  2412, 0, 0, 0 },
+    { "02:55:24:33:77:a0", "testing 0",                 "[WPA2-PSK-TKIP]", 5766, 0, 0, 0 },
+    { "02:55:24:33:77:a1", "testing 1",                 "[WPA-PSK-TKIP]",  2462, 0, 0, 0 },
+    { "02:55:24:33:77:a2", "testing 2",                 "[WPA2-PSK-TKIP]", 2462, 0, 0, 0 },
+    { "02:55:24:33:77:a3", "testing 3",                 "[WEP]",  2462, 0, 0, 0 },
+    { "02:55:24:33:77:a4", "testing 5",                 "[WPA2-PSK-TKIP]", 5830, 0, 0, 0 },
+    { "00:09:5b:95:e0:40", "合璧操作系统",              "[WPA-PSK-TKIP]",  2412, 0, 0, 0 },
+    { "00:09:5b:95:e0:41", "测 试 UTF-8",               "[WPA2-PSK-TKIP]", 2412, 0, 0, 0 },
+    { "00:09:5b:95:e0:42", "testing 2",                 "[WPA-PSK-TKIP]",  2412, 0, 0, 0 },
+    { "00:09:5b:95:e0:43", "My Private",                "[WPA2-PSK-TKIP]", 2412, 0, 0, 0 },
+    { "00:09:5b:95:e0:44", "Guest",                     "[NONE]",  2412, 0, 0, 0 },
+    { "00:09:5b:95:e0:45", "\"Tom\" and \"Jerry\"",     "[WPA2-PSK-TKIP]", 5348, 0, 0, 0 },
 };
 
 void wifi_release_one_hotspot(struct wifi_hotspot *one)
@@ -132,6 +154,98 @@ int wifi_get_netid_from_ssid(struct netdev_context *ctxt, const char *ssid)
     void *data = kvlist_get(&ctxt->saved_networks, ssid);
     if (data) {
         return *(int *)data;
+    }
+
+    return -1;
+}
+
+static int my_check_network(const struct wifi_hotspot_candidate *candidate,
+        const char *keymgmt, const char *passphrase)
+{
+    (void)passphrase;
+    if (keymgmt == NULL)
+        return -1;
+
+    const char *my_keymgmt = NULL;
+    if (strstr(candidate->capabilities, "WPA2-PSK"))
+        my_keymgmt = "WPA-PSK";
+    else if (strstr(candidate->capabilities, "WPA-PSK"))
+        my_keymgmt = "WPA-PSK";
+    else if (strstr(candidate->capabilities, "WPA2"))
+        my_keymgmt = "WPA-PSK";
+    else if (strstr(candidate->capabilities, "WPA"))
+        my_keymgmt = "WPA-PSK";
+    else if (strstr(candidate->capabilities, "WEP"))
+        my_keymgmt = "WEP";
+    else if (strstr(candidate->capabilities, "NONE"))
+        my_keymgmt = "NONE";
+
+    if (my_keymgmt && strcmp(my_keymgmt, keymgmt) == 0)
+        return 0;
+
+    return -1;
+}
+
+int wifi_check_network(struct netdev_context *ctxt, int netid,
+        const char *ssid, const char *keymgmt, const char *passphrase)
+{
+    (void)ctxt;
+
+    if (netid < 0)
+        return -1;
+
+    struct wifi_hotspot_candidate *candidate = NULL;
+    for (size_t i = 0; i < PCA_TABLESIZE(candidates); i++) {
+        if (candidates[i].netid == netid) {
+            candidate = candidates + i;
+            break;
+        }
+    }
+
+    if (candidate == NULL) {
+        return -1;
+    }
+
+    assert(strcmp(candidate->ssid, ssid) == 0);
+    return my_check_network(candidate, keymgmt, passphrase);
+}
+
+int wifi_add_network(struct netdev_context *ctxt, const char *ssid,
+        const char *keymgmt, const char *passphrase)
+{
+    struct wifi_hotspot_candidate *candidate = NULL;
+
+    for (size_t i = 0; i < PCA_TABLESIZE(candidates); i++) {
+        if (strcmp(ssid, candidates[i].ssid) == 0) {
+            candidate = candidates + i;
+            break;
+        }
+    }
+
+    if (candidate == NULL) {
+        return -1;
+    }
+
+    assert(candidate->netid == -1);
+
+    if (my_check_network(candidate, keymgmt, passphrase))
+        return -1;
+
+    candidate->netid = ctxt->next_netid;
+    ctxt->next_netid++;
+    kvlist_set(&ctxt->saved_networks, ssid, &candidate->netid);
+    return 0;
+}
+
+int wifi_select_network(struct netdev_context *ctxt, int netid)
+{
+    assert(netid >= 0);
+
+    for (size_t i = 0; i < PCA_TABLESIZE(candidates); i++) {
+        if (candidates[i].netid == netid) {
+            ctxt->trying = candidates + i;
+            return 0;
+        }
     }
 
     return -1;
@@ -208,6 +322,8 @@ int wifi_update_status(struct netdev_context *ctxt)
     return 0;
 }
 
+static int disconnect(struct netdev_context *ctxt);
+
 static int connect(struct netdev_context *ctxt,
         const char *ssid, const char *bssid,
         const char *keymgmt, const char *passphrase)
@@ -238,6 +354,90 @@ static int connect(struct netdev_context *ctxt,
         }
     }
 
+    int netid = wifi_get_netid_from_ssid(ctxt, ssid);
+    if (keymgmt == NULL) {
+        if (netid >= 0) {   /* if it is a saved network */
+            goto select;
+        }
+
+        const struct wifi_hotspot *hotspot;
+        hotspot = wifi_get_hotspot_by_ssid(ctxt, ssid);
+        if (hotspot == NULL) {
+            HLOG_ERR("No key_mgmt specified and `%s` not found.\n", ssid);
+            return ENOENT;
+        }
+        keymgmt = wifi_get_keymgmt_from_capabilities(hotspot);
+
+        if (keymgmt == NULL) {
+            HLOG_ERR("Can not get key_mgmt from capabilities: %s.\n",
+                    hotspot->capabilities);
+            return ENOTSUP;
+        }
+
+        netid = wifi_add_network(ctxt, ssid, keymgmt, passphrase);
+        if (netid < 0) {
+            HLOG_ERR("Failed to add new network: %s (key_mgmt: %s)\n",
+                    ssid, keymgmt);
+            return ERR_DEVICE_CONTROLLER;
+        }
+    }
+    else if (netid >= 0) {
+        if (wifi_check_network(ctxt, netid, ssid, keymgmt, passphrase)) {
+            HLOG_ERR("Failed to update network: %d) %s (key_mgmt: %s)\n",
+                    netid, ssid, keymgmt);
+            return ERR_DEVICE_CONTROLLER;
+        }
+    }
+    else {
+        netid = wifi_add_network(ctxt, ssid, keymgmt, passphrase);
+        if (netid < 0) {
+            HLOG_ERR("Failed to add new network: %s (key_mgmt: %s)\n",
+                    ssid, keymgmt);
+            return ERR_DEVICE_CONTROLLER;
+        }
+
+        ctxt->new_netid = netid;
+    }
+
+    if (ctxt->status && ctxt->status->bssid) {
+        disconnect(ctxt);
+    }
+
+select:
+    ctxt->wpa_state = WPA_STATE_SCANNING;
+    wifi_select_network(ctxt, netid);
+
+    unsigned count = 30;    /* total 3s */
+    do {
+        TEMP_FAILURE_RETRY(usleep(100000)); // 0.1s
+
+        if (random() % 30 == count) {
+            if (strcmp(keymgmt, "NONE")) {
+                ctxt->wpa_state = WPA_STATE_AUTHENTICATING;
+                break;
+            }
+            else {
+                ctxt->wpa_state = WPA_STATE_COMPLETED;
+                break;
+            }
+        }
+
+    } while (--count);
+
+    wifi_update_status(ctxt);
+
+    if (ctxt->wpa_state == WPA_STATE_COMPLETED) {
+        ctxt->evt_connected = 1;
+        return 0;
+    }
+    else if (ctxt->wpa_state == WPA_STATE_AUTHENTICATING) {
+        if (strcmp(passphrase, MY_PASSPHRASE))
+            return ERR_WPA_WRONG_PASSPHRASE;
+    }
+    else if (ctxt->wpa_state == WPA_STATE_SCANNING) {
+        ctxt->passphrase = strdup(passphrase);
+    }
+
     return ERR_UNCERTAIN_RESULT;
 }
 
@@ -247,28 +447,21 @@ static int disconnect(struct netdev_context *ctxt)
         /* not connected */
         return 0;
     }
+
+    ctxt->wpa_state = WPA_STATE_DISCONNECTED;
+    ctxt->evt_disconnected = 1;
+    wifi_reset_status(ctxt);
     return 0;
 }
 
-static struct wifi_hotspot_candidate candidates[] = {
-    { "00:09:5b:95:e0:40", "HybridOS",                  "[WPA-PSK-CCMP]",  2412, 0, 0, 0 },
-    { "00:09:5b:95:e0:41", "HybridOS 1",                "[WPA2-PSK-CCMP]", 2412, 0, 0, 0 },
-    { "00:09:5b:95:e0:42", "HybridOS 2",                "[WPA-PSK-CCMP]",  2412, 0, 0, 0 },
-    { "02:55:24:33:77:a0", "testing 0",                 "[WPA2-PSK-TKIP]", 5766, 0, 0, 0 },
-    { "02:55:24:33:77:a1", "testing 1",                 "[WPA-PSK-TKIP]",  2462, 0, 0, 0 },
-    { "02:55:24:33:77:a2", "testing 2",                 "[WPA2-PSK-TKIP]", 2462, 0, 0, 0 },
-    { "02:55:24:33:77:a3", "testing 3",                 "[WEP]",  2462, 0, 0, 0 },
-    { "02:55:24:33:77:a4", "testing 5",                 "[WPA2-PSK-TKIP]", 5830, 0, 0, 0 },
-    { "00:09:5b:95:e0:40", "合璧操作系统",              "[WPA-PSK-TKIP]",  2412, 0, 0, 0 },
-    { "00:09:5b:95:e0:41", "测 试 UTF-8",               "[WPA2-PSK-TKIP]", 2412, 0, 0, 0 },
-    { "00:09:5b:95:e0:42", "testing 2",                 "[WPA-PSK-TKIP]",  2412, 0, 0, 0 },
-    { "00:09:5b:95:e0:43", "My Private",                "[WPA2-PSK-TKIP]", 2412, 0, 0, 0 },
-    { "00:09:5b:95:e0:44", "Guest",                     "[NONE]",  2412, 0, 0, 0 },
-    { "00:09:5b:95:e0:45", "\"Tom\" and \"Jerry\"",     "[WPA2-PSK-TKIP]", 5348, 0, 0, 0 },
-};
-
 static int start_scan(struct netdev_context *ctxt)
 {
+    if (ctxt->scan_state == SCAN_STATE_SCANNING)
+        return 0;
+
+    ctxt->scan_state = SCAN_STATE_SCANNING;
+
+    wifi_reset_hotspots(&ctxt->hotspots);
     /* generate a random hotspot list */
     unsigned found = 0;
     for (size_t i = 0; i < PCA_TABLESIZE(candidates); i++) {
@@ -286,7 +479,7 @@ static int start_scan(struct netdev_context *ctxt)
             one->netid = wifi_get_netid_from_ssid(ctxt, one->ssid);
             list_add_tail(&one->ln, &ctxt->hotspots);
 
-            candidates[i].found = 1;
+            candidates[i].found = true;
             found++;
         }
     }
@@ -297,7 +490,11 @@ static int start_scan(struct netdev_context *ctxt)
 
 static int stop_scan(struct netdev_context *ctxt)
 {
-    (void)ctxt;
+    if (ctxt->scan_state == SCAN_STATE_IDLE)
+        return 0;
+
+    ctxt->scan_state = SCAN_STATE_IDLE;
+    wifi_reset_hotspots(&ctxt->hotspots);
     return 0;
 }
 
@@ -371,6 +568,7 @@ int wifi_device_on(hbdbus_conn *conn, struct network_device *netdev)
         HLOG_ERR("Failed to allocate memory for WiFi device context!\n");
         return ENOMEM;
     }
+    netdev->ctxt->conn = conn;
     netdev->ctxt->netdev = netdev;
 
     netdev->wifi_ops = &wifi_ops;
@@ -390,7 +588,7 @@ int wifi_device_on(hbdbus_conn *conn, struct network_device *netdev)
     for (size_t i = 0; i < PCA_TABLESIZE(candidates); i++) {
 
         if ((random() % 10) == 0) {
-            candidates[i].saved = 1;
+            candidates[i].netid = netdev->ctxt->next_netid;
             kvlist_set(&netdev->ctxt->saved_networks, candidates[i].ssid,
                     &netdev->ctxt->next_netid);
             netdev->ctxt->next_netid++;
@@ -437,6 +635,78 @@ int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
     (void)conn;
     if (netdev->ctxt == NULL)
         return EPERM;
+
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
+    pcutils_printbuf_init(pb);
+
+    struct netdev_context *ctxt = netdev->ctxt;
+
+    const char *evt = NULL;
+    if (ctxt->wpa_state == WPA_STATE_SCANNING) {
+        ctxt->wpa_state = WPA_STATE_AUTHENTICATING;
+    }
+    else if (ctxt->wpa_state == WPA_STATE_AUTHENTICATING) {
+        if (strcmp(ctxt->passphrase, MY_PASSPHRASE)) {
+            evt = BUBBLE_WIFIFAILEDCONNATTEMPT;
+
+            char *escaped_ssid;
+            escaped_ssid = pcutils_escape_string_for_json(ctxt->trying->ssid);
+            pcutils_printbuf_format(pb,
+                    "{\"ssid\":\"%s\","
+                    "\"reason\":\"%s\"}",
+                    escaped_ssid, "BAD-KEY");
+            free(escaped_ssid);
+
+            if (ctxt->new_netid >= 0) {
+                kvlist_remove(&ctxt->saved_networks, ctxt->trying->ssid);
+                ctxt->new_netid = -1;
+            }
+        }
+        else {
+            ctxt->wpa_state = WPA_STATE_COMPLETED;
+            ctxt->evt_connected = 1;
+        }
+
+        free(ctxt->passphrase);
+    }
+    else if (ctxt->evt_disconnected &&
+            ctxt->wpa_state == WPA_STATE_DISCONNECTED) {
+        ctxt->evt_disconnected = 0;
+        evt = BUBBLE_WIFIDISCONNECTED;
+        pcutils_printbuf_format(pb,
+                "{\"bssid\":\"%s\",\"ssid\":\"%s\"}",
+                ctxt->status->bssid,
+                ctxt->status->escaped_ssid ? ctxt->status->escaped_ssid :
+                ctxt->status->ssid);
+
+    }
+    else if (ctxt->evt_connected && ctxt->wpa_state == WPA_STATE_COMPLETED) {
+        ctxt->evt_connected = 0;
+        evt = BUBBLE_WIFICONNECTED;
+        pcutils_printbuf_format(pb,
+                "{\"bssid\":\"%s\","
+                "\"ssid\":\"%s\","
+                "\"signalLevel\":%d}",
+                  ctxt->status->bssid,
+                  ctxt->status->escaped_ssid ? ctxt->status->escaped_ssid :
+                    ctxt->status->ssid,
+                  ctxt->status->signal_level);
+    }
+
+    if (evt) {
+        if (pb->buf) {
+            int ret = hbdbus_fire_event(ctxt->conn, evt, pb->buf);
+            free(pb->buf);
+            if (ret) {
+                HLOG_ERR("Failed when firing event: %s\n", evt);
+                return ERR_DATA_BUS;
+            }
+        }
+        else {
+            HLOG_ERR("OOM when using printbuf\n");
+            return ENOMEM;
+        }
+    }
 
     return 0;
 }

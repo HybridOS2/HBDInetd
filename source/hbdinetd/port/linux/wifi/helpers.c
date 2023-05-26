@@ -956,6 +956,7 @@ int wifi_add_network(struct netdev_context *ctxt, const char *ssid,
         return -1;
     }
 
+    kvlist_set(&ctxt->saved_networks, ssid, &netid);
     return netid;
 }
 
