@@ -60,6 +60,31 @@ const char *get_error_message(int errcode)
     return error_messages[errcode];
 }
 
+int check_wpa_passphrase(const char *keymgmt, const char *passphrase)
+{
+    if (strcmp(keymgmt, "WPA-PSK") == 0 ||
+            strcmp(keymgmt, "WPA2-PSK") == 0) {
+        size_t len = strlen(passphrase);
+        if (len < 8 || len > 63)
+            return ERR_WPA_INVALID_PASSPHRASE;
+
+        for (int i = 0; passphrase[i]; i++) {
+            if ((passphrase[i] < 32) || (passphrase[i] > 126)) {
+                return ERR_WPA_INVALID_PASSPHRASE;
+            }
+        }
+    }
+    else if (strcmp(keymgmt, "WEP") == 0) {
+    }
+    else if (strcmp(keymgmt, "NONE") == 0) {
+    }
+    else {
+        return ERR_WPA_INVALID_KEYMGMT;
+    }
+
+    return 0;
+}
+
 int update_network_device_config(struct network_device *netdev,
         const char *method, const char *config)
 {
@@ -190,6 +215,97 @@ failed:
         purc_variant_unref(jo);
 
     return NULL;
+}
+
+void cleanup_network_device_dynamic_info(struct network_device *netdev)
+{
+    for (int i = 0; i < HBD_IFADDR_FIELDS_NR; i++) {
+        if (netdev->ipv4.fields[i]) {
+            free(netdev->ipv4.fields[i]);
+            netdev->ipv4.fields[i] = NULL;
+        }
+    }
+
+    for (int i = 0; i < HBD_IFADDR_FIELDS_NR; i++) {
+        if (netdev->ipv6.fields[i]) {
+            free(netdev->ipv6.fields[i]);
+            netdev->ipv6.fields[i] = NULL;
+        }
+    }
+}
+
+void cleanup_network_device(struct network_device *netdev)
+{
+    if (netdev->hwaddr) {
+        free(netdev->hwaddr);
+        netdev->hwaddr = NULL;
+    }
+
+    for (int i = 0; i < NETWORK_DEVICE_CONF_FIELDS_NR; i++) {
+        if (netdev->fields[i]) {
+            free(netdev->fields[i]);
+            netdev->fields[i] = NULL;
+        }
+    }
+
+    cleanup_network_device_dynamic_info(netdev);
+}
+
+int update_network_device_info(struct run_info *run_info, const char *ifname)
+{
+    void *data;
+    struct network_device *netdev;
+
+    data = kvlist_get(&run_info->devices, ifname);
+    if (data == NULL) {
+        netdev = calloc(1, sizeof(*netdev));
+        if (netdev == NULL) {
+            HLOG_ERR("Failed calloc()\n");
+            goto failed;
+        }
+
+        if ((netdev->ifname = kvlist_set_ex(&run_info->devices,
+                        ifname, &netdev)) == NULL) {
+            HLOG_ERR("Failed kvlist_set_ex()\n");
+            goto failed;
+        }
+
+        if (get_network_device_fixed_info(ifname, netdev) == NULL) {
+            goto failed;
+        }
+    }
+    else {
+        netdev = *(struct network_device **)data;
+        cleanup_network_device(netdev);
+    }
+
+    if (update_network_device_dynamic_info(ifname, netdev))
+        goto failed;
+
+    return 0;
+
+failed:
+    kvlist_remove(&run_info->devices, ifname);
+    return -1;
+}
+
+void cleanup_network_devices(struct run_info *run_info)
+{
+    const char* name;
+    void *data;
+    kvlist_for_each(&run_info->devices, name, data) {
+        struct network_device *netdev;
+        netdev = *(struct network_device **)data;
+
+        if (netdev->terminate) {
+            netdev->terminate(netdev);
+        }
+
+        cleanup_network_device(netdev);
+        free(netdev);
+    }
+
+    kvlist_free(&run_info->devices);
 }
 
 size_t convert_to_hex_string(const char *src, char *hex)

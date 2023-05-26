@@ -94,17 +94,19 @@ struct dhcp_info {
 static dhcp_info last_good_info;
 
 int dhcp_get_last_conf_info(uint32_t *msg_type,
-        in_addr_t *ipaddr, in_addr_t *gateway, in_addr_t *netmask,
-        in_addr_t *dns1, in_addr_t *dns2, in_addr_t *server,
+        char **ipaddr, char **gateway, char **netmask,
+        char **dns1, char **dns2, char **server,
         uint32_t *lease)
 {
     *msg_type = last_good_info.type;
-    *ipaddr = last_good_info.ipaddr;
-    *gateway = last_good_info.gateway;
-    *netmask = ifc_ipv4_prefix_length_to_netmask(last_good_info.prefixLength);
-    *dns1 = last_good_info.dns1;
-    *dns2 = last_good_info.dns2;
-    *server = last_good_info.serveraddr;
+    *ipaddr = strdup(ifc_ipaddr_to_string(last_good_info.ipaddr));
+    *gateway = strdup(ifc_ipaddr_to_string(last_good_info.gateway));
+    *netmask = strdup(ifc_ipaddr_to_string(
+                ifc_ipv4_prefix_length_to_netmask(
+                    last_good_info.prefixLength)));
+    *dns1 = strdup(ifc_ipaddr_to_string(last_good_info.dns1));
+    *dns2 = strdup(ifc_ipaddr_to_string(last_good_info.dns2));
+    *server = strdup(ifc_ipaddr_to_string(last_good_info.serveraddr));
     *lease = last_good_info.lease;
 
     if (last_good_info.type == DHCPACK) {
@@ -525,8 +527,7 @@ int dhcp_do_overall(const char *iname)
     return dhcp_init_ifc(iname);
 }
 
-int dhcp_request_renew(const char *ifname,
-        in_addr_t ipaddr, in_addr_t serveraddr)
+int dhcp_request_renew(const char *ifname, const char *ip, const char *server)
 {
     dhcp_msg discover_msg;
     dhcp_msg request_msg;
@@ -541,6 +542,9 @@ int dhcp_request_renew(const char *ifname,
     unsigned int state;
     unsigned int timeout;
     int if_index;
+
+    in_addr_t ipaddr = inet_addr(ip);
+    in_addr_t serveraddr = inet_addr(server);
 
     xid = (uint32_t) get_msecs();
 
@@ -671,14 +675,15 @@ int dhcp_request_renew(const char *ifname,
     return 0;
 }
 
-int dhcp_release_lease(const char *ifname,
-        in_addr_t ipaddr, in_addr_t serveraddr)
+int dhcp_release_lease(const char *ifname, const char *ip, const char *server)
 {
     dhcp_msg release_msg;
     uint32_t xid;
     unsigned char hwaddr[6];
     int if_index;
     int s, r, size;
+    in_addr_t ipaddr = inet_addr(ip);
+    in_addr_t serveraddr = inet_addr(server);
 
     xid = (uint32_t)get_msecs();
 

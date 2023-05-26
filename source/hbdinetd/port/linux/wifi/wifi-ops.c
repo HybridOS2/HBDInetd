@@ -24,7 +24,6 @@
 #include "internal.h"
 #include "log.h"
 
-#include "network-device.h"
 #include "wifi.h"
 #include "event.h"
 #include "helpers.h"

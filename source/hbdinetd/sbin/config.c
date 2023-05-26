@@ -137,7 +137,7 @@ static void shutdown_handler(struct this_run *info,
         ifconf = *(struct iface_config **)data;
 
         if (ifconf->server)
-            dhcp_release_lease(ifconf->name, ifconf->addr, ifconf->srv);
+            dhcp_release_lease(ifconf->name, ifconf->ipv4.addr, ifconf->server);
         cleanup_iface_config(ifconf, false);
     }
 
@@ -155,20 +155,22 @@ static const char *get_dhcp_result(struct iface_config *ifconf)
     const char *status = NULL;
 
     uint32_t msg_type;
-    in_addr_t gateway, netmask, dns1, dns2;
-    int ret = dhcp_get_last_conf_info(&msg_type, &ifconf->addr, &gateway,
-        &netmask, &dns1, &dns2, &ifconf->srv, &ifconf->lease);
+    int ret = dhcp_get_last_conf_info(&msg_type,
+            &ifconf->ipv4.addr, &ifconf->ipv4.gateway, &ifconf->ipv4.netmask,
+            &ifconf->dns1, &ifconf->dns2, &ifconf->server, &ifconf->lease);
     if (ret) {
         status = dhcp_msg_type_to_name(msg_type);
         goto failed;
     }
 
+#if 0
     ifconf->server = strdup(ifc_ipaddr_to_string(ifconf->srv));
     ifconf->dns1 = dns1 ? strdup(ifc_ipaddr_to_string(dns1)) : NULL;
     ifconf->dns2 = dns2 ? strdup(ifc_ipaddr_to_string(dns2)) : NULL;
     ifconf->ipv4.addr = strdup(ifc_ipaddr_to_string(ifconf->addr));
     ifconf->ipv4.netmask = strdup(ifc_ipaddr_to_string(netmask));
     ifconf->ipv4.gateway = strdup(ifc_ipaddr_to_string(gateway));
+#endif
 
     ifconf->config_time = purc_monotonic_time_after(0);
     ifconf->expire_time = purc_monotonic_time_after(ifconf->lease);
@@ -272,7 +274,7 @@ static void release_handler(struct this_run *info, const pcrdr_msg *request)
         HLOG_ERR("Failed due to bad ifname: %s\n", ifname);
     }
     else {
-        dhcp_release_lease(ifname, ifconf->addr, ifconf->srv);
+        dhcp_release_lease(ifname, ifconf->ipv4.addr, ifconf->server);
         cleanup_iface_config(ifconf, false);
         kvlist_remove(&info->ifaces, ifname);
     }
@@ -312,19 +314,17 @@ static const char *get_renew_result(struct iface_config *ifconf)
 {
     const char *status = NULL;
     uint32_t msg_type;
-    in_addr_t gateway, netmask, dns1, dns2;
-    int ret = dhcp_get_last_conf_info(&msg_type, &ifconf->addr, &gateway,
-        &netmask, &dns1, &dns2, &ifconf->srv, &ifconf->lease);
-    if (ret) {
-        status = dhcp_msg_type_to_name(msg_type);
-        goto failed;
-    }
 
     /* always update DNS servers */
     if (ifconf->dns1) free(ifconf->dns1);
     if (ifconf->dns2) free(ifconf->dns2);
-    ifconf->dns1 = dns1 ? strdup(ifc_ipaddr_to_string(dns1)) : NULL;
-    ifconf->dns2 = dns2 ? strdup(ifc_ipaddr_to_string(dns2)) : NULL;
+    int ret = dhcp_get_last_conf_info(&msg_type,
+            &ifconf->ipv4.addr, &ifconf->ipv4.gateway, &ifconf->ipv4.netmask,
+            &ifconf->dns1, &ifconf->dns2, &ifconf->server, &ifconf->lease);
+    if (ret) {
+        status = dhcp_msg_type_to_name(msg_type);
+        goto failed;
+    }
 
     ifconf->config_time = purc_monotonic_time_after(0);
     ifconf->expire_time = purc_monotonic_time_after(ifconf->lease);
@@ -358,14 +358,16 @@ static void check_to_renew(struct this_run *info)
             do_config(ifconf, info->rid_main);
         }
         else if (ifconf->renew_tries > 0 && elapsed >= ifconf->lease * 0.875) {
-            if (dhcp_request_renew(ifconf->name, ifconf->addr, ifconf->srv) == 0) {
+            if (dhcp_request_renew(ifconf->name,
+                        ifconf->ipv4.addr, ifconf->server) == 0) {
                 get_renew_result(ifconf);
             }
             else
                 ifconf->renew_tries++;
         }
         else if (elapsed >= ifconf->lease * 0.5) {
-            if (dhcp_request_renew(ifconf->name, ifconf->addr, ifconf->srv) == 0) {
+            if (dhcp_request_renew(ifconf->name,
+                        ifconf->ipv4.addr, ifconf->server) == 0) {
                 get_renew_result(ifconf);
             }
             else

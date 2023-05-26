@@ -1,4 +1,4 @@
-add_definitions(-DBUILDING_LINUX__=1)
+add_definitions(-DBUILDING_FAKE__=1)
 
 HBDINETD_OPTION_BEGIN()
 

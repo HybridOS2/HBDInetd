@@ -41,22 +41,6 @@ bool is_valid_interface_name(const char *ifname)
     return purc_is_valid_token(ifname, IFNAMSIZ - 1);
 }
 
-#if 0
-    if (ifname[0] == 'e') {
-        netdev->type = DEVICE_TYPE_ETHER_WIRED;
-    }
-    else if (ifname[0] == 'w') {
-        netdev->type = DEVICE_TYPE_ETHER_WIRELESS;
-        netdev->on = wifi_device_on;
-        netdev->off = wifi_device_off;
-        netdev->check = wifi_device_check;
-    }
-    else {
-        /* TODO */
-        netdev->type = DEVICE_TYPE_UNKNOWN;
-    }
-#endif
-
 static int get_device_type(struct network_device * netdev,
         const char *ifname, int fd)
 {
@@ -101,39 +85,6 @@ done:
     if (opened)
         close(fd);
     return 0;
-}
-
-void cleanup_network_device(struct network_device *netdev)
-{
-    if (netdev->terminate) {
-        netdev->terminate(netdev);
-    }
-
-    if (netdev->hwaddr) {
-        free(netdev->hwaddr);
-        netdev->hwaddr = NULL;
-    }
-
-    for (int i = 0; i < NETWORK_DEVICE_CONF_FIELDS_NR; i++) {
-        if (netdev->fields[i]) {
-            free(netdev->fields[i]);
-            netdev->fields[i] = NULL;
-        }
-    }
-
-    for (int i = 0; i < HBD_IFADDR_FIELDS_NR; i++) {
-        if (netdev->ipv4.fields[i]) {
-            free(netdev->ipv4.fields[i]);
-            netdev->ipv4.fields[i] = NULL;
-        }
-    }
-
-    for (int i = 0; i < HBD_IFADDR_FIELDS_NR; i++) {
-        if (netdev->ipv6.fields[i]) {
-            free(netdev->ipv6.fields[i]);
-            netdev->ipv6.fields[i] = NULL;
-        }
-    }
 }
 
 struct network_device *get_network_device_fixed_info(const char *ifname,
@@ -273,59 +224,6 @@ int update_network_device_dynamic_info(const char *ifname,
 
 failed:
     return -1;
-}
-
-int update_network_device_info(struct run_info *run_info, const char *ifname)
-{
-    void *data;
-    struct network_device *netdev;
-
-    data = kvlist_get(&run_info->devices, ifname);
-    if (data == NULL) {
-        netdev = calloc(1, sizeof(*netdev));
-        if (netdev == NULL) {
-            HLOG_ERR("Failed calloc()\n");
-            goto failed;
-        }
-
-        if ((netdev->ifname = kvlist_set_ex(&run_info->devices,
-                        ifname, &netdev)) == NULL) {
-            HLOG_ERR("Failed kvlist_set_ex()\n");
-            goto failed;
-        }
-
-        if (get_network_device_fixed_info(ifname, netdev) == NULL) {
-            goto failed;
-        }
-    }
-    else {
-        netdev = *(struct network_device **)data;
-        cleanup_network_device(netdev);
-    }
-
-    if (update_network_device_dynamic_info(ifname, netdev))
-        goto failed;
-
-    return 0;
-
-failed:
-    kvlist_remove(&run_info->devices, ifname);
-    return -1;
-}
-
-void cleanup_network_devices(struct run_info *run_info)
-{
-    const char* name;
-    void *data;
-    kvlist_for_each(&run_info->devices, name, data) {
-        struct network_device *netdev;
-        netdev = *(struct network_device **)data;
-
-        cleanup_network_device(netdev);
-        free(netdev);
-    }
-
-    kvlist_free(&run_info->devices);
 }
 
 int enumerate_network_devices(struct run_info *run_info)

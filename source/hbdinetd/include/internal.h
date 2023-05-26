@@ -295,14 +295,13 @@ extern struct run_info run_info;
 /* ports/<port>/network-device.c */
 bool is_valid_interface_name(const char *ifname);
 int enumerate_network_devices(struct run_info *run_info);
-void cleanup_network_devices(struct run_info *run_info);
 
 struct network_device *get_network_device_fixed_info(const char *ifname,
     struct network_device *netdev);
 int update_network_device_dynamic_info(const char *ifname,
     struct network_device *netdev);
-
-int update_network_device_info(struct run_info *info, const char *ifname);
+int netdev_config_iface_up(const char *ifname, struct network_device *netdev);
+int netdev_config_iface_down(const char *ifname, struct network_device *netdev);
 
 /* ports/<port>/wifi-device.c */
 int wifi_device_on(hbdbus_conn *conn, struct network_device *netdev);
@@ -319,9 +318,13 @@ int restore_system_settings(hbdbus_conn *conn);
 const char *get_error_message(int errcode);
 int update_network_device_config(struct network_device *netdev,
         const char *method, const char *config);
+void cleanup_network_device_dynamic_info(struct network_device *netdev);
+void cleanup_network_device(struct network_device *netdev);
 struct network_device *check_network_device_ex(struct run_info *info,
         const char *method_param, int expect_type,
         const char *extra_key, purc_variant_t *extra_value, int *errcode);
+void cleanup_network_devices(struct run_info *run_info);
+int update_network_device_info(struct run_info *info, const char *ifname);
 
 size_t convert_to_hex_string(const char *src, char *hex);
 size_t escape_string_to_literal_text(const char *src, char *escaped);
@@ -333,6 +336,8 @@ int print_one_hotspot(const struct wifi_hotspot *hotspot, int curr_netid,
         struct pcutils_printbuf *pb);
 int print_hotspot_list(const struct list_head *hotspots, int curr_netid,
         struct pcutils_printbuf *pb);
+/* check wpa/wpa2 passphrase is valid */
+int check_wpa_passphrase(const char *keymgmt, const char *passphrase);
 
 /* pathname will be the first argument. */
 int start_daemon(const char *pathname, const char *arg, ...);

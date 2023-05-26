@@ -13,9 +13,10 @@ list(APPEND hbdinetd_PRIVATE_INCLUDE_DIRECTORIES
 
 list(APPEND hbdinetd_SOURCES
     "${HBDINETD_DIR}/port/fake/network-device.c"
+    "${HBDINETD_DIR}/port/fake/system-settings.c"
     "${HBDINETD_DIR}/port/fake/wifi/wifi-ops.c"
-    "${HBDINETD_DIR}/port/fake/libnetutils/ifc.c"
-    "${HBDINETD_DIR}/port/fake/libnetutils/dhcp.c"
+    "${HBDINETD_DIR}/port/fake/libnetutils/src/ifc_utils.c"
+    "${HBDINETD_DIR}/port/fake/libnetutils/src/dhcpclient.c"
 )
 
 install(FILES
