@@ -28,8 +28,7 @@ set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/source/cmake")
 # -----------------------------------------------------------------------------
 set(ALL_PORTS
     Linux
-    Mac
-    Windows
+    Fake
 )
 set(PORT "NOPORT" CACHE STRING "choose which HBDInetd port to build (one of ${ALL_PORTS})")
 

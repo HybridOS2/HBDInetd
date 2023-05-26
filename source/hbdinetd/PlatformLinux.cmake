@@ -25,7 +25,6 @@ list(APPEND hbdinetd_SOURCES
     "${HBDINETD_DIR}/port/linux/libnetutils/src/dhcpclient.c"
     "${HBDINETD_DIR}/port/linux/libnetutils/src/ifc_utils.c"
     "${HBDINETD_DIR}/port/linux/libnetutils/src/packet.c"
-
 )
 
 install(FILES
