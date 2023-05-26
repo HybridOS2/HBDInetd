@@ -13,6 +13,7 @@ list(APPEND hbdinetd_PRIVATE_INCLUDE_DIRECTORIES
 
 list(APPEND hbdinetd_SOURCES
     "${HBDINETD_DIR}/port/linux/network-device.c"
+    "${HBDINETD_DIR}/port/linux/system-settings.c"
     "${HBDINETD_DIR}/port/linux/wpa-client/common.c"
     "${HBDINETD_DIR}/port/linux/wpa-client/os_unix.c"
     "${HBDINETD_DIR}/port/linux/wpa-client/wpa_debug.c"

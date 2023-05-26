@@ -194,7 +194,7 @@ static char *make_config_json(struct iface_config *ifconf)
                 "\"dns1\":\"%s\","
                 "\"dns2\":\"%s\","
                 "\"search\":\"%s\","
-                "\"inet\":{"
+                "\"inet4\":{"
                     "\"address\":\"%s\","
                     "\"netmask\":\"%s\","
                     "\"gateway\":\"%s\""

@@ -31,6 +31,8 @@
 
 #include <time.h>
 
+struct system_settings;
+
 struct run_info {
     bool running;
     bool daemon;
@@ -48,6 +50,7 @@ struct run_info {
     purc_rwstream_t dump_stm;
 
     struct kvlist devices;
+    struct system_settings *saved_settings;
 };
 
 /* network device description */
@@ -252,6 +255,14 @@ typedef struct network_device {
     const char         *ifname;     /* interface name */
     char               *hwaddr;     /* only for ether interface */
 
+    char               *fields[0];
+#define NETWORK_DEVICE_CONF_FIELDS_NR   4
+
+    char               *dns1;
+    char               *dns2;
+    char               *search;
+    char               *method;
+
     /* dynamic info */
     unsigned int        status;
     unsigned int        flags;      /* copied from kernel */
@@ -299,8 +310,15 @@ int wifi_device_off(hbdbus_conn *conn, struct network_device *netdev);
 int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev);
 void wifi_device_terminate(struct network_device *netdev);
 
+/* ports/<port>/post-configured.c */
+int save_system_settings(hbdbus_conn *conn);
+int update_system_settings(hbdbus_conn *conn, struct network_device *netdev);
+int restore_system_settings(hbdbus_conn *conn);
+
 /* utils.c */
 const char *get_error_message(int errcode);
+int update_network_device_config(struct network_device *netdev,
+        const char *method, const char *config);
 struct network_device *check_network_device_ex(struct run_info *info,
         const char *method_param, int expect_type,
         const char *extra_key, purc_variant_t *extra_value, int *errcode);
@@ -319,6 +337,9 @@ int print_hotspot_list(const struct list_head *hotspots, int curr_netid,
 /* pathname will be the first argument. */
 int start_daemon(const char *pathname, const char *arg, ...);
 int stop_daemon(const char *pidfile);
+
+char *load_file_contents(const char *path, size_t *length);
+int save_file_contents(const char *path, const char *contents, size_t len);
 
 /* common-iface.c */
 int register_common_interfaces(hbdbus_conn *conn);

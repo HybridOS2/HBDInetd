@@ -60,6 +60,73 @@ const char *get_error_message(int errcode)
     return error_messages[errcode];
 }
 
+int update_network_device_config(struct network_device *netdev,
+        const char *method, const char *config)
+{
+    purc_variant_t jo = NULL, jo_tmp;
+    jo = purc_variant_make_from_json_string(config, strlen(config));
+    if (jo == NULL) {
+        HLOG_ERR("Bad JSON data: %s\n", config);
+        goto failed;
+    }
+
+    /* reset config fields */
+    for (int i = 0; i < NETWORK_DEVICE_CONF_FIELDS_NR; i++) {
+        if (netdev->fields[i]) {
+            free(netdev->fields[i]);
+            netdev->fields[i] = NULL;
+        }
+    }
+
+    if (netdev->ipv4.gateway) {
+        free(netdev->ipv4.gateway);
+        netdev->ipv4.gateway = NULL;
+    }
+
+    static const char *config_names[] = {
+        "dns1",
+        "dns2",
+        "search",
+    };
+
+    for (size_t i = 0; i < PCA_TABLESIZE(config_names); i++) {
+        if ((jo_tmp = purc_variant_object_get_by_ckey(jo, config_names[i]))) {
+            const char *str = purc_variant_get_string_const(jo_tmp);
+            if (str && str[0])
+                netdev->fields[i] = strdup(str);
+        }
+    }
+    if (netdev->method)
+        free(netdev->method);
+    netdev->method = strdup(method);
+
+    if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "inet4")) &&
+            purc_variant_is_object(jo_tmp)) {
+        purc_variant_t jo_tmp_tmp;
+        jo_tmp_tmp = purc_variant_object_get_by_ckey(jo_tmp, "gateway");
+        const char *str = purc_variant_get_string_const(jo_tmp_tmp);
+        if (str && str[0])
+            netdev->ipv4.gateway = strdup(str);
+    }
+
+    if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "inet6")) &&
+            purc_variant_is_object(jo_tmp)) {
+        purc_variant_t jo_tmp_tmp;
+        jo_tmp_tmp = purc_variant_object_get_by_ckey(jo_tmp, "gateway");
+        const char *str = purc_variant_get_string_const(jo_tmp_tmp);
+        if (str && str[0])
+            netdev->ipv6.gateway = strdup(str);
+    }
+
+    purc_variant_unref(jo);
+    return 0;
+
+failed:
+    if (jo)
+        purc_variant_unref(jo);
+    return -1;
+}
+
 struct network_device *check_network_device_ex(struct run_info *info,
         const char *method_param, int expect_type,
         const char *extra_key, purc_variant_t *extra_value, int *errcode)
@@ -474,6 +541,64 @@ int stop_daemon(const char *pid_file)
 
         return kill((pid_t)pid, SIGKILL);
     }
+
+failed:
+    if (fd >= 0)
+        close(fd);
+    return -1;
+}
+
+char *load_file_contents(const char *path, size_t *length)
+{
+    char *buf = NULL;
+
+    FILE *f = fopen(path, "r");
+
+    if (f) {
+        if (fseek(f, 0, SEEK_END))
+            goto failed;
+
+        long len = ftell(f);
+        if (len < 0)
+            goto failed;
+
+        buf = malloc(len + 1);
+        if (buf == NULL)
+            goto failed;
+
+        fseek(f, 0, SEEK_SET);
+        if (fread(buf, 1, len, f) < (size_t)len) {
+            free(buf);
+            buf = NULL;
+        }
+        buf[len] = '\0';
+
+        if (length)
+            *length = (size_t)len;
+failed:
+        fclose(f);
+    }
+    else {
+        goto done;
+    }
+
+done:
+    return buf;
+}
+
+int save_file_contents(const char *path, const char *contents, size_t len)
+{
+    int fd = open(path, O_RDWR | O_TRUNC);
+
+    if (fd >= 0) {
+        ssize_t n = write(fd, contents, len);
+        if (n < 0)
+            goto failed;
+
+        close(fd);
+    }
+
+    return 0;
 
 failed:
     if (fd >= 0)

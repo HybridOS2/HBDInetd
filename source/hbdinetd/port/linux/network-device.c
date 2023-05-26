@@ -114,34 +114,25 @@ void cleanup_network_device(struct network_device *netdev)
         netdev->hwaddr = NULL;
     }
 
-    if (netdev->ipv4.addr) {
-        free(netdev->ipv4.addr);
-        netdev->ipv4.addr = NULL;
+    for (int i = 0; i < NETWORK_DEVICE_CONF_FIELDS_NR; i++) {
+        if (netdev->fields[i]) {
+            free(netdev->fields[i]);
+            netdev->fields[i] = NULL;
+        }
     }
 
-    if (netdev->ipv4.netmask) {
-        free(netdev->ipv4.netmask);
-        netdev->ipv4.netmask = NULL;
+    for (int i = 0; i < HBD_IFADDR_FIELDS_NR; i++) {
+        if (netdev->ipv4.fields[i]) {
+            free(netdev->ipv4.fields[i]);
+            netdev->ipv4.fields[i] = NULL;
+        }
     }
 
-    if (netdev->ipv4.hbdifa_dstaddr) {
-        free(netdev->ipv4.hbdifa_dstaddr);
-        netdev->ipv4.hbdifa_dstaddr = NULL;
-    }
-
-    if (netdev->ipv6.addr) {
-        free(netdev->ipv6.addr);
-        netdev->ipv6.addr = NULL;
-    }
-
-    if (netdev->ipv6.netmask) {
-        free(netdev->ipv6.netmask);
-        netdev->ipv6.netmask = NULL;
-    }
-
-    if (netdev->ipv6.hbdifa_dstaddr) {
-        free(netdev->ipv6.hbdifa_dstaddr);
-        netdev->ipv6.hbdifa_dstaddr = NULL;
+    for (int i = 0; i < HBD_IFADDR_FIELDS_NR; i++) {
+        if (netdev->ipv6.fields[i]) {
+            free(netdev->ipv6.fields[i]);
+            netdev->ipv6.fields[i] = NULL;
+        }
     }
 }
 

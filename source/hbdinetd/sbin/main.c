@@ -412,16 +412,31 @@ handle_event_from_other_runners(hbdbus_conn *conn, const pcrdr_msg *msg)
 
     const char *event = NULL;
     if (strcmp(event_name, CONFIG_EV_SUCCEEDED) == 0) {
+        const char *config = purc_variant_get_string_const(msg->data);
+        assert(config);
+
+        struct network_device *netdev = *(struct network_device **)data;
+        if (update_network_device_config(netdev, "dhcp", config)) {
+            HLOG_ERR("Failed to update device %s with configuration: %s\n",
+                    ifname, config);
+            goto done;
+        }
+
+        if (update_system_settings(conn, netdev)) {
+            HLOG_ERR("Failed to update system settings\n");
+            goto done;
+        }
+
         pcutils_printbuf_format(pb,
                 "{"
                     "\"device\":\"%s\","
                     "\"method\":\"dhcp\","
                     "\"config\":\"%s\""
                 "}",
-              ifname, purc_variant_get_string_const(msg->data));
+              ifname, config);
         event = BUBBLE_DEVICECONFIGURED;
     }
-    else if (strcmp(event_name, CONFIG_EV_SUCCEEDED) == 0) {
+    else if (strcmp(event_name, CONFIG_EV_FAILED) == 0) {
         pcutils_printbuf_format(pb,
                 "{"
                     "\"device\":\"%s\","
@@ -432,6 +447,7 @@ handle_event_from_other_runners(hbdbus_conn *conn, const pcrdr_msg *msg)
         event = BUBBLE_DEVICECONFIGFAILED;
     }
 
+done:
     if (pb->buf) {
         int ret = 0;
 
