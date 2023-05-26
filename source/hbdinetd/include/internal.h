@@ -310,7 +310,7 @@ int wifi_device_off(hbdbus_conn *conn, struct network_device *netdev);
 int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev);
 void wifi_device_terminate(struct network_device *netdev);
 
-/* ports/<port>/post-configured.c */
+/* ports/<port>/system-settings.c */
 int save_system_settings(hbdbus_conn *conn);
 int update_system_settings(hbdbus_conn *conn, struct network_device *netdev);
 int restore_system_settings(hbdbus_conn *conn);

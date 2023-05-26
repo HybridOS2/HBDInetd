@@ -557,6 +557,8 @@ int main(int argc, char **argv)
 
     register_common_interfaces(conn);
 
+    save_system_settings(conn);
+
     maxfd = cnnfd;
     do {
         int retval;
@@ -617,6 +619,7 @@ int main(int argc, char **argv)
                 time(NULL) < run_info.shutdown_time));
 
 failed:
+    restore_system_settings(conn);
     revoke_common_interfaces(conn);
 
 failed_hbdbus:
