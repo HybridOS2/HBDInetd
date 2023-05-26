@@ -8,7 +8,7 @@ set(hbdinetd_DEFINITIONS
 
 list(APPEND hbdinetd_PRIVATE_INCLUDE_DIRECTORIES
     "${HBDINETD_DIR}/port/linux"
-    "${HBDINETD_DIR}/libnetutils/inc"
+    "${HBDINETD_DIR}/port/linux/libnetutils/inc"
 )
 
 list(APPEND hbdinetd_SOURCES
@@ -21,10 +21,10 @@ list(APPEND hbdinetd_SOURCES
     "${HBDINETD_DIR}/port/linux/wifi/wifi.c"
     "${HBDINETD_DIR}/port/linux/wifi/event.c"
     "${HBDINETD_DIR}/port/linux/wifi/helpers.c"
-    "${HBDINETD_DIR}/libnetutils/src/dhcpmsg.c"
-    "${HBDINETD_DIR}/libnetutils/src/dhcpclient.c"
-    "${HBDINETD_DIR}/libnetutils/src/ifc_utils.c"
-    "${HBDINETD_DIR}/libnetutils/src/packet.c"
+    "${HBDINETD_DIR}/port/linux/libnetutils/src/dhcpmsg.c"
+    "${HBDINETD_DIR}/port/linux/libnetutils/src/dhcpclient.c"
+    "${HBDINETD_DIR}/port/linux/libnetutils/src/ifc_utils.c"
+    "${HBDINETD_DIR}/port/linux/libnetutils/src/packet.c"
 
 )
 
