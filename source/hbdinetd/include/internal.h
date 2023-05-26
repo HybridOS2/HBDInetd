@@ -328,16 +328,16 @@ void revoke_common_interfaces(hbdbus_conn *conn);
 int register_wifi_interfaces(hbdbus_conn *conn);
 void revoke_wifi_interfaces(hbdbus_conn *conn);
 
-/* dhclient.c */
-#define DHCLI_OP_CONFIG     "config"
-#define DHCLI_OP_RELEASE    "release"
-#define DHCLI_OP_SHUTDOWN   "shutdown"
+/* config.c */
+#define CONFIG_OP_CONFIG     "config"
+#define CONFIG_OP_RELEASE    "release"
+#define CONFIG_OP_SHUTDOWN   "shutdown"
 
-#define DHCLI_EV_SUCCEEDED  "succeeded"
-#define DHCLI_EV_FAILED     "failed"
+#define CONFIG_EV_SUCCEEDED  "succeeded"
+#define CONFIG_EV_FAILED     "failed"
 
-purc_atom_t dhcli_start(const struct run_info *mainrun);
-void dhcli_sync_exit(void);
+purc_atom_t config_start(const struct run_info *mainrun);
+void config_sync_exit(void);
 
 /* main.c */
 int issue_dhcp_request(hbdbus_conn *conn, const char *ifname);

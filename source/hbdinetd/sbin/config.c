@@ -42,16 +42,24 @@
 #include "netutils/dhcp.h"
 #include "netutils/ifc.h"
 
-struct dhcp_iface {
+enum {
+    CONFIG_METHOD_STATIC = 0,
+    CONFIG_METHOD_DHCP,
+};
+
+struct iface_config {
     const char *name;
 
-    time_t      config_time;
-    time_t      expire_time;
-    uint32_t    renew_tries;
+    /* TODO: reserved for future */
+    int         method;
 
     uint32_t    addr;
     uint32_t    srv;
+
     uint32_t    lease;
+    int         renew_tries;
+    time_t      config_time;
+    time_t      expire_time;
 
     char       *fields[0];
 #define DHIF_STR_FIELDS_NR  4
@@ -80,23 +88,23 @@ static int init_instance(struct this_run *run, purc_atom_t rid_main)
     return 0;
 }
 
-static void cleanup_dhcp_iface(struct dhcp_iface *dhif, bool free_itself)
+static void cleanup_iface_config(struct iface_config *ifconf, bool free_itself)
 {
     for (int i = 0; i < DHIF_STR_FIELDS_NR; i++) {
-        if (dhif->fields[i])
-            free(dhif->fields[i]);
+        if (ifconf->fields[i])
+            free(ifconf->fields[i]);
     }
 
     for (int i = 0; i < HBD_IFADDR_FIELDS_NR; i++) {
-        if (dhif->ipv4.fields[i])
-            free(dhif->ipv4.fields[i]);
+        if (ifconf->ipv4.fields[i])
+            free(ifconf->ipv4.fields[i]);
     }
 
     if (free_itself) {
-        free(dhif);
+        free(ifconf);
     }
     else {
-        memset(dhif, 0, sizeof(*dhif));
+        memset(ifconf, 0, sizeof(*ifconf));
     }
 }
 
@@ -105,10 +113,10 @@ static void deinit_instance(struct this_run *run)
     const char* name;
     void *data;
     kvlist_for_each(&run->ifaces, name, data) {
-        struct dhcp_iface *dhif;
-        dhif = *(struct dhcp_iface **)data;
+        struct iface_config *ifconf;
+        ifconf = *(struct iface_config **)data;
 
-        cleanup_dhcp_iface(dhif, true);
+        cleanup_iface_config(ifconf, true);
     }
 
     kvlist_free(&run->ifaces);
@@ -125,12 +133,12 @@ static void shutdown_handler(struct this_run *info,
     const char *name;
     void *data;
     kvlist_for_each(&info->ifaces, name, data) {
-        struct dhcp_iface *dhif;
-        dhif = *(struct dhcp_iface **)data;
+        struct iface_config *ifconf;
+        ifconf = *(struct iface_config **)data;
 
-        if (dhif->server)
-            dhcp_release_lease(dhif->name, dhif->addr, dhif->srv);
-        cleanup_dhcp_iface(dhif, false);
+        if (ifconf->server)
+            dhcp_release_lease(ifconf->name, ifconf->addr, ifconf->srv);
+        cleanup_iface_config(ifconf, false);
     }
 
     response->type = PCRDR_MSG_TYPE_RESPONSE;
@@ -142,31 +150,31 @@ static void shutdown_handler(struct this_run *info,
     response->data = PURC_VARIANT_INVALID;
 }
 
-static const char *get_dhcp_result(struct dhcp_iface *dhif)
+static const char *get_dhcp_result(struct iface_config *ifconf)
 {
     const char *status = NULL;
 
     uint32_t msg_type;
     in_addr_t gateway, netmask, dns1, dns2;
-    int ret = dhcp_get_last_conf_info(&msg_type, &dhif->addr, &gateway,
-        &netmask, &dns1, &dns2, &dhif->srv, &dhif->lease);
+    int ret = dhcp_get_last_conf_info(&msg_type, &ifconf->addr, &gateway,
+        &netmask, &dns1, &dns2, &ifconf->srv, &ifconf->lease);
     if (ret) {
         status = dhcp_msg_type_to_name(msg_type);
         goto failed;
     }
 
-    dhif->server = strdup(ifc_ipaddr_to_string(dhif->srv));
-    dhif->dns1 = dns1 ? strdup(ifc_ipaddr_to_string(dns1)) : NULL;
-    dhif->dns2 = dns2 ? strdup(ifc_ipaddr_to_string(dns2)) : NULL;
-    dhif->ipv4.addr = strdup(ifc_ipaddr_to_string(dhif->addr));
-    dhif->ipv4.netmask = strdup(ifc_ipaddr_to_string(netmask));
-    dhif->ipv4.gateway = strdup(ifc_ipaddr_to_string(gateway));
+    ifconf->server = strdup(ifc_ipaddr_to_string(ifconf->srv));
+    ifconf->dns1 = dns1 ? strdup(ifc_ipaddr_to_string(dns1)) : NULL;
+    ifconf->dns2 = dns2 ? strdup(ifc_ipaddr_to_string(dns2)) : NULL;
+    ifconf->ipv4.addr = strdup(ifc_ipaddr_to_string(ifconf->addr));
+    ifconf->ipv4.netmask = strdup(ifc_ipaddr_to_string(netmask));
+    ifconf->ipv4.gateway = strdup(ifc_ipaddr_to_string(gateway));
 
-    dhif->config_time = purc_monotonic_time_after(0);
-    dhif->expire_time = purc_monotonic_time_after(dhif->lease);
-    dhif->renew_tries = 0;
+    ifconf->config_time = purc_monotonic_time_after(0);
+    ifconf->expire_time = purc_monotonic_time_after(ifconf->lease);
+    ifconf->renew_tries = 0;
 
-    HLOG_INFO("Lease: %u\n", dhif->lease);
+    HLOG_INFO("Lease: %u\n", ifconf->lease);
     return NULL;
 
 failed:
@@ -174,9 +182,9 @@ failed:
     return status;
 }
 
-static char *make_config_json(struct dhcp_iface *dhif)
+static char *make_config_json(struct iface_config *ifconf)
 {
-    assert(dhif);
+    assert(ifconf);
 
     char *result;
     int ret = asprintf(&result,
@@ -197,17 +205,17 @@ static char *make_config_json(struct dhcp_iface *dhif)
                     "\"gateway\":\"%s\""
                 "}"
             "}",
-            dhif->name,
-            dhif->server ? dhif->server : "",
-            dhif->dns1 ? dhif->dns1 : "",
-            dhif->dns2 ? dhif->dns2 : "",
-            dhif->search ? dhif->search : "",
-            dhif->ipv4.addr ? dhif->ipv4.addr : "",
-            dhif->ipv4.netmask ? dhif->ipv4.netmask : "",
-            dhif->ipv4.gateway ? dhif->ipv4.gateway : "",
-            dhif->ipv6.addr ? dhif->ipv6.addr : "",
-            dhif->ipv6.netmask ? dhif->ipv6.netmask : "",
-            dhif->ipv6.gateway ? dhif->ipv6.gateway : "");
+            ifconf->name,
+            ifconf->server ? ifconf->server : "",
+            ifconf->dns1 ? ifconf->dns1 : "",
+            ifconf->dns2 ? ifconf->dns2 : "",
+            ifconf->search ? ifconf->search : "",
+            ifconf->ipv4.addr ? ifconf->ipv4.addr : "",
+            ifconf->ipv4.netmask ? ifconf->ipv4.netmask : "",
+            ifconf->ipv4.gateway ? ifconf->ipv4.gateway : "",
+            ifconf->ipv6.addr ? ifconf->ipv6.addr : "",
+            ifconf->ipv6.netmask ? ifconf->ipv6.netmask : "",
+            ifconf->ipv6.gateway ? ifconf->ipv6.gateway : "");
 
     if (ret < 0)
         return NULL;
@@ -215,10 +223,10 @@ static char *make_config_json(struct dhcp_iface *dhif)
     return result;
 }
 
-static void do_config(struct dhcp_iface *dhif, purc_atom_t requester)
+static void do_config(struct iface_config *ifconf, purc_atom_t requester)
 {
-    dhcp_do_overall(dhif->name);
-    const char *status = get_dhcp_result(dhif);
+    dhcp_do_overall(ifconf->name);
+    const char *status = get_dhcp_result(ifconf);
 
     const char *endpoint_name = purc_get_endpoint(NULL);
 
@@ -226,14 +234,14 @@ static void do_config(struct dhcp_iface *dhif, purc_atom_t requester)
     event = pcrdr_make_event_message(
                 PCRDR_MSG_TARGET_INSTANCE,
                 requester,
-                status ? DHCLI_EV_FAILED : DHCLI_EV_SUCCEEDED,
+                status ? CONFIG_EV_FAILED : CONFIG_EV_SUCCEEDED,
                 endpoint_name,
-                PCRDR_MSG_ELEMENT_TYPE_ID, dhif->name,
+                PCRDR_MSG_ELEMENT_TYPE_ID, ifconf->name,
                 status,
                 PCRDR_MSG_DATA_TYPE_VOID, NULL, 0);
 
     if (status == NULL) {
-        char *json = make_config_json(dhif);
+        char *json = make_config_json(ifconf);
         if (json) {
             event->dataType = PCRDR_MSG_DATA_TYPE_JSON;
             event->data = purc_variant_make_string_reuse_buff(json,
@@ -255,17 +263,17 @@ static void release_handler(struct this_run *info, const pcrdr_msg *request)
     assert(ifname);
 
     void *data;
-    struct dhcp_iface *dhif = NULL;
+    struct iface_config *ifconf = NULL;
     if ((data = kvlist_get(&info->ifaces, ifname))) {
-        dhif = *(struct dhcp_iface **)data;
+        ifconf = *(struct iface_config **)data;
     }
 
-    if (dhif == NULL) {
+    if (ifconf == NULL) {
         HLOG_ERR("Failed due to bad ifname: %s\n", ifname);
     }
     else {
-        dhcp_release_lease(ifname, dhif->addr, dhif->srv);
-        cleanup_dhcp_iface(dhif, false);
+        dhcp_release_lease(ifname, ifconf->addr, ifconf->srv);
+        cleanup_iface_config(ifconf, false);
         kvlist_remove(&info->ifaces, ifname);
     }
 }
@@ -281,48 +289,48 @@ static void config_handler(struct this_run *info, purc_atom_t requester,
     assert(ifname);
 
     void *data;
-    struct dhcp_iface *dhif = NULL;
+    struct iface_config *ifconf = NULL;
     if ((data = kvlist_get(&info->ifaces, ifname))) {
-        dhif = *(struct dhcp_iface **)data;
-        cleanup_dhcp_iface(dhif, false);
+        ifconf = *(struct iface_config **)data;
+        cleanup_iface_config(ifconf, false);
     }
     else {
-        dhif = calloc(1, sizeof(*dhif));
-        if (dhif)
-            dhif->name = kvlist_set_ex(&info->ifaces, ifname, &dhif);
+        ifconf = calloc(1, sizeof(*ifconf));
+        if (ifconf)
+            ifconf->name = kvlist_set_ex(&info->ifaces, ifname, &ifconf);
     }
 
-    if (dhif == NULL || dhif->name == NULL) {
+    if (ifconf == NULL || ifconf->name == NULL) {
         HLOG_ERR("Failed due to OOM\n");
         return;
     }
 
-    do_config(dhif, requester);
+    do_config(ifconf, requester);
 }
 
-static const char *get_renew_result(struct dhcp_iface *dhif)
+static const char *get_renew_result(struct iface_config *ifconf)
 {
     const char *status = NULL;
     uint32_t msg_type;
     in_addr_t gateway, netmask, dns1, dns2;
-    int ret = dhcp_get_last_conf_info(&msg_type, &dhif->addr, &gateway,
-        &netmask, &dns1, &dns2, &dhif->srv, &dhif->lease);
+    int ret = dhcp_get_last_conf_info(&msg_type, &ifconf->addr, &gateway,
+        &netmask, &dns1, &dns2, &ifconf->srv, &ifconf->lease);
     if (ret) {
         status = dhcp_msg_type_to_name(msg_type);
         goto failed;
     }
 
     /* always update DNS servers */
-    if (dhif->dns1) free(dhif->dns1);
-    if (dhif->dns2) free(dhif->dns2);
-    dhif->dns1 = dns1 ? strdup(ifc_ipaddr_to_string(dns1)) : NULL;
-    dhif->dns2 = dns2 ? strdup(ifc_ipaddr_to_string(dns2)) : NULL;
+    if (ifconf->dns1) free(ifconf->dns1);
+    if (ifconf->dns2) free(ifconf->dns2);
+    ifconf->dns1 = dns1 ? strdup(ifc_ipaddr_to_string(dns1)) : NULL;
+    ifconf->dns2 = dns2 ? strdup(ifc_ipaddr_to_string(dns2)) : NULL;
 
-    dhif->config_time = purc_monotonic_time_after(0);
-    dhif->expire_time = purc_monotonic_time_after(dhif->lease);
-    dhif->renew_tries = 0;
+    ifconf->config_time = purc_monotonic_time_after(0);
+    ifconf->expire_time = purc_monotonic_time_after(ifconf->lease);
+    ifconf->renew_tries = 0;
 
-    HLOG_INFO("Lease: %u\n", dhif->lease);
+    HLOG_INFO("Lease: %u\n", ifconf->lease);
     return NULL;
 
 failed:
@@ -335,33 +343,33 @@ static void check_to_renew(struct this_run *info)
     const char* name;
     void *data;
     kvlist_for_each(&info->ifaces, name, data) {
-        struct dhcp_iface *dhif;
-        dhif = *(struct dhcp_iface **)data;
+        struct iface_config *ifconf;
+        ifconf = *(struct iface_config **)data;
 
-        if (dhif->server == NULL) {
+        if (ifconf->server == NULL) {
             continue;
         }
 
-        struct timespec config_ts = {dhif->config_time, 0 };
+        struct timespec config_ts = {ifconf->config_time, 0 };
         double elapsed = purc_get_elapsed_seconds(&config_ts, NULL);
 
-        if (dhif->renew_tries > 1 && elapsed >= dhif->lease) {
-            cleanup_dhcp_iface(dhif, false);
-            do_config(dhif, info->rid_main);
+        if (ifconf->renew_tries > 1 && elapsed >= ifconf->lease) {
+            cleanup_iface_config(ifconf, false);
+            do_config(ifconf, info->rid_main);
         }
-        else if (dhif->renew_tries > 0 && elapsed >= dhif->lease * 0.875) {
-            if (dhcp_request_renew(dhif->name, dhif->addr, dhif->srv) == 0) {
-                get_renew_result(dhif);
+        else if (ifconf->renew_tries > 0 && elapsed >= ifconf->lease * 0.875) {
+            if (dhcp_request_renew(ifconf->name, ifconf->addr, ifconf->srv) == 0) {
+                get_renew_result(ifconf);
             }
             else
-                dhif->renew_tries++;
+                ifconf->renew_tries++;
         }
-        else if (elapsed >= dhif->lease * 0.5) {
-            if (dhcp_request_renew(dhif->name, dhif->addr, dhif->srv) == 0) {
-                get_renew_result(dhif);
+        else if (elapsed >= ifconf->lease * 0.5) {
+            if (dhcp_request_renew(ifconf->name, ifconf->addr, ifconf->srv) == 0) {
+                get_renew_result(ifconf);
             }
             else
-                dhif->renew_tries++;
+                ifconf->renew_tries++;
         }
     }
 }
@@ -425,7 +433,7 @@ static void event_loop(struct this_run *info)
             request_id = purc_variant_get_string_const(msg->requestId);
 
             pcrdr_msg *response = pcrdr_make_void_message();
-            if (strcmp(op, DHCLI_OP_SHUTDOWN) == 0) {
+            if (strcmp(op, CONFIG_OP_SHUTDOWN) == 0) {
                 /* for operation `shutdown`, request_id must not be `-` */
                 assert(strcmp(request_id, PCRDR_REQUESTID_NORETURN));
                 shutdown_handler(info, msg, response);
@@ -434,10 +442,10 @@ static void event_loop(struct this_run *info)
                 pcrdr_release_message(msg);
                 break;
             }
-            else if (strcmp(op, DHCLI_OP_RELEASE) == 0) {
+            else if (strcmp(op, CONFIG_OP_RELEASE) == 0) {
                 release_handler(info, msg);
             }
-            else if (strcmp(op, DHCLI_OP_CONFIG) == 0) {
+            else if (strcmp(op, CONFIG_OP_CONFIG) == 0) {
                 config_handler(info, requester, msg);
             }
             else {
@@ -480,14 +488,14 @@ struct thread_arg {
     purc_atom_t     rid;
 };
 
-static void* dhcli_thread_entry(void* arg)
+static void* config_thread_entry(void* arg)
 {
     struct thread_arg *my_arg = (struct thread_arg *)arg;
     sem_t *sw = my_arg->wait;
     purc_atom_t rid_main = my_arg->mainrun->rid, rid = 0;
 
     int ret = purc_init_ex(PURC_MODULE_EJSON,
-            HBDINETD_APP_NAME, HBDINETD_RUNNER_DHCLIENT, NULL);
+            HBDINETD_APP_NAME, HBDINETD_RUN_CONFIG, NULL);
     if (ret == PURC_ERROR_OK) {
         rid = my_arg->rid = purc_inst_create_move_buffer(
                 PCINST_MOVE_BUFFER_FLAG_NONE, 16);
@@ -524,8 +532,8 @@ static void* dhcli_thread_entry(void* arg)
 
 #define SEM_NAME_SYNC_START     "sync-dhclient-start"
 
-static pthread_t dhcli_th;
-purc_atom_t dhcli_start(const struct run_info *mainrun)
+static pthread_t config_th;
+purc_atom_t config_start(const struct run_info *mainrun)
 {
     int ret;
     struct thread_arg arg = { mainrun, NULL, 0 };
@@ -542,7 +550,7 @@ ALLOW_DEPRECATED_DECLARATIONS_BEGIN
         goto failed;
     }
 
-    ret = pthread_create(&dhcli_th, &attr, dhcli_thread_entry, &arg);
+    ret = pthread_create(&config_th, &attr, config_thread_entry, &arg);
     if (ret) {
         HLOG_ERR("Failed to create thread for DHCP client: %s\n",
                 strerror(errno));
@@ -564,8 +572,8 @@ failed:
     return 0;
 }
 
-void dhcli_sync_exit(void)
+void config_sync_exit(void)
 {
-    pthread_join(dhcli_th, NULL);
+    pthread_join(config_th, NULL);
 }
 

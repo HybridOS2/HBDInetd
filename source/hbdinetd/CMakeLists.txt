@@ -29,7 +29,7 @@ list(APPEND hbdinetd_SOURCES
     "${HBDINETD_DIR}/sbin/utils.c"
     "${HBDINETD_DIR}/sbin/common-iface.c"
     "${HBDINETD_DIR}/sbin/wifi-iface.c"
-    "${HBDINETD_DIR}/sbin/dhclient.c"
+    "${HBDINETD_DIR}/sbin/config.c"
 )
 
 HBDINETD_INCLUDE_CONFIG_FILES_IF_EXISTS()

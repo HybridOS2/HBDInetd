@@ -24,8 +24,8 @@
 #define __hbdinetd_h
 
 #define HBDINETD_APP_NAME               "@PROJECT_APP_NAME@"
-#define HBDINETD_RUNNER_MAIN            "main"
-#define HBDINETD_RUNNER_DHCLIENT        "dhcl"
+#define HBDINETD_RUN_MAIN               "main"
+#define HBDINETD_RUN_CONFIG             "config"
 
 #define HBDINETD_ALLOWED_HOSTS          "localhost"
 #define HBDINETD_PRIVILEGED_APPS        "cn.fmsoft.hybridos.*"

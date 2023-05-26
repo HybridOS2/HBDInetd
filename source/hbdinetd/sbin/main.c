@@ -308,7 +308,7 @@ static int shutdown_dhclient_runner(purc_atom_t rid_dhcli)
 
     pcrdr_msg *shutdown_msg = pcrdr_make_request_message(
             PCRDR_MSG_TARGET_INSTANCE, rid_dhcli,
-            DHCLI_OP_SHUTDOWN,
+            CONFIG_OP_SHUTDOWN,
             NULL,
             purc_get_endpoint(NULL),
             PCRDR_MSG_ELEMENT_TYPE_VOID, NULL,
@@ -358,7 +358,7 @@ int issue_dhcp_request(hbdbus_conn *conn, const char *ifname)
 
     pcrdr_msg *msg = pcrdr_make_request_message(
             PCRDR_MSG_TARGET_INSTANCE, info->rid_dhcli,
-            DHCLI_OP_CONFIG,
+            CONFIG_OP_CONFIG,
             PCRDR_REQUESTID_NORETURN,
             purc_get_endpoint(NULL),
             PCRDR_MSG_ELEMENT_TYPE_ID, ifname,
@@ -414,7 +414,7 @@ handle_event_from_other_runners(hbdbus_conn *conn, const pcrdr_msg *msg)
     }
 
     const char *event = NULL;
-    if (strcmp(event_name, DHCLI_EV_SUCCEEDED) == 0) {
+    if (strcmp(event_name, CONFIG_EV_SUCCEEDED) == 0) {
         pcutils_printbuf_format(pb,
                 "{"
                     "\"device\":\"%s\","
@@ -424,7 +424,7 @@ handle_event_from_other_runners(hbdbus_conn *conn, const pcrdr_msg *msg)
               ifname, purc_variant_get_string_const(msg->data));
         event = BUBBLE_DEVICECONFIGURED;
     }
-    else if (strcmp(event_name, DHCLI_EV_SUCCEEDED) == 0) {
+    else if (strcmp(event_name, CONFIG_EV_SUCCEEDED) == 0) {
         pcutils_printbuf_format(pb,
                 "{"
                     "\"device\":\"%s\","
@@ -484,10 +484,10 @@ int main(int argc, char **argv)
 
     if (!run_info.runner_name[0] ||
             !purc_is_valid_runner_name(run_info.runner_name)) {
-        strcpy(run_info.runner_name, HBDINETD_RUNNER_MAIN);
+        strcpy(run_info.runner_name, HBDINETD_RUN_MAIN);
     }
 
-    if ((run_info.rid_dhcli = dhcli_start(&run_info)) == 0) {
+    if ((run_info.rid_dhcli = config_start(&run_info)) == 0) {
         fprintf(stderr,
                 "Failed to initialize the built-in DHCP client runner\n");
         return EXIT_FAILURE;
@@ -617,7 +617,7 @@ failed_hbdbus:
     purc_cleanup();
 
     if (run_info.rid_dhcli)
-        dhcli_sync_exit();
+        config_sync_exit();
 
     return EXIT_SUCCESS;
 }
