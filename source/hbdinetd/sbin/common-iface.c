@@ -63,14 +63,15 @@ static char* terminate(hbdbus_conn* conn, const char* from_endpoint,
 
 done:
     struct pcutils_printbuf my_buff, *pb = &my_buff;
+    pcutils_printbuf_init(pb);
+    pcutils_printbuf_format(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", errcode,
+            get_error_message(errcode));
 
-    if (pcutils_printbuf_init(pb)) {
+    if (pb->buf == NULL) {
         *bus_ec = HBDBUS_EC_NOMEM;
         return NULL;
     }
 
-    pcutils_printbuf_format(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", errcode,
-            get_error_message(errcode));
     *bus_ec = 0;
     return pb->buf;
 }
@@ -110,14 +111,14 @@ static char* openDevice(hbdbus_conn* conn, const char* from_endpoint,
 
 done:
     struct pcutils_printbuf my_buff, *pb = &my_buff;
+    pcutils_printbuf_init(pb);
+    pcutils_printbuf_format(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", errcode,
+            get_error_message(errcode));
 
-    if (pcutils_printbuf_init(pb)) {
+    if (pb->buf == NULL) {
         *bus_ec = HBDBUS_EC_NOMEM;
         return NULL;
     }
-
-    pcutils_printbuf_format(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", errcode,
-            get_error_message(errcode));
     *bus_ec = 0;
     return pb->buf;
 }
@@ -155,14 +156,15 @@ static char *closeDevice(hbdbus_conn* conn, const char* from_endpoint,
 
 done:
     struct pcutils_printbuf my_buff, *pb = &my_buff;
+    pcutils_printbuf_init(pb);
+    pcutils_printbuf_format(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", errcode,
+            get_error_message(errcode));
 
-    if (pcutils_printbuf_init(pb)) {
+    if (pb->buf == NULL) {
         *bus_ec = HBDBUS_EC_NOMEM;
         return NULL;
     }
 
-    pcutils_printbuf_format(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", errcode,
-            get_error_message(errcode));
     *bus_ec = 0;
     return pb->buf;
 }
@@ -185,11 +187,7 @@ static char *getDeviceStatus(hbdbus_conn* conn,
     assert(strcasecmp(to_method, METHOD_NET_GET_DEVICE_STATUS) == 0);
 
     struct pcutils_printbuf my_buff, *pb = &my_buff;
-    if (pcutils_printbuf_init(pb)) {
-        *bus_ec = HBDBUS_EC_NOMEM;
-        return NULL;
-    }
-
+    pcutils_printbuf_init(pb);
     pcutils_printbuf_strappend(pb, "{\"data\":[");
 
     jo = purc_variant_make_from_json_string(method_param, strlen(method_param));
@@ -311,6 +309,12 @@ static char *getDeviceStatus(hbdbus_conn* conn,
 done:
     pcutils_printbuf_format(pb, "],\"errCode\":%d, \"errMsg\":\"%s\"}",
             errcode, get_error_message(errcode));
+
+    if (pb->buf == NULL) {
+        *bus_ec = HBDBUS_EC_NOMEM;
+        return NULL;
+    }
+
     *bus_ec = 0;
     return pb->buf;
 }

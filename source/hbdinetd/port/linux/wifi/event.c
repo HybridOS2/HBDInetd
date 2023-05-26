@@ -66,11 +66,8 @@ static int on_connected(hbdbus_conn *conn,
 
     if (ctxt->status && ctxt->status->bssid) {
         struct pcutils_printbuf my_buff, *pb = &my_buff;
-        if (pcutils_printbuf_init(pb)) {
-            HLOG_ERR("Failed when initializing print buffer\n");
-            goto fatal;
-        }
 
+        pcutils_printbuf_init(pb);
         pcutils_printbuf_format(pb,
                 "{\"bssid\":\"%s\","
                 "\"ssid\":\"%s\","
@@ -80,10 +77,16 @@ static int on_connected(hbdbus_conn *conn,
                     ctxt->status->ssid,
                   ctxt->status->signal_level);
 
-        ret = hbdbus_fire_event(conn, BUBBLE_WIFICONNECTED, pb->buf);
-        free(pb->buf);
-        if (ret)
+        if (pb->buf) {
+            ret = hbdbus_fire_event(conn, BUBBLE_WIFICONNECTED, pb->buf);
+            free(pb->buf);
+            if (ret)
+                goto fatal;
+        }
+        else {
+            HLOG_ERR("OOM when using printbuf\n");
             goto fatal;
+        }
     }
     else {
         ret = hbdbus_fire_event(conn, BUBBLE_WIFICONNECTED,
@@ -112,20 +115,26 @@ static int on_disconnected(hbdbus_conn *conn,
     int ret;
     if (ctxt->status && ctxt->status->bssid) {
         struct pcutils_printbuf my_buff, *pb = &my_buff;
-        if (pcutils_printbuf_init(pb)) {
-            HLOG_ERR("Failed when initializing print buffer\n");
-            goto fatal;
-        }
 
+        pcutils_printbuf_init(pb);
         pcutils_printbuf_format(pb,
                 "{\"bssid\":\"%s\",\"ssid\":\"%s\"}",
                   ctxt->status->bssid,
                   ctxt->status->escaped_ssid ? ctxt->status->escaped_ssid :
                     ctxt->status->ssid);
-        ret = hbdbus_fire_event(conn, BUBBLE_WIFIDISCONNECTED, pb->buf);
-        free(pb->buf);
-        if (ret)
+
+        if (pb->buf) {
+            ret = hbdbus_fire_event(conn, BUBBLE_WIFIDISCONNECTED, pb->buf);
+            free(pb->buf);
+            if (ret) {
+                HLOG_ERR("Failed when firing event: %s\n", BUBBLE_WIFIDISCONNECTED);
+                goto fatal;
+            }
+        }
+        else {
+            HLOG_ERR("OOM when using printbuf\n");
             goto fatal;
+        }
     }
     else {
         ret = hbdbus_fire_event(conn, BUBBLE_WIFIDISCONNECTED,
@@ -138,10 +147,6 @@ static int on_disconnected(hbdbus_conn *conn,
     return 0;
 
 fatal:
-    if (ret) {
-        HLOG_ERR("Failed when firing event: %s\n", BUBBLE_WIFIDISCONNECTED);
-    }
-
     return ret;
 }
 
@@ -164,18 +169,22 @@ static int on_scan_results(hbdbus_conn *conn,
     }
 
     struct pcutils_printbuf my_buff, *pb = &my_buff;
-    if (pcutils_printbuf_init(pb)) {
-        HLOG_ERR("Failed when initializing print buffer\n");
-        goto fatal;
-    }
 
+    pcutils_printbuf_init(pb);
     pcutils_printbuf_strappend(pb, "{\"success\":true,\"hotspots\":[");
     print_hotspot_list(&ctxt->hotspots, ctxt->status->netid, pb);
     pcutils_printbuf_strappend(pb, "]");
 
-    ret = hbdbus_fire_event(conn, BUBBLE_WIFISCANFINISHED, pb->buf);
-    free(pb->buf);
-    if (ret) {
+    if (pb->buf) {
+        ret = hbdbus_fire_event(conn, BUBBLE_WIFISCANFINISHED, pb->buf);
+        free(pb->buf);
+        if (ret) {
+            HLOG_ERR("Failed when firing event: %s\n", BUBBLE_WIFISCANFINISHED);
+            goto fatal;
+        }
+    }
+    else {
+        HLOG_ERR("OOM when using printbuf\n");
         goto fatal;
     }
     return 0;
@@ -185,10 +194,6 @@ failed:
             "{\"success\":false,\"hotspots\":null}");
 
 fatal:
-    if (ret) {
-        HLOG_ERR("Failed when firing event: %s\n", BUBBLE_WIFISCANFINISHED);
-    }
-
     return ret;
 }
 
@@ -230,17 +235,24 @@ static int on_bss_added(hbdbus_conn *conn,
         list_add_tail(&newone->ln, &ctxt->hotspots);
 
         struct pcutils_printbuf my_buff, *pb = &my_buff;
-        if (pcutils_printbuf_init(pb)) {
-            newone = NULL;
-            HLOG_ERR("Failed when initializing print buffer\n");
+
+        pcutils_printbuf_init(pb);
+        print_one_hotspot(newone, ctxt->status->netid, pb);
+        newone = NULL;  /* mark for not releasing it */
+
+        if (pb->buf) {
+            int ret = hbdbus_fire_event(conn, BUBBLE_WIFIHOTSPOTFOUND, pb->buf);
+            free(pb->buf);
+            if (ret) {
+                HLOG_ERR("Failed when firing event %s\n",
+                        BUBBLE_WIFIHOTSPOTFOUND);
+                goto failed;
+            }
+        }
+        else {
+            HLOG_ERR("OOM when using printbuf\n");
             goto failed;
         }
-
-        print_one_hotspot(newone, ctxt->status->netid, pb);
-
-        hbdbus_fire_event(conn, BUBBLE_WIFIHOTSPOTFOUND, pb->buf);
-        free(pb->buf);
-        newone = NULL;
     }
 
     return 0;
@@ -330,21 +342,30 @@ static int on_ssid_temp_disabled(hbdbus_conn *conn,
 
     /* 1) Fire WiFiFaileConnAttempt event. */
     struct pcutils_printbuf my_buff, *pb = &my_buff;
-    if (pcutils_printbuf_init(pb)) {
-        HLOG_ERR("Failed when initializing print buffer\n");
-        goto failed;
-    }
 
+    pcutils_printbuf_init(pb);
     pcutils_printbuf_format(pb,
             "{\"ssid\":\"%s\","
             "\"reason\":\"%s\"}",
             escaped_ssid, reason);
-
-    ret = hbdbus_fire_event(conn, BUBBLE_WIFIFAILEDCONNATTEMPT, pb->buf);
-    free(pb->buf);
-
-    if (escaped_ssid)
+    if (escaped_ssid) {
         free(escaped_ssid);
+        escaped_ssid = NULL;
+    }
+
+    if (pb->buf) {
+        ret = hbdbus_fire_event(conn, BUBBLE_WIFIFAILEDCONNATTEMPT, pb->buf);
+        free(pb->buf);
+        if (ret) {
+            HLOG_ERR("Failed when firing event: %s\n",
+                    BUBBLE_WIFIFAILEDCONNATTEMPT);
+            goto failed;
+        }
+    }
+    else {
+        HLOG_ERR("OOM when using buffer\n");
+        goto failed;
+    }
 
     /* 2) If the network is newly added, remove it. */
     if (ctxt->new_netid >= 0) {
@@ -352,13 +373,11 @@ static int on_ssid_temp_disabled(hbdbus_conn *conn,
         ctxt->new_netid = -1;
     }
 
-    return ret;
+    return 0;
 
 bad_data:
     HLOG_WARN("Bad event data: %s\n", data);
 failed:
-    if (escaped_ssid)
-        free(escaped_ssid);
     return -1;
 }
 

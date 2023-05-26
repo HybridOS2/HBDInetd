@@ -408,10 +408,7 @@ handle_event_from_other_runners(hbdbus_conn *conn, const pcrdr_msg *msg)
     }
 
     struct pcutils_printbuf my_buff, *pb = &my_buff;
-    if (pcutils_printbuf_init(pb)) {
-        HLOG_ERR("Failed when initializing print buffer\n");
-        return;
-    }
+    pcutils_printbuf_init(pb);
 
     const char *event = NULL;
     if (strcmp(event_name, CONFIG_EV_SUCCEEDED) == 0) {
@@ -435,14 +432,20 @@ handle_event_from_other_runners(hbdbus_conn *conn, const pcrdr_msg *msg)
         event = BUBBLE_DEVICECONFIGFAILED;
     }
 
-    int ret = 0;
-    if (event)
-        ret = hbdbus_fire_event(conn, event, pb->buf);
+    if (pb->buf) {
+        int ret = 0;
 
-    free(pb->buf);
+        if (event)
+            ret = hbdbus_fire_event(conn, event, pb->buf);
 
-    if (ret) {
-        HLOG_ERR("Failed when firing event: %s\n", event);
+        if (ret) {
+            HLOG_ERR("Failed when firing event: %s\n", event);
+        }
+
+        free(pb->buf);
+    }
+    else {
+        HLOG_ERR("OOM when using printbuf\n");
     }
 }
 

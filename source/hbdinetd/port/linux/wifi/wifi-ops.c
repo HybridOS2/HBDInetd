@@ -420,8 +420,6 @@ int wifi_device_off(hbdbus_conn *conn, struct network_device *netdev)
 
 int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
 {
-    HLOG_INFO_ONCE("called\n");
-
     if (netdev->ctxt == NULL)
         return EPERM;
 
@@ -458,11 +456,7 @@ int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
             if (netdev->ctxt->status->signal_level != level) {
 
                 struct pcutils_printbuf my_buff, *pb = &my_buff;
-                if (pcutils_printbuf_init(pb)) {
-                    HLOG_ERR("Failed when initializing print buffer\n");
-                    return ENOMEM;
-                }
-
+                pcutils_printbuf_init(pb);
                 pcutils_printbuf_format(pb,
                         "{\"bssid\":\"%s\","
                          "\"ssid\":\"%s\","
@@ -472,9 +466,15 @@ int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
                             netdev->ctxt->status->escaped_ssid :
                             netdev->ctxt->status->ssid,
                          netdev->ctxt->status->signal_level);
-                hbdbus_fire_event(conn, BUBBLE_WIFISIGNALLEVELCHANGED,
-                        pb->buf);
-                free(pb->buf);
+                if (pb->buf) {
+                    hbdbus_fire_event(conn, BUBBLE_WIFISIGNALLEVELCHANGED,
+                            pb->buf);
+                    free(pb->buf);
+                }
+                else {
+                    HLOG_ERR("OOM when using printbuf\n");
+                    return ENOMEM;
+                }
             }
 
             netdev->ctxt->last_update_time = t;

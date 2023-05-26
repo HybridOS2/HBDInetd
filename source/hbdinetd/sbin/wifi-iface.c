@@ -43,11 +43,7 @@ static char *wifiStartScanHotspots(hbdbus_conn* conn,
     assert(strcasecmp(to_method, METHOD_WIFI_START_SCAN) == 0);
 
     struct pcutils_printbuf my_buff, *pb = &my_buff;
-    if (pcutils_printbuf_init(pb)) {
-        *bus_ec = HBDBUS_EC_NOMEM;
-        return NULL;
-    }
-
+    pcutils_printbuf_init(pb);
     pcutils_printbuf_strappend(pb, "{\"data\":[");
 
     purc_variant_t extra_value;
@@ -104,6 +100,11 @@ done:
     pcutils_printbuf_format(pb,
             "],\"errCode\":%d, \"errMsg\":\"%s\"}",
             errcode, get_error_message(errcode));
+    if (pb->buf == NULL) {
+        *bus_ec = HBDBUS_EC_NOMEM;
+        return NULL;
+    }
+
     *bus_ec = 0;
     return pb->buf;
 }
@@ -121,11 +122,7 @@ static char *wifiGetHotspotList(hbdbus_conn* conn,
     assert(strcasecmp(to_method, METHOD_WIFI_GET_HOTSPOTS) == 0);
 
     struct pcutils_printbuf my_buff, *pb = &my_buff;
-    if (pcutils_printbuf_init(pb)) {
-        *bus_ec = HBDBUS_EC_NOMEM;
-        return NULL;
-    }
-
+    pcutils_printbuf_init(pb);
     pcutils_printbuf_strappend(pb, "{\"data\":[");
 
     struct network_device *netdev;
@@ -154,6 +151,12 @@ static char *wifiGetHotspotList(hbdbus_conn* conn,
 done:
     pcutils_printbuf_format(pb, "],\"errCode\":%d, \"errMsg\":\"%s\"}",
             errcode, get_error_message(errcode));
+    if (pb->buf == NULL) {
+        *bus_ec = HBDBUS_EC_NOMEM;
+        return NULL;
+    }
+
+    *bus_ec = 0;
     return pb->buf;
 }
 
@@ -191,14 +194,15 @@ static char *wifiStopScanHotspots(hbdbus_conn* conn,
 done:
     struct pcutils_printbuf my_buff, *pb = &my_buff;
 
-    if (pcutils_printbuf_init(pb)) {
+    pcutils_printbuf_init(pb);
+    pcutils_printbuf_format(pb,
+            "{\"errCode\":%d, \"errMsg\":\"%s\"}",
+            errcode, get_error_message(errcode));
+    if (pb->buf == NULL) {
         *bus_ec = HBDBUS_EC_NOMEM;
         return NULL;
     }
 
-    pcutils_printbuf_format(pb,
-            "{\"errCode\":%d, \"errMsg\":\"%s\"}",
-            errcode, get_error_message(errcode));
     *bus_ec = 0;
     return pb->buf;
 }
@@ -307,14 +311,16 @@ done:
 
     struct pcutils_printbuf my_buff, *pb = &my_buff;
 
-    if (pcutils_printbuf_init(pb)) {
+    pcutils_printbuf_init(pb);
+    pcutils_printbuf_format(pb,
+            "{\"errCode\":%d, \"errMsg\":\"%s\"}",
+            errcode, get_error_message(errcode));
+
+    if (pb->buf == NULL) {
         *bus_ec = HBDBUS_EC_NOMEM;
         return NULL;
     }
 
-    pcutils_printbuf_format(pb,
-            "{\"errCode\":%d, \"errMsg\":\"%s\"}",
-            errcode, get_error_message(errcode));
     *bus_ec = 0;
     return pb->buf;
 }
@@ -351,14 +357,16 @@ static char *wifiDisconnect(hbdbus_conn* conn, const char* from_endpoint,
 done:
     struct pcutils_printbuf my_buff, *pb = &my_buff;
 
-    if (pcutils_printbuf_init(pb)) {
+    pcutils_printbuf_init(pb);
+    pcutils_printbuf_format(pb,
+            "{\"errCode\":%d, \"errMsg\":\"%s\"}",
+            errcode, get_error_message(errcode));
+
+    if (pb->buf == NULL) {
         *bus_ec = HBDBUS_EC_NOMEM;
         return NULL;
     }
 
-    pcutils_printbuf_format(pb,
-            "{\"errCode\":%d, \"errMsg\":\"%s\"}",
-            errcode, get_error_message(errcode));
     *bus_ec = 0;
     return pb->buf;
 }
@@ -375,10 +383,7 @@ static char *wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint,
     assert(strcasecmp(to_method, METHOD_WIFI_GET_NETWORK_INFO) == 0);
 
     struct pcutils_printbuf my_buff, *pb = &my_buff;
-    if (pcutils_printbuf_init(pb)) {
-        *bus_ec = HBDBUS_EC_NOMEM;
-        return NULL;
-    }
+    pcutils_printbuf_init(pb);
 
     struct network_device *netdev;
     netdev = check_network_device(info, method_param,
@@ -467,6 +472,12 @@ done:
     pcutils_printbuf_format(pb,
             "},\"errCode\":%d, \"errMsg\":\"%s\"}",
             errcode, get_error_message(errcode));
+
+    if (pb->buf == NULL) {
+        *bus_ec = HBDBUS_EC_NOMEM;
+        return NULL;
+    }
+
     *bus_ec = 0;
     return pb->buf;
 }
