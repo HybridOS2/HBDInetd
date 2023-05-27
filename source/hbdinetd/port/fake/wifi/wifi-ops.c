@@ -44,8 +44,9 @@ struct netdev_context {
     hbdbus_conn *conn;
     struct network_device *netdev;
 
-    /* 0 means scan does not start */
     time_t scan_start_time;
+    time_t start_trying_time;
+    time_t last_update_time;
 
     /* wap state */
     enum wpa_state wpa_state;
@@ -58,13 +59,11 @@ struct netdev_context {
 
     /* the hotspot trying to connect */
     const struct wifi_hotspot_candidate *trying;
+    char *trying_ssid;
+    char *trying_bssid;
     char *trying_key;
 
-    const struct wifi_hotspot_candidate *connected;
-    unsigned evt_connected:1;
-    unsigned evt_disconnected:1;
-
-    time_t last_update_time;
+    const struct wifi_hotspot *connected;
 
     struct list_head hotspots;
     struct kvlist saved_networks;
@@ -117,6 +116,27 @@ void wifi_reset_hotspots(struct list_head *hotspots)
 }
 
 struct wifi_hotspot *
+wifi_get_hotspot_by_netid(struct netdev_context *ctxt, int netid)
+{
+    if (netid < 0)
+        return NULL;
+
+    struct list_head *p;
+    list_for_each(p, &ctxt->hotspots) {
+        struct wifi_hotspot *hotspot;
+        hotspot = list_entry(p, struct wifi_hotspot, ln);
+
+        struct wifi_hotspot_candidate *candidate = hotspot->extra;
+        assert(candidate);
+        if (netid == candidate->netid) {
+            return hotspot;
+        }
+    }
+
+    return NULL;
+}
+
+struct wifi_hotspot *
 wifi_get_hotspot_by_bssid(struct netdev_context *ctxt, const char *bssid)
 {
     struct list_head *p;
@@ -158,31 +178,39 @@ int wifi_get_netid_from_ssid(struct netdev_context *ctxt, const char *ssid)
     return -1;
 }
 
-static int my_check_network(const struct wifi_hotspot_candidate *candidate,
-        const char *keymgmt, const char *passphrase)
+struct wifi_hotspot_candidate *
+wifi_find_candidate(const char *ssid, const char *bssid)
 {
-    (void)passphrase;
-    if (keymgmt == NULL)
-        return -1;
+    for (size_t i = 0; i < PCA_TABLESIZE(candidates); i++) {
+        if (bssid && strcmp(bssid, candidates[i].bssid) == 0) {
+            return candidates + i;
+        }
 
-    const char *my_keymgmt = NULL;
-    if (strstr(candidate->capabilities, "WPA2-PSK"))
-        my_keymgmt = "WPA-PSK";
-    else if (strstr(candidate->capabilities, "WPA-PSK"))
-        my_keymgmt = "WPA-PSK";
-    else if (strstr(candidate->capabilities, "WPA2"))
-        my_keymgmt = "WPA-PSK";
-    else if (strstr(candidate->capabilities, "WPA"))
-        my_keymgmt = "WPA-PSK";
-    else if (strstr(candidate->capabilities, "WEP"))
-        my_keymgmt = "WEP";
-    else if (strstr(candidate->capabilities, "NONE"))
-        my_keymgmt = "NONE";
+        if (strcmp(ssid, candidates[i].ssid) == 0) {
+            return candidates + i;
+        }
+    }
 
-    if (my_keymgmt && strcmp(my_keymgmt, keymgmt) == 0)
-        return 0;
+    return NULL;
+}
 
-    return -1;
+const char *
+wifi_get_keymgmt_from_capabilities(const char *capabilities)
+{
+    if (strstr(capabilities, "WPA2-PSK"))
+        return "WPA-PSK";
+    else if (strstr(capabilities, "WPA-PSK"))
+        return "WPA-PSK";
+    else if (strstr(capabilities, "WPA2"))
+        return "WPA-PSK";
+    else if (strstr(capabilities, "WPA"))
+        return "WPA-PSK";
+    else if (strstr(capabilities, "WEP"))
+        return "WEP";
+    else if (strstr(capabilities, "NONE"))
+        return "NONE";
+
+    return NULL;
 }
 
 int wifi_check_network(struct netdev_context *ctxt, int netid,
@@ -206,48 +234,50 @@ int wifi_check_network(struct netdev_context *ctxt, int netid,
     }
 
     assert(strcmp(candidate->ssid, ssid) == 0);
-    return my_check_network(candidate, keymgmt, passphrase);
+
+    const char *my_keymgmt;
+    my_keymgmt = wifi_get_keymgmt_from_capabilities(candidate->capabilities);
+    if (my_keymgmt == NULL || strcmp(my_keymgmt, keymgmt))
+        return -1;
+
+    return check_wpa_passphrase(keymgmt, passphrase);
 }
 
 int wifi_add_network(struct netdev_context *ctxt, const char *ssid,
         const char *keymgmt, const char *passphrase)
 {
-    struct wifi_hotspot_candidate *candidate = NULL;
+    (void)passphrase;
 
-    for (size_t i = 0; i < PCA_TABLESIZE(candidates); i++) {
-        if (strcmp(ssid, candidates[i].ssid) == 0) {
-            candidate = candidates + i;
-            break;
-        }
+    struct wifi_hotspot *found;
+    found = wifi_get_hotspot_by_ssid(ctxt, ssid);
+
+    if (found) {
+        const char *_keymgmt;
+        _keymgmt = wifi_get_keymgmt_from_capabilities(found->capabilities);
+        if (_keymgmt == NULL || strcmp(_keymgmt, keymgmt))
+            return -1;
+
+        found->netid = ctxt->next_netid;
     }
 
-    if (candidate == NULL) {
-        return -1;
-    }
-
-    assert(candidate->netid == -1);
-
-    if (my_check_network(candidate, keymgmt, passphrase))
-        return -1;
-
-    candidate->netid = ctxt->next_netid;
+    kvlist_set(&ctxt->saved_networks, ssid, &ctxt->next_netid);
     ctxt->next_netid++;
-    kvlist_set(&ctxt->saved_networks, ssid, &candidate->netid);
+
     return 0;
 }
 
-int wifi_select_network(struct netdev_context *ctxt, int netid)
+int wifi_select_network_in_scan_result(struct netdev_context *ctxt, int netid)
 {
     assert(netid >= 0);
 
-    for (size_t i = 0; i < PCA_TABLESIZE(candidates); i++) {
-        if (candidates[i].netid == netid) {
-            ctxt->trying = candidates + i;
-            return 0;
-        }
+    ctxt->trying = NULL;
+    struct wifi_hotspot *hotspot;
+    hotspot = wifi_get_hotspot_by_netid(ctxt, netid);
+    if (hotspot) {
+        ctxt->trying = hotspot->extra;
     }
 
-    return -1;
+    return 0;
 }
 
 void wifi_reset_status(struct netdev_context *ctxt)
@@ -264,25 +294,6 @@ void wifi_reset_status(struct netdev_context *ctxt)
     }
 }
 
-const char *
-wifi_get_keymgmt_from_capabilities(const struct wifi_hotspot *hotspot)
-{
-    if (strstr(hotspot->capabilities, "WPA2-PSK"))
-        return "WPA-PSK";
-    else if (strstr(hotspot->capabilities, "WPA-PSK"))
-        return "WPA-PSK";
-    else if (strstr(hotspot->capabilities, "WPA2"))
-        return "WPA-PSK";
-    else if (strstr(hotspot->capabilities, "WPA"))
-        return "WPA-PSK";
-    else if (strstr(hotspot->capabilities, "WEP"))
-        return "WEP";
-    else if (strstr(hotspot->capabilities, "NONE"))
-        return "NONE";
-
-    return NULL;
-}
-
 int wifi_update_status(struct netdev_context *ctxt)
 {
     if (ctxt->status == NULL) {
@@ -295,7 +306,25 @@ int wifi_update_status(struct netdev_context *ctxt)
     else
         wifi_reset_status(ctxt);
 
-    if (ctxt->wpa_state > WPA_STATE_SCANNING) {
+    if (ctxt->wpa_state == WPA_STATE_COMPLETED) {
+        assert(ctxt->connected);
+
+        ctxt->status->bssid = strdup(ctxt->connected->bssid);
+        ctxt->status->ssid = strdup(ctxt->connected->ssid);
+        ctxt->status->escaped_ssid =
+            pcutils_escape_string_for_json(ctxt->status->ssid);
+        ctxt->status->wpa_state = ctxt->wpa_state;
+
+        struct wifi_hotspot_candidate *candidate = ctxt->connected->extra;
+        assert(candidate && candidate->netid >= 0);
+        ctxt->status->netid = candidate->netid;
+
+        ctxt->status->hotspot = ctxt->connected;
+        ctxt->status->key_mgmt = strdup(
+                wifi_get_keymgmt_from_capabilities(
+                    ctxt->connected->capabilities));
+    }
+    else if (ctxt->wpa_state > WPA_STATE_SCANNING && ctxt->trying != NULL) {
         ctxt->status->bssid = strdup(ctxt->trying->bssid);
         ctxt->status->ssid = strdup(ctxt->trying->ssid);
         ctxt->status->escaped_ssid =
@@ -303,19 +332,16 @@ int wifi_update_status(struct netdev_context *ctxt)
         ctxt->status->wpa_state = ctxt->wpa_state;
 
         if (ctxt->wpa_state == WPA_STATE_COMPLETED) {
-            ctxt->status->netid = wifi_get_netid_from_ssid(ctxt,
-                    ctxt->status->ssid);
+            ctxt->status->netid = ctxt->trying->netid;
         }
 
         ctxt->status->hotspot =
             wifi_get_hotspot_by_bssid(ctxt, ctxt->status->bssid);
-        if (ctxt->status->hotspot == NULL) {
-            HLOG_ERR("BSS %s is not in the hotspot list\n", ctxt->status->bssid);
-        }
-        else {
-            ctxt->status->key_mgmt = strdup(
-                    wifi_get_keymgmt_from_capabilities(ctxt->status->hotspot));
-        }
+        assert(ctxt->status->hotspot);
+
+        ctxt->status->key_mgmt = strdup(
+                wifi_get_keymgmt_from_capabilities(
+                    ctxt->status->hotspot->capabilities));
     }
 
     return 0;
@@ -365,7 +391,7 @@ static int connect(struct netdev_context *ctxt,
             HLOG_ERR("No key_mgmt specified and `%s` not found.\n", ssid);
             return ENOENT;
         }
-        keymgmt = wifi_get_keymgmt_from_capabilities(hotspot);
+        keymgmt = wifi_get_keymgmt_from_capabilities(hotspot->capabilities);
 
         if (keymgmt == NULL) {
             HLOG_ERR("Can not get key_mgmt from capabilities: %s.\n",
@@ -382,7 +408,7 @@ static int connect(struct netdev_context *ctxt,
     }
     else if (netid >= 0) {
         if (wifi_check_network(ctxt, netid, ssid, keymgmt, passphrase)) {
-            HLOG_ERR("Failed to update network: %d) %s (key_mgmt: %s)\n",
+            HLOG_ERR("Invalid key_mgmt or passphrase (%d): (%s/%s)\n",
                     netid, ssid, keymgmt);
             return ERR_DEVICE_CONTROLLER;
         }
@@ -403,30 +429,41 @@ static int connect(struct netdev_context *ctxt,
     }
 
 select:
-    ctxt->wpa_state = WPA_STATE_SCANNING;
-    wifi_select_network(ctxt, netid);
+    wifi_select_network_in_scan_result(ctxt, netid);
+    if (ctxt->trying) {
+        /* the network is a found one */
+        ctxt->wpa_state = WPA_STATE_AUTHENTICATING;
+    }
+    else {
+        ctxt->wpa_state = WPA_STATE_SCANNING;
+        ctxt->trying = wifi_find_candidate(ssid, bssid);
 
-    unsigned count = 30;    /* total 3s */
-    do {
-        TEMP_FAILURE_RETRY(usleep(100000)); // 0.1s
+        if (ctxt->trying) {
+            unsigned count = 30;    /* total 3s */
+            do {
+                TEMP_FAILURE_RETRY(usleep(100000)); // 0.1s
 
-        if (random() % 30 == count) {
-            if (strcmp(keymgmt, "NONE")) {
-                ctxt->wpa_state = WPA_STATE_AUTHENTICATING;
-                break;
-            }
-            else {
-                ctxt->wpa_state = WPA_STATE_COMPLETED;
-                break;
-            }
+                if (random() % 30 == count) {
+                    if (strcmp(keymgmt, "NONE")) {
+                        ctxt->wpa_state = WPA_STATE_AUTHENTICATING;
+                        break;
+                    }
+                    else {
+                        ctxt->wpa_state = WPA_STATE_COMPLETED;
+                        break;
+                    }
+                }
+
+            } while (--count);
         }
-
-    } while (--count);
+        else {
+            ctxt->start_trying_time = purc_monotonic_time_after(0);
+        }
+    }
 
     wifi_update_status(ctxt);
-
     if (ctxt->wpa_state == WPA_STATE_COMPLETED) {
-        ctxt->evt_connected = 1;
+        assert(ctxt->trying);
         return 0;
     }
     else if (ctxt->wpa_state == WPA_STATE_AUTHENTICATING) {
@@ -434,7 +471,9 @@ select:
             return ERR_WPA_WRONG_PASSPHRASE;
     }
     else if (ctxt->wpa_state == WPA_STATE_SCANNING) {
-        ctxt->trying_key = strdup(passphrase);
+        ctxt->trying_ssid = strdup(ssid);
+        ctxt->trying_bssid = bssid ? strdup(bssid) : NULL;
+        ctxt->trying_key = passphrase ? strdup(passphrase) : NULL;
     }
 
     return ERR_UNCERTAIN_RESULT;
@@ -448,7 +487,6 @@ static int disconnect(struct netdev_context *ctxt)
     }
 
     ctxt->wpa_state = WPA_STATE_DISCONNECTED;
-    ctxt->evt_disconnected = 1;
     wifi_reset_status(ctxt);
     return 0;
 }
@@ -509,7 +547,7 @@ get_hotspot_list(struct netdev_context *ctxt, int *curr_netid)
 static const struct wifi_status *
 get_status(struct netdev_context *ctxt)
 {
-    // TODO: wifi_update_status(ctxt);
+    wifi_update_status(ctxt);
     return ctxt->status;
 }
 
@@ -546,6 +584,12 @@ static struct netdev_context *netdev_context_new(void)
 
 static void netdev_context_delete(struct netdev_context *ctxt)
 {
+    if (ctxt->trying_ssid) {
+        free(ctxt->trying_ssid);
+        if (ctxt->trying_bssid) free(ctxt->trying_bssid);
+        if (ctxt->trying_key) free(ctxt->trying_key);
+    }
+
     wifi_reset_status(ctxt);
     if (ctxt->status)
         free(ctxt->status);
@@ -629,6 +673,21 @@ int wifi_device_off(hbdbus_conn *conn, struct network_device *netdev)
     return 0;
 }
 
+static void release_trying_info(struct netdev_context *ctxt)
+{
+    if (ctxt->wpa_state == WPA_STATE_UNKNOWN && ctxt->new_netid >= 0) {
+        kvlist_remove(&ctxt->saved_networks, ctxt->trying_ssid);
+        ctxt->new_netid = -1;
+    }
+
+    if (ctxt->trying_ssid) {
+        free(ctxt->trying_ssid);
+        if (ctxt->trying_bssid) free(ctxt->trying_bssid);
+        if (ctxt->trying_key) free(ctxt->trying_key);
+        ctxt->trying_ssid = NULL;
+    }
+}
+
 int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
 {
     (void)conn;
@@ -636,6 +695,11 @@ int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
         return EPERM;
 
     struct netdev_context *ctxt = netdev->ctxt;
+    size_t curr_time = purc_monotonic_time_after(0);
+    if (curr_time - ctxt->last_update_time < 1) {
+        return 0;
+    }
+    ctxt->last_update_time = curr_time;
 
     const char *evt = NULL;
     struct pcutils_printbuf my_buff, *pb = &my_buff;
@@ -643,46 +707,65 @@ int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
 
     /* handle change of WPA state first */
     if (ctxt->wpa_state == WPA_STATE_SCANNING) {
-        ctxt->wpa_state = WPA_STATE_AUTHENTICATING;
+        assert(ctxt->trying_ssid);
+        if (ctxt->trying) {
+            ctxt->wpa_state = WPA_STATE_AUTHENTICATING;
+        }
+        else {
+            if (curr_time - ctxt->start_trying_time >= 3) {
+                evt = BUBBLE_WIFIFAILEDCONNATTEMPT;
+
+                char *escaped_ssid;
+                escaped_ssid = pcutils_escape_string_for_json(ctxt->trying_ssid);
+                pcutils_printbuf_format(pb,
+                        "{\"ssid\":\"%s\","
+                        "\"reason\":\"%s\"}",
+                        escaped_ssid, "NOT-FOUND");
+                free(escaped_ssid);
+
+                ctxt->wpa_state = WPA_STATE_UNKNOWN;
+                release_trying_info(ctxt);
+            }
+        }
     }
     else if (ctxt->wpa_state == WPA_STATE_AUTHENTICATING) {
         if (strcmp(ctxt->trying_key, MY_PASSPHRASE)) {
             evt = BUBBLE_WIFIFAILEDCONNATTEMPT;
 
             char *escaped_ssid;
-            escaped_ssid = pcutils_escape_string_for_json(ctxt->trying->ssid);
+            escaped_ssid = pcutils_escape_string_for_json(ctxt->trying_ssid);
             pcutils_printbuf_format(pb,
                     "{\"ssid\":\"%s\","
                     "\"reason\":\"%s\"}",
                     escaped_ssid, "BAD-KEY");
             free(escaped_ssid);
 
-            if (ctxt->new_netid >= 0) {
-                kvlist_remove(&ctxt->saved_networks, ctxt->trying->ssid);
-                ctxt->new_netid = -1;
-            }
+            ctxt->wpa_state = WPA_STATE_UNKNOWN;
         }
         else {
             ctxt->wpa_state = WPA_STATE_COMPLETED;
-            ctxt->evt_connected = 1;
         }
 
-        free(ctxt->trying_key);
+        release_trying_info(ctxt);
     }
-    else if (ctxt->evt_disconnected &&
-            ctxt->wpa_state == WPA_STATE_DISCONNECTED) {
-        ctxt->evt_disconnected = 0;
+    else if (ctxt->wpa_state == WPA_STATE_DISCONNECTED) {
         evt = BUBBLE_WIFIDISCONNECTED;
         pcutils_printbuf_format(pb,
                 "{\"bssid\":\"%s\",\"ssid\":\"%s\"}",
                 ctxt->status->bssid,
                 ctxt->status->escaped_ssid ? ctxt->status->escaped_ssid :
                 ctxt->status->ssid);
+        ctxt->wpa_state = WPA_STATE_UNKNOWN;
 
     }
     else if (ctxt->wpa_state == WPA_STATE_COMPLETED) {
-        if (ctxt->evt_connected) {
-            ctxt->evt_connected = 0;
+        if (ctxt->trying) {
+            ctxt->connected = wifi_get_hotspot_by_bssid(ctxt,
+                    ctxt->trying->bssid);
+            assert(ctxt->connected);
+
+            wifi_update_status(ctxt);
+
             evt = BUBBLE_WIFICONNECTED;
             pcutils_printbuf_format(pb,
                     "{\"bssid\":\"%s\","
@@ -692,18 +775,14 @@ int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
                       ctxt->status->escaped_ssid ? ctxt->status->escaped_ssid :
                         ctxt->status->ssid,
                       ctxt->status->signal_level);
+            ctxt->trying = NULL;
         }
         else {
-            time_t curr_time = purc_monotonic_time_after(0);
-            if (curr_time - ctxt->last_update_time >= 1) {
-                ctxt->last_update_time = curr_time;
-                /* simulate WiFiSignalLevelChanged event */
-            }
+            /* simulate WiFiSignalLevelChanged event */
         }
+
     }
     else if (ctxt->scan_start_time) {
-        time_t curr_time = purc_monotonic_time_after(0);
-
         if (curr_time - ctxt->scan_start_time >= 5) {
             /* simulate WiFiScanFinished event */
         }

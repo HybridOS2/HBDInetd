@@ -82,10 +82,11 @@ struct wifi_hotspot {
     unsigned int frequency;
     int signal_level;
 
-    /* < 0 if not saved */
-    int netid;
+    int netid;  /* >= 0 if saved */
 
     struct list_head ln;
+
+    void *extra;
 };
 
 #define STATUS_KEY_BSSID            "bssid"
