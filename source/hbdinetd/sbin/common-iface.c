@@ -60,8 +60,12 @@ static char* terminate(hbdbus_conn* conn, const char* from_endpoint,
     }
 
     purc_variant_unref(jo);
+    jo = NULL;
 
 done:
+    if (jo)
+        purc_variant_unref(jo);
+
     struct pcutils_printbuf my_buff, *pb = &my_buff;
     pcutils_printbuf_init(pb);
     pcutils_printbuf_format(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", errcode,
@@ -212,10 +216,14 @@ static char *getDeviceStatus(hbdbus_conn* conn,
 
     GPatternSpec* spec = g_pattern_spec_new(ifname);
     if (spec == NULL) {
-        free(pb->buf);
+        if (pb->buf)
+            free(pb->buf);
+        purc_variant_unref(jo);
         *bus_ec = HBDBUS_EC_NOMEM;
         return NULL;
     }
+    purc_variant_unref(jo);
+    jo = NULL;
 
     int nr_devices = 0;
     const char* name;
@@ -307,6 +315,9 @@ static char *getDeviceStatus(hbdbus_conn* conn,
     g_pattern_spec_free(spec);
 
 done:
+    if (jo)
+        purc_variant_unref(jo);
+
     pcutils_printbuf_format(pb, "],\"errCode\":%d, \"errMsg\":\"%s\"}",
             errcode, get_error_message(errcode));
 
