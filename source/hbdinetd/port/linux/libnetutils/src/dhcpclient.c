@@ -1,4 +1,5 @@
 /*
+ * Copyright 2023, HybridOS Community
  * Copyright 2008, The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
