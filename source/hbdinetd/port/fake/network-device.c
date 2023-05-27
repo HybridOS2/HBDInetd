@@ -24,14 +24,11 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <errno.h>
+#include <net/if.h>
 
 #include "hbdinetd.h"
 #include "internal.h"
 #include "log.h"
-
-#define IFNAMSIZ        63
-#define IFF_UP          0x01
-#define IFF_RUNNING     0x02
 
 bool is_valid_interface_name(const char *ifname)
 {
@@ -55,6 +52,10 @@ struct network_device *get_network_device_fixed_info(const char *ifname,
     else if (ifname[0] == 'w') {
         netdev->type = DEVICE_TYPE_ETHER_WIRELESS;
         netdev->hwaddr = strdup("24:41:8c:8f:1c:27");
+        netdev->on = wifi_device_on;
+        netdev->off = wifi_device_off;
+        netdev->check = wifi_device_check;
+        netdev->terminate = wifi_device_terminate;
     }
     else if (ifname[0] == 'e') {
         netdev->type = DEVICE_TYPE_ETHER_WIRED;
@@ -91,7 +92,17 @@ int update_network_device_dynamic_info(const char *ifname,
     else if (ifname[0] == 'e') {
         netdev->type = DEVICE_TYPE_ETHER_WIRED;
 
-        if (netdev->flags & IFF_RUNNING) {
+        netdev->status = DEVICE_STATUS_UNCERTAIN;
+        if (netdev->flags & IFF_UP) {
+            if (netdev->flags & IFF_RUNNING)
+                netdev->status = DEVICE_STATUS_RUNNING;
+            else
+                netdev->status = DEVICE_STATUS_UP;
+        }
+        else
+            netdev->status = DEVICE_STATUS_DOWN;
+
+        if (netdev->status == DEVICE_STATUS_RUNNING) {
             hbdaddr = &netdev->ipv4;
             hbdaddr->addr = strdup("192.168.2.77");
             hbdaddr->netmask = strdup("255.255.255.0");
@@ -100,6 +111,18 @@ int update_network_device_dynamic_info(const char *ifname,
             hbdaddr = &netdev->ipv6;
             hbdaddr->addr = strdup("fe80::583a:5e2d:fa3f:14ad");
         }
+    }
+    else if (ifname[0] == 'w') {
+        netdev->status = DEVICE_STATUS_UNCERTAIN;
+        if (netdev->flags & IFF_UP) {
+            if (netdev->flags & IFF_RUNNING)
+                netdev->status = DEVICE_STATUS_RUNNING;
+            else
+                netdev->status = DEVICE_STATUS_UP;
+        }
+        else
+            netdev->status = DEVICE_STATUS_DOWN;
+
     }
 
     return 0;

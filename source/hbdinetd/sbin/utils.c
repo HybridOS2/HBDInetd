@@ -528,8 +528,8 @@ int print_one_hotspot(const struct wifi_hotspot *hotspot, int curr_netid,
             "\"isSaved\":%s,"
             "\"isConnected\":%s"
             "}",
-            hotspot->escaped_ssid ? hotspot->escaped_ssid : hotspot->bssid,
-            hotspot->ssid,
+            hotspot->bssid,
+            hotspot->escaped_ssid ? hotspot->escaped_ssid : hotspot->ssid,
             frequency,
             hotspot->capabilities,
             hotspot->signal_level,

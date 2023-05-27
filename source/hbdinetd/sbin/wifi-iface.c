@@ -67,12 +67,12 @@ static char *wifiStartScanHotspots(hbdbus_conn* conn,
         purc_variant_unref(extra_value);
     }
 
-    if (wait_seconds >= 0.1) {
-        errcode = netdev->wifi_ops->start_scan(netdev->ctxt);
-        if (errcode) {
-            goto done;
-        }
+    errcode = netdev->wifi_ops->start_scan(netdev->ctxt);
+    if (errcode) {
+        goto done;
+    }
 
+    if (wait_seconds >= 0.1) {
         if (wait_seconds > 5.0) {
             wait_seconds = 5.0;
         }
@@ -91,10 +91,6 @@ static char *wifiStartScanHotspots(hbdbus_conn* conn,
     }
 
     print_hotspot_list(hotspots, curr_netid, pb);
-
-    if (wait_seconds < 0.1) {
-        netdev->wifi_ops->start_scan(netdev->ctxt);
-    }
 
 done:
     pcutils_printbuf_format(pb,
@@ -498,6 +494,8 @@ static const char *events[] = {
     BUBBLE_WIFICONNECTED,
     BUBBLE_WIFIFAILEDCONNATTEMPT,
     BUBBLE_WIFIDISCONNECTED,
+    BUBBLE_WIFIHOTSPOTFOUND,
+    BUBBLE_WIFIHOTSPOTLOST,
     BUBBLE_WIFISCANFINISHED,
     BUBBLE_WIFISIGNALLEVELCHANGED,
 };

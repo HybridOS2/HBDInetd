@@ -39,7 +39,6 @@ struct wifi_hotspot_candidate {
 };
 
 struct netdev_context {
-    hbdbus_conn *conn;
     struct network_device *netdev;
 
     time_t scan_start_time;
@@ -604,11 +603,14 @@ static struct netdev_context *netdev_context_new(void)
 
     ctxt = calloc(1, sizeof(*ctxt));
     if (ctxt) {
+        if (wifi_update_status(ctxt)) {
+            free(ctxt);
+            return NULL;
+        }
         init_list_head(&ctxt->hotspots);
         kvlist_init(&ctxt->saved_networks, get_id_len);
+        ctxt->new_netid = -1;
     }
-
-    ctxt->new_netid = -1;
 
     return ctxt;
 }
@@ -642,7 +644,6 @@ int wifi_device_on(hbdbus_conn *conn, struct network_device *netdev)
         HLOG_ERR("Failed to allocate memory for WiFi device context!\n");
         return ENOMEM;
     }
-    netdev->ctxt->conn = conn;
     netdev->ctxt->netdev = netdev;
 
     netdev->wifi_ops = &wifi_ops;
@@ -841,8 +842,14 @@ int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
     else if (ctxt->scan_start_time) {
         if (curr_time - ctxt->scan_start_time >= 5) {
             /* simulate WiFiScanFinished event */
+            ctxt->scan_start_time = 0;
+
+            evt = BUBBLE_WIFISCANFINISHED;
+            pcutils_printbuf_strappend(pb, "{\"success\":true,\"hotspots\":[");
+            print_hotspot_list(&ctxt->hotspots, ctxt->status->netid, pb);
+            pcutils_printbuf_strappend(pb, "]");
         }
-        else if (random() % 5 == 0) {    // about 0.5s
+        else {
             int index = random() % (int)PCA_TABLESIZE(candidates);
             if (candidates[index].found) {
                 /* simulate WiFiHotspotLost event */
@@ -874,8 +881,9 @@ int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
     }
 
     if (evt) {
+        HLOG_ERR("Firing event: %s\n", evt);
         if (pb->buf) {
-            int ret = hbdbus_fire_event(ctxt->conn, evt, pb->buf);
+            int ret = hbdbus_fire_event(conn, evt, pb->buf);
             free(pb->buf);
             if (ret) {
                 HLOG_ERR("Failed when firing event: %s\n", evt);
@@ -886,6 +894,9 @@ int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
             HLOG_ERR("OOM when using printbuf\n");
             return ENOMEM;
         }
+    }
+    else if (pb->buf) {
+        free(pb->buf);
     }
 
     return 0;
