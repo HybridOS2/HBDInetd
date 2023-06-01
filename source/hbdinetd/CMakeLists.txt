@@ -47,6 +47,14 @@ set_target_properties(hbdinetd PROPERTIES
 HBDINETD_COMPUTE_SOURCES(hbdinetd)
 HBDINETD_FRAMEWORK(hbdinetd)
 
-install(TARGETS hbdinetd
-    DESTINATION "${HBDINETD_APP_INSTALL_DIR}/sbin/")
+install(TARGETS hbdinetd DESTINATION "${HBDINETD_APP_INSTALL_DIR}/sbin/")
+
+set(HVML_FILES
+    "hvml/test.hvml"
+)
+
+HBDINETD_COPY_FILES(HVMLFiles
+    DESTINATION "${CMAKE_BINARY_DIR}"
+    FILES ${HVML_FILES}
+)
 
