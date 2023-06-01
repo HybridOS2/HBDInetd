@@ -53,6 +53,48 @@
             </test>
         </define>
 
+        <define as 'showBubbleData'>
+
+            <inherit>
+                $STREAM.stdout.writelines("Got an event from $?.fromEndpoint/bubble/$?.fromBubble: $?.bubbleData")
+                $STREAM.stdout.writelines($DATA.serialize($DATA.parse($?.bubbleData), 'pretty'))
+            </inherit>
+        </define>
+
+        <init as 'scanTimes' at '_root' with 1 />
+        <define as 'scanHotspots' >
+            <test with $databus.call($hbdinetdMain, 'wifiStartScan', "{device: '$globalState.wifi', waitSeconds: 2}") >
+                <observe on $databus for 'result:wifiStartScan'>
+                    <call on $getInetdResult with { edpt: $hbdinetdMain, method: 'wifiStartScan', result: $? } >
+                        <test with $L.strne('case', $DATA.type($?), 'undefined') >
+
+                            <iterate on ['WiFiHotspotLost', 'WiFiHotspotFound',
+                                        'WiFiConnected', 'WiFiDisconnected', 'WiFiFailedConnAttempt', 'WiFiSignalLevelChanged'] >
+                                <observe on $databus for "event:$?" with $showBubbleData />
+                            </iterate>
+
+                            <observe on $databus for 'event:WiFiScanFinished'>
+
+                                <iterate on ['WiFiScanFinished', 'WiFiHotspotLost', 'WiFiHotspotFound',
+                                            'WiFiConnected', 'WiFiDisconnected', 'WiFiFailedConnAttempt', 'WiFiSignalLevelChanged'] >
+                                    <forget on $databus for "event:$?" />
+                                </iterate>
+
+                                <test with $L.lt($scanTimes, 10) >
+                                    $STREAM.stdout.writelines("Current scan times: $scanTimes")
+
+                                    <init as 'scanTimes' at '_root' with $DATA.arith('+', $scanTimes, 1) />
+                                    <call on $scanHotspots />
+                                </test>
+                            </observe>
+
+                        </test>
+
+                    </call>
+                </observe>
+            </test>
+        </define>
+
         <observe on $globalState for 'GotWiFiDevice' >
             <inherit>
                 $STREAM.stdout.writelines("Found the WiFi Device: $globalState.wifi ($?)")
@@ -77,12 +119,15 @@
                                 </test>
                             </iterate>
 
+                            <call on $scanHotspots />
+
                         </test>
 
                     </call>
 
                 </observe>
             </test>
+
         </observe>
 
         <define as 'onHBDBusReady'>

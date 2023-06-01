@@ -542,12 +542,14 @@ static int start_scan(struct netdev_context *ctxt)
     /* generate a random hotspot list */
     unsigned found = 0;
     for (size_t i = 0; i < PCA_TABLESIZE(candidates); i++) {
+        candidates[i].found = false;
         if ((random() % 2) == 0) {
             struct wifi_hotspot *one;
             one = clone_hotspot_from_candidate(candidates + i);
             candidates[i].found = true;
             list_add_tail(&one->ln, &ctxt->hotspots);
             found++;
+            HLOG_INFO("Add candidate: %d\n", (int)i);
         }
     }
 
@@ -746,6 +748,7 @@ int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
                 one = clone_hotspot_from_candidate(ctxt->trying);
                 ctxt->trying->found = true;
                 list_add_tail(&one->ln, &ctxt->hotspots);
+                HLOG_INFO("Add candidate from trying one\n");
 
                 evt = BUBBLE_WIFIHOTSPOTFOUND;
                 print_one_hotspot(one, ctxt->status->netid, pb);
@@ -847,7 +850,7 @@ int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
             evt = BUBBLE_WIFISCANFINISHED;
             pcutils_printbuf_strappend(pb, "{\"success\":true,\"hotspots\":[");
             print_hotspot_list(&ctxt->hotspots, ctxt->status->netid, pb);
-            pcutils_printbuf_strappend(pb, "]");
+            pcutils_printbuf_strappend(pb, "]}");
         }
         else {
             int index = random() % (int)PCA_TABLESIZE(candidates);
@@ -862,6 +865,7 @@ int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
                 list_del(&one->ln);
 
                 candidates[index].found = false;
+                HLOG_INFO("Remove candidate: %d\n", index);
 
                 evt = BUBBLE_WIFIHOTSPOTLOST;
                 pcutils_printbuf_format(pb, "{\"bssid\": \"%s\"}", one->bssid);
@@ -874,6 +878,7 @@ int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
                 candidates[index].found = true;
                 list_add_tail(&one->ln, &ctxt->hotspots);
 
+                HLOG_INFO("Add candidate: %d\n", index);
                 evt = BUBBLE_WIFIHOTSPOTFOUND;
                 print_one_hotspot(one, ctxt->status->netid, pb);
             }

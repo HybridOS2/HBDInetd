@@ -172,7 +172,7 @@ static int on_scan_results(hbdbus_conn *conn,
     pcutils_printbuf_init(pb);
     pcutils_printbuf_strappend(pb, "{\"success\":true,\"hotspots\":[");
     print_hotspot_list(&ctxt->hotspots, ctxt->status->netid, pb);
-    pcutils_printbuf_strappend(pb, "]");
+    pcutils_printbuf_strappend(pb, "]}");
 
     if (pb->buf) {
         ret = hbdbus_fire_event(conn, BUBBLE_WIFISCANFINISHED, pb->buf);
