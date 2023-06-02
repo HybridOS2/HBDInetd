@@ -60,13 +60,13 @@ struct hbd_ifaddr {
 
     char *addr;    /* Address of interface */
     char *netmask; /* Netmask of interface */
-    char *gateway; /* Gateway of interface */
     union {
         char *broadaddr;
         /* Broadcast address of interface */
         char *dstaddr;
         /* Point-to-point destination address */
     } ifa_ifu;
+    char *gateway; /* Gateway of interface */
 #define hbdifa_broadaddr ifa_ifu.broadaddr
 #define hbdifa_dstaddr   ifa_ifu.dstaddr
 };
@@ -262,7 +262,7 @@ typedef struct network_device {
     char               *dns1;
     char               *dns2;
     char               *search;
-    char               *method;
+    char               *method; /* if not NULL, the device is configured */
 
     /* dynamic info */
     unsigned int        status;

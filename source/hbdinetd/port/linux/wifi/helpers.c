@@ -591,6 +591,7 @@ int wifi_update_status(struct netdev_context *ctxt)
             HLOG_ERR("Failed allocating WiFi status structure\n");
             return -1;
         }
+        ctxt->status->netid = -1;
     }
     else
         wifi_reset_status(ctxt);

@@ -100,11 +100,18 @@ static void cleanup_iface_config(struct iface_config *ifconf, bool free_itself)
             free(ifconf->ipv4.fields[i]);
     }
 
+    for (int i = 0; i < HBD_IFADDR_FIELDS_NR; i++) {
+        if (ifconf->ipv6.fields[i])
+            free(ifconf->ipv6.fields[i]);
+    }
+
     if (free_itself) {
         free(ifconf);
     }
     else {
+        const char *saved = ifconf->name;
         memset(ifconf, 0, sizeof(*ifconf));
+        ifconf->name = saved;
     }
 }
 
@@ -162,15 +169,6 @@ static const char *get_dhcp_result(struct iface_config *ifconf)
         status = dhcp_msg_type_to_name(msg_type);
         goto failed;
     }
-
-#if 0
-    ifconf->server = strdup(ifc_ipaddr_to_string(ifconf->srv));
-    ifconf->dns1 = dns1 ? strdup(ifc_ipaddr_to_string(dns1)) : NULL;
-    ifconf->dns2 = dns2 ? strdup(ifc_ipaddr_to_string(dns2)) : NULL;
-    ifconf->ipv4.addr = strdup(ifc_ipaddr_to_string(ifconf->addr));
-    ifconf->ipv4.netmask = strdup(ifc_ipaddr_to_string(netmask));
-    ifconf->ipv4.gateway = strdup(ifc_ipaddr_to_string(gateway));
-#endif
 
     ifconf->config_time = purc_monotonic_time_after(0);
     ifconf->expire_time = purc_monotonic_time_after(ifconf->lease);

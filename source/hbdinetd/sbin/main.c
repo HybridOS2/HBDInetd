@@ -422,6 +422,8 @@ handle_event_from_other_runners(hbdbus_conn *conn, const pcrdr_msg *msg)
             goto done;
         }
 
+        char *escaped_config = pcutils_escape_string_for_json(config);
+
         if (update_system_settings(conn, netdev)) {
             HLOG_ERR("Failed to update system settings\n");
             goto done;
@@ -433,7 +435,9 @@ handle_event_from_other_runners(hbdbus_conn *conn, const pcrdr_msg *msg)
                     "\"method\":\"dhcp\","
                     "\"config\":\"%s\""
                 "}",
-              ifname, config);
+              ifname, escaped_config);
+        free(escaped_config);
+
         event = BUBBLE_DEVICECONFIGURED;
     }
     else if (strcmp(event_name, CONFIG_EV_FAILED) == 0) {
@@ -451,8 +455,10 @@ done:
     if (pb->buf) {
         int ret = 0;
 
-        if (event)
+        if (event) {
+            HLOG_INFO("Firing an event: %s\n", event);
             ret = hbdbus_fire_event(conn, event, pb->buf);
+        }
 
         if (ret) {
             HLOG_ERR("Failed when firing event: %s\n", event);

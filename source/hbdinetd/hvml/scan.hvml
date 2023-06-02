@@ -8,7 +8,7 @@
     </head>
 
     <body>
-        <init as 'globalState' with { wifi: null } />
+        <init as 'globalState' with { wifi: null, ssid: null } />
         <init as 'hbdinetdMain' with 'edpt://localhost/cn.fmsoft.hybridos.inetd/main' />
 
         <define as 'showResult'>
@@ -55,10 +55,31 @@
 
         <define as 'showBubbleData'>
 
+            <init as 'bubbleData' with $DATA.parse($?.bubbleData) temp />
+
             <inherit>
                 $STREAM.stdout.writelines("Got an event from $?.fromEndpoint/bubble/$?.fromBubble: $?.bubbleData")
-                $STREAM.stdout.writelines($DATA.serialize($DATA.parse($?.bubbleData), 'pretty'))
+                $STREAM.stdout.writelines($DATA.serialize($bubbleData, 'pretty'))
             </inherit>
+
+            <return with $bubbleData />
+        </define>
+
+        <define as 'showWiFiStatus'>
+            <test with $databus.call($hbdinetdMain, 'getDeviceStatus', "{device: '$globalState.wifi'}") >
+                $STREAM.stdout.writelines("Calling $hbdinetdMain/method/getDeviceStatus...")
+
+                <forget on $databus for 'result:getDeviceStatus' />
+                <observe on $databus for 'result:getDeviceStatus'>
+                    <call on $showResult with { edpt: $hbdinetdMain, method: 'getDeviceStatus', result: $? } />
+
+                    <exit with 'Success' />
+                </observe>
+
+                <differ>
+                    $STREAM.stdout.writelines("Failed to call $hbdinetdMain/method/getDeviceStatus")
+                </differ>
+            </test>
         </define>
 
         <init as 'scanTimes' at '_root' with 1 />
@@ -66,7 +87,7 @@
             <test with $databus.call($hbdinetdMain, 'wifiStartScan', "{device: '$globalState.wifi', waitSeconds: 2}") >
                 <observe on $databus for 'result:wifiStartScan'>
 
-                    <iterate on ['WiFiScanFinished', 'WiFiHotspotLost', 'WiFiHotspotFound',
+                    <iterate on ['DeviceConfigured', 'DeviceConfigFailed', 'WiFiScanFinished', 'WiFiHotspotLost', 'WiFiHotspotFound',
                                 'WiFiConnected', 'WiFiDisconnected', 'WiFiFailedConnAttempt', 'WiFiSignalLevelChanged'] >
                         <forget on $databus for "event:$?" />
                     </iterate>
@@ -86,7 +107,40 @@
 
                                     <init as 'scanTimes' at '_root' with $DATA.arith('+', $scanTimes, 1) />
                                     <fire on $globalState for 'scanHotspots' />
+
+                                    <differ>
+                                        <exit with 'reach max scan times' />
+                                    </differ>
                                 </test>
+                            </observe>
+
+                            <observe on $databus for 'event:WiFiConnected'>
+                                <call on $showBubbleData with $? >
+
+                                    <update on $globalState at '.ssid' with $?.ssid />
+                                    <init as 'scanTimes' at '_root' with 10 >
+                                        $STREAM.stdout.writelines("Connected to `$?.ssid`")
+                                    </init>
+
+                                </call>
+                            </observe>
+
+                            <observe on $databus for 'event:DeviceConfigured'>
+                                <call on $showBubbleData with $? >
+                                    <inherit>
+                                        $STREAM.stdout.writelines("Configuration for the device $?.device: ")
+                                        $STREAM.stdout.writelines($DATA.serialize($DATA.parse($?.config), 'pretty'))
+                                    </inherit>
+
+                                    <call on $showWiFiStatus />
+                                    <!-- exit with "Connected to $globalState.ssid and it is configured by using $?.method" / -->
+                                </call>
+                            </observe>
+
+                            <observe on $databus for 'event:DeviceConfigFailed'>
+                                <call on $showBubbleData with $? >
+                                    <exit with "Connected to $globalState.ssid but failed to configure the device using $?.method" />
+                                </call>
                             </observe>
 
                         </test>
@@ -108,7 +162,7 @@
                     <call on $getInetdResult with { edpt: $hbdinetdMain, method: 'openDevice', result: $? } >
                         <test with $L.strne('case', $DATA.type($?), 'undefined') >
 
-                            <iterate on ['WiFiScanFinished', 'WiFiHotspotLost', 'WiFiHotspotFound',
+                            <iterate on ['DeviceConfigured', 'DeviceConfigFailed', 'WiFiScanFinished', 'WiFiHotspotLost', 'WiFiHotspotFound',
                                         'WiFiConnected', 'WiFiDisconnected', 'WiFiFailedConnAttempt', 'WiFiSignalLevelChanged'] >
 
                                 <test with $databus.subscribe($hbdinetdMain, $?) silently >
@@ -205,6 +259,14 @@
 
             </observe>
 
+            <observe on $databus for 'state:LostEventGenerator' >
+
+                <test with $L.streq('caseless', $?.endpointName, $hbdinetdMain) >
+                    <exit with 'HBDInetd disconnected from HBDBus' />
+                </test>
+
+            </observe>
+
             <observe on $databus for 'close' >
 
                 <inherit>
@@ -217,6 +279,8 @@
                 <inherit>
                     $STREAM.stdout.writelines("Error when using HBDBus: $?.retMsg ($?.retCode)")
                 </inherit>
+
+                <exit with 'error:hbdbus' />
             </observe>
 
             <catch for `ANY`>

@@ -108,6 +108,11 @@ int update_network_device_config(struct network_device *netdev,
         netdev->ipv4.gateway = NULL;
     }
 
+    if (netdev->ipv6.gateway) {
+        free(netdev->ipv6.gateway);
+        netdev->ipv6.gateway = NULL;
+    }
+
     static const char *config_names[] = {
         "dns1",
         "dns2",
@@ -121,9 +126,53 @@ int update_network_device_config(struct network_device *netdev,
                 netdev->fields[i] = strdup(str);
         }
     }
+
     if (netdev->method)
         free(netdev->method);
     netdev->method = strdup(method);
+
+#ifdef BUILDING_FAKE__
+    static const char *addr_names[] = {
+        "address",
+        "netmask",
+        "broadcast",
+    };
+
+    if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "inet4")) &&
+            purc_variant_is_object(jo_tmp)) {
+
+        purc_variant_t jo_tmp_tmp;
+        for (size_t i = 0; i < PCA_TABLESIZE(addr_names); i++) {
+            if (netdev->ipv4.fields[i]) free(netdev->ipv4.fields[i]);
+
+            if ((jo_tmp_tmp = purc_variant_object_get_by_ckey(jo_tmp,
+                            addr_names[i]))) {
+                const char *str = purc_variant_get_string_const(jo_tmp_tmp);
+                if (str && str[0])
+                    netdev->ipv4.fields[i] = strdup(str);
+            }
+        }
+    }
+
+    if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "inet6")) &&
+            purc_variant_is_object(jo_tmp)) {
+
+        purc_variant_t jo_tmp_tmp;
+        for (size_t i = 0; i < PCA_TABLESIZE(addr_names); i++) {
+            if (netdev->ipv6.fields[i]) free(netdev->ipv4.fields[i]);
+
+            if ((jo_tmp_tmp = purc_variant_object_get_by_ckey(jo_tmp,
+                            addr_names[i]))) {
+                const char *str = purc_variant_get_string_const(jo_tmp_tmp);
+                if (str && str[0])
+                    netdev->ipv6.fields[i] = strdup(str);
+            }
+        }
+    }
+#else
+    if (update_network_device_dynamic_info(ifname, netdev))
+        goto failed;
+#endif
 
     if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "inet4")) &&
             purc_variant_is_object(jo_tmp)) {
@@ -219,6 +268,8 @@ failed:
 
 void cleanup_network_device_dynamic_info(struct network_device *netdev)
 {
+    HLOG_INFO("called\n");
+
     for (int i = 0; i < HBD_IFADDR_FIELDS_NR; i++) {
         if (netdev->ipv4.fields[i]) {
             free(netdev->ipv4.fields[i]);

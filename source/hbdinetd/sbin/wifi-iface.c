@@ -269,6 +269,7 @@ static char *wifiConnect(hbdbus_conn* conn, const char* from_endpoint,
     }
 
     if (netdev->type != DEVICE_TYPE_ETHER_WIRELESS) {
+        HLOG_ERR("Not a wireless device\n");
         errcode = EINVAL;
         goto done;
     }
@@ -282,18 +283,20 @@ static char *wifiConnect(hbdbus_conn* conn, const char* from_endpoint,
     if (netdev->status == DEVICE_STATUS_DOWN ||
             netdev->status == DEVICE_STATUS_UNCERTAIN ||
             netdev->ctxt == NULL) {
+        HLOG_ERR("Device is down\n");
         errcode = ENETDOWN;
         goto done;
     }
 
     if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "passphrase")) == NULL) {
+        HLOG_ERR("Passphrase not specified\n");
         errcode = ENOKEY;
         goto done;
     }
 
     const char *passphrase = purc_variant_get_string_const(jo_tmp);
     if (passphrase == NULL) {
-        HLOG_ERR("Password not specified\n");
+        HLOG_ERR("Invalid passphrase\n");
         errcode = EINVAL;
         goto done;
     }
@@ -444,7 +447,7 @@ static char *wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint,
 
     pcutils_printbuf_format(pb,
             "\"hardwareAddr\":\"%s\","
-            "\"inet\":{\"address\":\"%s\","
+            "\"inet4\":{\"address\":\"%s\","
                 "\"netmask\":\"%s\","
                 "\"broadcastAddr\":\"%s\","
                 "\"destinationAddr\":\"%s\""

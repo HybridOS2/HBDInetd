@@ -50,7 +50,8 @@ HBDINETD_FRAMEWORK(hbdinetd)
 install(TARGETS hbdinetd DESTINATION "${HBDINETD_APP_INSTALL_DIR}/sbin/")
 
 set(HVML_FILES
-    "hvml/test.hvml"
+    "hvml/scan.hvml"
+    "hvml/connect.hvml"
 )
 
 HBDINETD_COPY_FILES(HVMLFiles
