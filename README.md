@@ -7,12 +7,78 @@ The daemon managing network interfaces for HybridOS.
 - Linux WPA/WPA2/IEEE 802.1X Supplicant (2.10+):
    + Package on Ubuntu 22.04 LTS: `wpasupplicant`.
    + Source: <http://w1.fi/wpa_supplicant/>
-- PurC: <https://github.com/HVML/PurC>
-- HBDBus: <https://github.com/HybridOS2/HBDBus>
+- PurC (0.9.13+): <https://github.com/HVML/PurC>
+- HBDBus (2.0.0+): <https://github.com/HybridOS2/HBDBus>
 
 For the detailed information about the 3rd-party dependencies of HBDInetd, please refer to:
 
 <https://github.com/HybridOS2/Documents/blob/master/ThirdPartySoftwareList.md#hbdinetd>
+
+## Building
+
+HBDInetd provides two ports:
+
+- `Linux`: This port uses `wpa_supplicant` and a real implementation of DHCP client to
+   scan, connect, and configure a wireless device. We use this port in a real production.
+- `Fake`: This port simulating a virtual wireless device (`wlan0`). We use this port
+   when we developing the app which provides the UIs for WiFi settings.
+
+When you configure this porject by using CMake, please use one of the following commands
+according to your need:
+
+```console
+$ cmake <root_of_source_tree> -DPORT=Linux
+```
+
+Or,
+
+```console
+$ cmake <root_of_source_tree> -DPORT=Fake
+```
+
+## Usage
+
+After building HBDInetd, there will be one executable and two HVML scripts:
+
+1. `hbdinetd`, located in the `sbin/` directory in the root of your building tree.
+   This is the daemon program of HBDInetd.
+1. `scan.hvml`, located in the `hvml/` directory in the root of your building tree.
+   This is a HVML program for demonstrating how to use the data bus APIs to scan
+   the hotspots and get the scan result from HBDInetd.
+1. `connect.hvml`, located in the `hvml/` directory in the root of your building tree.
+   This is a HVML program for demonstrating how to use the data bus APIs to connect to a hotspot.
+   Note that you can pass the SSID and passphrase on the command line as a query string:
+
+```console
+$ hvml/connect.hvml -a cn.fmsoft.hybridos.settings -r wifi -q 'ssid=YourSSID&key=ThePassphrase'
+```
+
+To start HBDInetd, make sure that you have started HBDBus. For more information
+about HBDBus, please refer to:
+
+<https://github.com/HybridOS2/HBDBus>
+
+After starting `hbdbusd`, you can run `hbdinetd` in the root of your building tree:
+
+```console
+$ sbin/hbdinetd
+```
+
+For the detailed usage, please run `hbdinetd` with `-h` option.
+
+If you use Linux port, please note the following things:
+
+1. Run `sbin/hbdinetd` as a super user (root).
+1. Run `rfkill` command to cancel any blocking on the wireless devices.
+1. The Linux port also needs that the executable of `wpa_supplicant` is located in the system directory `/sbin/`.
+1. Some Linux distribution may configured `wpa_supplicant` under the option `ONFIG_NO_CONFIG_WRITE=y`.
+   This will prevent the daemon from saving configuration to the default config file.
+   However, HBDInetd needs this options having value `n`, that is, we hope `wap_supplicant` to manage the configuration.
+
+For the description of APIs providing by HBDInetd, please refer to:
+
+[Design of HybridOS Data Bus (Chinese)](https://github.com/HybridOS2/Documents/blob/master/zh/hybridos-design-data-bus-zh.md)
+[Design of HybridOS Network Device Management Daemon (Chinese)](https://github.com/HybridOS2/Documents/blob/master/zh/hybridos-design-sysapp-inetd-zh.md)
 
 ## Copying
 
