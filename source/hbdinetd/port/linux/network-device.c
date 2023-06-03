@@ -194,6 +194,18 @@ int update_network_device_dynamic_info(const char *ifname,
             }
 
             if (hbdaddr) {
+                if (hbdaddr->addr) {
+                    free(hbdaddr->addr);
+                }
+
+                if (hbdaddr->netmask) {
+                    free(hbdaddr->netmask);
+                }
+
+                if (hbdaddr->hbdifa_dstaddr) {
+                    free(hbdaddr->hbdifa_dstaddr);
+                }
+
                 char ap[100];
                 getnameinfo(address->ifa_addr, family_size,
                         ap, sizeof(ap), 0, 0, NI_NUMERICHOST);
@@ -285,17 +297,14 @@ int enumerate_network_devices(struct run_info *run_info)
         if (hbdaddr) {
             if (hbdaddr->addr) {
                 free(hbdaddr->addr);
-                hbdaddr->addr = NULL;
             }
 
             if (hbdaddr->netmask) {
                 free(hbdaddr->netmask);
-                hbdaddr->netmask = NULL;
             }
 
             if (hbdaddr->hbdifa_dstaddr) {
                 free(hbdaddr->hbdifa_dstaddr);
-                hbdaddr->hbdifa_dstaddr = NULL;
             }
 
             char ap[100];

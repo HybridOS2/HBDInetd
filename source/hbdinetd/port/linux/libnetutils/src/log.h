@@ -21,10 +21,10 @@
  * along with this program.  If not, see http://www.gnu.org/licenses/.
  */
 
+#undef NDEBUG
+
 #ifndef __log_h_
 #define __log_h_
-
-#undef NDEBUG
 
 #include <purc/purc-helpers.h>
 

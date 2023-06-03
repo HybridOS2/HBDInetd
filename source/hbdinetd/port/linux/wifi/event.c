@@ -105,41 +105,75 @@ fatal:
     return ret;
 }
 
+#define MAX_LEN_BSSID 63
+
+static int parse_argument_bssid(const char *data, char *bssid_buf)
+{
+    const char *start = data;
+    const char *end = strstr(start, "=");
+
+    if (end == NULL)
+        return -1;
+
+    size_t len = end - start;
+    if (strncasecmp2ltr(start, "bssid", len) == 0) {
+        start = end + 1;
+        size_t i = 0;
+        while (i < MAX_LEN_BSSID && start[i] != ' ' && start[i] != 0) {
+            bssid_buf[i] = start[i];
+            i++;
+        }
+
+        bssid_buf[i] = 0;
+    }
+
+    return 0;
+}
+
 static int on_disconnected(hbdbus_conn *conn,
         struct netdev_context *ctxt, const char *data, int len)
 {
     (void)data;
     (void)len;
 
-    int ret;
-    if (ctxt->status && ctxt->status->bssid) {
-        struct pcutils_printbuf my_buff, *pb = &my_buff;
+    int ret = -1;
+    char bssid[MAX_LEN_BSSID + 1];
 
-        pcutils_printbuf_init(pb);
+    if (parse_argument_bssid(data, bssid)) {
+        HLOG_ERR("Bad argument of event for device controller: %s\n",
+                BUBBLE_WIFIDISCONNECTED);
+        return -1;
+    }
+
+    HLOG_INFO("Got bssid: %s for event %s\n", bssid, BUBBLE_WIFIDISCONNECTED);
+
+    struct wifi_hotspot *hotspot = wifi_get_hotspot_by_bssid(ctxt, bssid);
+
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
+    pcutils_printbuf_init(pb);
+    if (hotspot) {
         pcutils_printbuf_format(pb,
-                "{\"bssid\":\"%s\",\"ssid\":\"%s\"}",
-                  ctxt->status->bssid,
-                  ctxt->status->escaped_ssid ? ctxt->status->escaped_ssid :
-                    ctxt->status->ssid);
+            "{\"bssid\":\"%s\",\"ssid\":\"%s\"}",
+              bssid,
+              hotspot->escaped_ssid ? hotspot->escaped_ssid : hotspot->ssid);
+    }
+    else {
+        pcutils_printbuf_format(pb,
+            "{\"bssid\":\"%s\",\"ssid\":null}",
+              bssid);
+    }
 
-        if (pb->buf) {
-            ret = hbdbus_fire_event(conn, BUBBLE_WIFIDISCONNECTED, pb->buf);
-            free(pb->buf);
-            if (ret) {
-                HLOG_ERR("Failed when firing event: %s\n", BUBBLE_WIFIDISCONNECTED);
-                goto fatal;
-            }
-        }
-        else {
-            HLOG_ERR("OOM when using printbuf\n");
+    if (pb->buf) {
+        ret = hbdbus_fire_event(conn, BUBBLE_WIFIDISCONNECTED, pb->buf);
+        free(pb->buf);
+        if (ret) {
+            HLOG_ERR("Failed when firing event: %s\n", BUBBLE_WIFIDISCONNECTED);
             goto fatal;
         }
     }
     else {
-        ret = hbdbus_fire_event(conn, BUBBLE_WIFIDISCONNECTED,
-                "{\"bssid\":null,\"ssid\":null}");
-        if (ret)
-            goto fatal;
+        HLOG_ERR("OOM when using printbuf\n");
+        goto fatal;
     }
 
     wifi_reset_status(ctxt);
@@ -162,6 +196,7 @@ static int on_scan_results(hbdbus_conn *conn,
         goto failed;
     }
 
+    wifi_reset_hotspots(&ctxt->hotspots);
     if (wifi_parse_scan_results(ctxt, ctxt->buf, reply_len)) {
         HLOG_ERR("Failed when parsing scan results\n");
         goto failed;

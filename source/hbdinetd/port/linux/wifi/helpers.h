@@ -59,10 +59,11 @@ int wifi_update_hotspot_by_bssid(struct netdev_context *ctxt,
 int wifi_get_signal_level_by_bssid(struct netdev_context *ctxt,
         const char *bssid);
 
-int wifi_add_network(struct netdev_context *ctxt, const char *ssid,
-        const char *keymgmt, const char *passphrase);
-int wifi_update_network(struct netdev_context *ctxt, int netid,
+int wifi_add_network(struct netdev_context *ctxt, const char *bssid,
         const char *ssid, const char *keymgmt, const char *passphrase);
+int wifi_update_network(struct netdev_context *ctxt, int netid,
+        const char *bssid, const char *ssid,
+        const char *keymgmt, const char *passphrase);
 int wifi_remove_network(struct netdev_context *ctxt, int netid);
 
 int wifi_issue_dhcp_request(struct netdev_context *ctxt);

@@ -121,7 +121,7 @@ int ifc_init(void)
     }
 
     ret = ifc_ctl_sock < 0 ? -1 : 0;
-    HLOG_DEBUG("ifc_init_returning %d", ret);
+    HLOG_DEBUG("ifc_init_returning %d\n", ret);
     return ret;
 }
 
@@ -138,7 +138,7 @@ int ifc_init6(void)
 
 void ifc_close(void)
 {
-    HLOG_DEBUG("ifc_close");
+    HLOG_DEBUG("ifc_close\n");
     if (ifc_ctl_sock != -1) {
         (void)close(ifc_ctl_sock);
         ifc_ctl_sock = -1;
@@ -199,14 +199,14 @@ static int ifc_set_flags(const char *name, unsigned set, unsigned clr)
 int ifc_up(const char *name)
 {
     int ret = ifc_set_flags(name, IFF_UP, 0);
-    HLOG_DEBUG("ifc_up(%s) = %d", name, ret);
+    HLOG_DEBUG("ifc_up(%s) = %d\n", name, ret);
     return ret;
 }
 
 int ifc_down(const char *name)
 {
     int ret = ifc_set_flags(name, 0, IFF_UP);
-    HLOG_DEBUG("ifc_down(%s) = %d", name, ret);
+    HLOG_DEBUG("ifc_down(%s) = %d\n", name, ret);
     return ret;
 }
 
@@ -227,7 +227,7 @@ int ifc_set_addr(const char *name, in_addr_t addr)
     init_sockaddr_in(&ifr.ifr_addr, addr);
 
     ret = ioctl(ifc_ctl_sock, SIOCSIFADDR, &ifr);
-    HLOG_DEBUG("ifc_set_addr(%s, xx) = %d", name, ret);
+    HLOG_DEBUG("ifc_set_addr(%s, xx) = %d\n", name, ret);
     return ret;
 }
 
@@ -429,7 +429,7 @@ int ifc_set_mask(const char *name, in_addr_t mask)
     init_sockaddr_in(&ifr.ifr_addr, mask);
 
     ret = ioctl(ifc_ctl_sock, SIOCSIFNETMASK, &ifr);
-    HLOG_DEBUG("ifc_set_mask(%s, xx) = %d", name, ret);
+    HLOG_DEBUG("ifc_set_mask(%s, xx) = %d\n", name, ret);
     return ret;
 }
 
@@ -549,7 +549,7 @@ int ifc_create_default_route(const char *name, in_addr_t gw)
     in_gw.s_addr = gw;
 
     int ret = ifc_act_on_ipv4_route(SIOCADDRT, name, in_dst, 0, in_gw);
-    HLOG_DEBUG("ifc_create_default_route(%s, %d) = %d", name, gw, ret);
+    HLOG_DEBUG("ifc_create_default_route(%s, %d) = %d\n", name, gw, ret);
     return ret;
 }
 
@@ -678,7 +678,7 @@ int ifc_remove_host_routes(const char *name)
         init_sockaddr_in(&rt.rt_genmask, mask);
         addr.s_addr = dest;
         if (ioctl(ifc_ctl_sock, SIOCDELRT, &rt) < 0) {
-            HLOG_DEBUG("failed to remove route for %s to %s: %s",
+            HLOG_DEBUG("failed to remove route for %s to %s: %s\n",
                  ifname, inet_ntoa(addr), strerror(errno));
         }
     }
@@ -744,7 +744,7 @@ int ifc_set_default_route(const char *ifname, in_addr_t gateway)
     ifc_init();
     addr.s_addr = gateway;
     if ((result = ifc_create_default_route(ifname, gateway)) < 0) {
-        HLOG_DEBUG("failed to add %s as default route for %s: %s",
+        HLOG_DEBUG("failed to add %s as default route for %s: %s\n",
              inet_ntoa(addr), ifname, strerror(errno));
     }
     ifc_close();
@@ -765,7 +765,7 @@ int ifc_remove_default_route(const char *ifname)
     rt.rt_flags = RTF_UP|RTF_GATEWAY;
     init_sockaddr_in(&rt.rt_dst, 0);
     if ((result = ioctl(ifc_ctl_sock, SIOCDELRT, &rt)) < 0) {
-        HLOG_DEBUG("failed to remove default route for %s: %s", ifname, strerror(errno));
+        HLOG_DEBUG("failed to remove default route for %s: %s\n", ifname, strerror(errno));
     }
     ifc_close();
     return result;
@@ -894,7 +894,7 @@ int ifc_add_ipv4_route(const char *ifname, struct in_addr dst, int prefix_length
       struct in_addr gw)
 {
     int i =ifc_act_on_ipv4_route(SIOCADDRT, ifname, dst, prefix_length, gw);
-    HLOG_DEBUG("ifc_add_ipv4_route(%s, xx, %d, xx) = %d", ifname, prefix_length, i);
+    HLOG_DEBUG("ifc_add_ipv4_route(%s, xx, %d, xx) = %d\n", ifname, prefix_length, i);
     return i;
 }
 
@@ -910,7 +910,7 @@ int ifc_add_ipv6_route(const char *ifname, struct in6_addr dst, int prefix_lengt
 int ifc_add_route(const char *ifname, const char *dst, int prefix_length, const char *gw)
 {
     int i = ifc_act_on_route(SIOCADDRT, ifname, dst, prefix_length, gw);
-    HLOG_DEBUG("ifc_add_route(%s, %s, %d, %s) = %d", ifname, dst, prefix_length, gw, i);
+    HLOG_DEBUG("ifc_add_route(%s, %s, %d, %s) = %d\n", ifname, dst, prefix_length, gw, i);
     return i;
 }
 

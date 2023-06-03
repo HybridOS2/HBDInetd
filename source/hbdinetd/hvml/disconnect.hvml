@@ -71,39 +71,17 @@
             <return with $bubbleData />
         </define>
 
-        <define as 'showWiFiStatus'>
-            <test with $databus.call($hbdinetdMain, 'getDeviceStatus', "{device: '$globalState.wifi'}") >
-                $STREAM.stdout.writelines("Calling $hbdinetdMain/method/getDeviceStatus...")
+        <observe on $globalState for 'timeToDisconnect' >
+            <test with $databus.call($hbdinetdMain, 'wifiDisconnect',
+                    "{device: '$globalState.wifi'}") >
+                $STREAM.stdout.writelines("Calling $hbdinetdMain/method/wifiDisconnect...")
 
-                <forget on $databus for 'result:getDeviceStatus' />
-                <observe on $databus for 'result:getDeviceStatus'>
-                    <call on $showResult with { edpt: $hbdinetdMain, method: 'getDeviceStatus', result: $? } />
-
-                    <exit with 'Success' />
-                </observe>
-
-                <differ>
-                    $STREAM.stdout.writelines("Failed to call $hbdinetdMain/method/getDeviceStatus")
-                </differ>
-            </test>
-        </define>
-        <init as 'changeTimes' at '_root' with 1 />
-        <observe on $globalState for 'wifiDeviceReady' >
-            <test with $databus.call($hbdinetdMain, 'wifiConnect',
-                    "{device: '$globalState.wifi', ssid:'$REQ.ssid', bssid:null, keymgmt:'WPA-PSK', passphrase: '$REQ.key'}") >
-                $STREAM.stdout.writelines("Calling $hbdinetdMain/method/wifiConnect...")
-
-                <observe on $databus for 'result:wifiConnect'>
-                    <call on $showResult with { edpt: $hbdinetdMain, method: 'wifiConnect', result: $? } >
+                <observe on $databus for 'result:wifiDisconnect'>
+                    <call on $showResult with { edpt: $hbdinetdMain, method: 'wifiDisconnect', result: $? } >
 
                         <test on $?.errCode >
-                            <match on $L.eq($?, -4) exclusively>
-                                $STREAM.stdout.writelines("Waiting for result event...")
-                            </match>
-
                             <match on $L.eq($?, 0) exclusively>
-                                $STREAM.stdout.writelines("Correctly connected to $REQ.ssid")
-                                <update on $globalState at '.ssid' with $REQ.ssid />
+                                $STREAM.stdout.writelines("Correctly disconnected from $REQ.ssid")
                             </match>
 
                             <match>
@@ -114,56 +92,51 @@
                     </call>
                 </observe>
 
-                <observe on $databus for 'event:WiFiConnected'>
-                    <call on $showBubbleData with $? />
-                    <update on $globalState at '.ssid' with $REQ.ssid />
-                </observe>
-
                 <observe on $databus for 'event:WiFiDisconnected'>
                     <call on $showBubbleData with $? />
-                </observe>
-
-                <observe on $databus for 'event:WiFiFailedConnAttempt'>
-                    <call on $showBubbleData with $? >
-                        <exit with "Failed to connect to $?.ssid ($?.reason)" />
-                    </call>
-                </observe>
-
-                <observe on $databus for 'event:DeviceConfigured'>
-                    <call on $showBubbleData with $? >
-                        <inherit>
-                            $STREAM.stdout.writelines("Configuration for the device $?.device: ")
-                        </inherit>
-
-                        <call on $showWiFiStatus />
-                    </call>
-                </observe>
-
-                <observe on $databus for 'event:DeviceConfigFailed'>
-                    <call on $showBubbleData with $? >
-                        <exit with "Connected to $globalState.ssid but failed to configure the device by using $?.method" />
-                    </call>
-                </observe>
-
-                <observe on $databus for 'event:WiFiSignalLevelChanged'>
-
-                    <call on $showBubbleData with $? />
-                    <test with $L.lt($changeTimes, 20) >
-                        <init as 'changeTimes' at '_root' with $DATA.arith('+', $changeTimes, 1) />
-
-                        <differ>
-                            <exit with 'reach max change times' />
-                        </differ>
-                    </test>
-
+                    <exit with 'Disconnected' />
                 </observe>
 
                 <differ>
-                    $STREAM.stdout.writelines("Failed to call wifiConnect")
+                    $STREAM.stdout.writelines("Failed to call wifiDisconnect")
 
                     <exit with 'Failed' />
                 </differ>
             </test>
+        </observe>
+
+        <define as 'showWiFiNetworkInfo'>
+            <test with $databus.call($hbdinetdMain, 'wifiGetNetworkInfo', "{device: '$globalState.wifi'}") >
+                $STREAM.stdout.writelines("Calling $hbdinetdMain/method/wifiGetNetworkInfo...")
+
+                <forget on $databus for 'result:wifiGetNetworkInfo' />
+                <observe on $databus for 'result:wifiGetNetworkInfo'>
+                    <call on $showResult with { edpt: $hbdinetdMain, method: 'wifiGetNetworkInfo', result: $? } >
+                        <test with $L.eq($?.errCode, 0) >
+
+                            <update on $globalState at '.ssid' with $2?.data.ssid >
+                                $STREAM.stdout.writelines("Currently connected to $2?.data.ssid")
+                            </update>
+
+                            <fire on $globalState for 'timeToDisconnect' />
+
+                            <differ>
+                                $STREAM.stdout.writelines("Failed $hbdinetdMain/method/wifiConnect $2?.errCode ($2?.errMsg)")
+                                <exit with 'The device is not connected' />
+                            </differ>
+                        </test>
+                    </call>
+                </observe>
+
+                <differ>
+                    $STREAM.stdout.writelines("Failed to call $hbdinetdMain/method/wifiGetNetworkInfo")
+                </differ>
+            </test>
+        </define>
+
+        <init as 'changeTimes' at '_root' with 1 />
+        <observe on $globalState for 'wifiDeviceReady' >
+            <call on $showWiFiNetworkInfo />
         </observe>
 
         <observe on $globalState for 'GotWiFiDevice' >

@@ -217,7 +217,7 @@ enum eap_state {
 
 struct wifi_status {
     char *fields[0];        /* aliase for the following fields */
-#define WIFI_STATUS_STRING_FIELDS       6
+#define WIFI_STATUS_STRING_FIELDS       7
 
     char *bssid;            /* NULL if not connected */
     char *ssid;             /* Not NULL if bssid is not NULL */

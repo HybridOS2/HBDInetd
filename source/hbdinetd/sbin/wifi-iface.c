@@ -425,6 +425,7 @@ static char *wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint,
     const struct wifi_status *status;
     status = netdev->wifi_ops->get_status(netdev->ctxt);
     if (status == NULL || status->hotspot == NULL) {
+        pcutils_printbuf_shrink(pb, 1);
         errcode = ENONET;
         goto done;
     }
@@ -449,25 +450,37 @@ static char *wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint,
 
     pcutils_printbuf_format(pb,
             "\"hardwareAddr\":\"%s\","
+            "\"dns1\":\"%s\","
+            "\"dns2\":\"%s\","
+            "\"configMethod\":\"%s\","
+            "\"search\":\"%s\","
             "\"inet4\":{\"address\":\"%s\","
                 "\"netmask\":\"%s\","
                 "\"broadcastAddr\":\"%s\","
-                "\"destinationAddr\":\"%s\""
+                "\"destinationAddr\":\"%s\","
+                "\"gateway\":\"%s\""
             "},"
             "\"inet6\":{\"address\":\"%s\","
                 "\"netmask\":\"%s\","
                 "\"broadcastAddr\":\"%s\","
-                "\"destinationAddr\":\"%s\""
+                "\"destinationAddr\":\"%s\","
+                "\"gateway\":\"%s\""
             "},",
             netdev->hwaddr ? netdev->hwaddr : "",
+            netdev->dns1 ? netdev->dns1 : "",
+            netdev->dns2 ? netdev->dns2 : "",
+            netdev->search ? netdev->search : "",
+            netdev->method ? netdev->method : "Unknown",
             netdev->ipv4.addr ? netdev->ipv4.addr : "",
             netdev->ipv4.netmask ? netdev->ipv4.netmask : "",
             (netdev->flags & IFF_POINTOPOINT) ? "" : netdev->ipv4.hbdifa_broadaddr,
             (netdev->flags & IFF_POINTOPOINT) ? netdev->ipv4.hbdifa_dstaddr : "",
+            netdev->ipv4.gateway ? netdev->ipv4.gateway : "",
             netdev->ipv6.addr ? netdev->ipv6.addr : "",
             netdev->ipv6.netmask ? netdev->ipv6.netmask : "",
             (netdev->flags & IFF_POINTOPOINT) ? "" : netdev->ipv6.hbdifa_broadaddr,
-            (netdev->flags & IFF_POINTOPOINT) ? netdev->ipv6.hbdifa_dstaddr : "");
+            (netdev->flags & IFF_POINTOPOINT) ? netdev->ipv6.hbdifa_dstaddr : "",
+            netdev->ipv6.gateway ? netdev->ipv6.gateway : "");
 
 done:
     pcutils_printbuf_format(pb,

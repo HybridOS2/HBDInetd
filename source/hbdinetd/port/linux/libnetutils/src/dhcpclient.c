@@ -142,14 +142,14 @@ const char *dhcp_msg_type_to_name(uint32_t type)
 static void dump_dhcp_info(dhcp_info *info)
 {
     char addr[20], gway[20];
-    HLOG_DEBUG("--- dhcp %s (%d) ---",
+    HLOG_DEBUG("--- dhcp %s (%d) ---\n",
             dhcp_msg_type_to_name(info->type), info->type);
     strcpy(addr, ipaddr(info->ipaddr));
     strcpy(gway, ipaddr(info->gateway));
-    HLOG_DEBUG("ip %s gw %s prefixLength %d", addr, gway, info->prefixLength);
+    HLOG_DEBUG("ip %s gw %s prefixLength %d\n", addr, gway, info->prefixLength);
     if (info->dns1) HLOG_DEBUG("dns1: %s", ipaddr(info->dns1));
     if (info->dns2) HLOG_DEBUG("dns2: %s", ipaddr(info->dns2));
-    HLOG_DEBUG("server %s, lease %d seconds",
+    HLOG_DEBUG("server %s, lease %d seconds\n",
             ipaddr(info->serveraddr), info->lease);
 }
 
@@ -242,9 +242,9 @@ static void dump_dhcp_msg(dhcp_msg *msg, int len)
     const char *name;
     char buf[2048];
 
-    HLOG_DEBUG("===== DHCP message:");
+    HLOG_DEBUG("===== DHCP message:\n");
     if (len < DHCP_MSG_FIXED_SIZE) {
-        HLOG_DEBUG("Invalid length %d, should be %d", len, DHCP_MSG_FIXED_SIZE);
+        HLOG_DEBUG("Invalid length %d, should be %d\n", len, DHCP_MSG_FIXED_SIZE);
         return;
     }
 
@@ -256,18 +256,18 @@ static void dump_dhcp_msg(dhcp_msg *msg, int len)
         name = "BOOTREPLY";
     else
         name = "????";
-    HLOG_DEBUG("op = %s (%d), htype = %d, hlen = %d, hops = %d",
+    HLOG_DEBUG("op = %s (%d), htype = %d, hlen = %d, hops = %d\n",
            name, msg->op, msg->htype, msg->hlen, msg->hops);
-    HLOG_DEBUG("xid = 0x%08x secs = %d, flags = 0x%04x optlen = %d",
+    HLOG_DEBUG("xid = 0x%08x secs = %d, flags = 0x%04x optlen = %d\n",
            ntohl(msg->xid), ntohs(msg->secs), ntohs(msg->flags), len);
-    HLOG_DEBUG("ciaddr = %s", ipaddr(msg->ciaddr));
-    HLOG_DEBUG("yiaddr = %s", ipaddr(msg->yiaddr));
-    HLOG_DEBUG("siaddr = %s", ipaddr(msg->siaddr));
-    HLOG_DEBUG("giaddr = %s", ipaddr(msg->giaddr));
+    HLOG_DEBUG("ciaddr = %s\n", ipaddr(msg->ciaddr));
+    HLOG_DEBUG("yiaddr = %s\n", ipaddr(msg->yiaddr));
+    HLOG_DEBUG("siaddr = %s\n", ipaddr(msg->siaddr));
+    HLOG_DEBUG("giaddr = %s\n", ipaddr(msg->giaddr));
 
     c = msg->hlen > 16 ? 16 : msg->hlen;
     hex2str(buf, msg->chaddr, c);
-    HLOG_DEBUG("chaddr = {%s}", buf);
+    HLOG_DEBUG("chaddr = {%s}\n", buf);
 
     for (n = 0; n < 64; n++) {
         if ((msg->sname[n] < ' ') || ((uint8_t)msg->sname[n] > 127)) {
@@ -285,8 +285,8 @@ static void dump_dhcp_msg(dhcp_msg *msg, int len)
     }
     msg->file[127] = 0;
 
-    HLOG_DEBUG("sname = '%s'", msg->sname);
-    HLOG_DEBUG("file = '%s'", msg->file);
+    HLOG_DEBUG("sname = '%s'\n", msg->sname);
+    HLOG_DEBUG("file = '%s'\n", msg->file);
 
     if (len < 4) return;
     len -= 4;
@@ -319,7 +319,7 @@ static void dump_dhcp_msg(dhcp_msg *msg, int len)
             name = dhcp_msg_type_to_name(x[2]);
         else
             name = NULL;
-        HLOG_DEBUG("op %d len %d {%s} %s", x[0], optsz, buf, name == NULL ? "" : name);
+        HLOG_DEBUG("op %d len %d {%s} %s\n", x[0], optsz, buf, name == NULL ? "" : name);
         len -= optsz;
         x = x + optsz + 2;
     }
@@ -457,7 +457,7 @@ static int dhcp_init_ifc(const char *ifname)
         r = receive_packet(s, &reply);
         if (r < 0) {
             if (errno != 0) {
-                HLOG_DEBUG("receive_packet failed (%d): %s", r, strerror(errno));
+                HLOG_DEBUG("receive_packet failed (%d): %s\n", r, strerror(errno));
                 if (errno == ENETDOWN || errno == ENXIO) {
                     return -1;
                 }
@@ -513,6 +513,11 @@ static int dhcp_init_ifc(const char *ifname)
 
 int dhcp_do_overall(const char *iname)
 {
+    if (ifc_init()) {
+        HLOG_ERR("failed to call ifc_init(): %s\n", strerror(errno));
+        return -1;
+    }
+
     if (ifc_set_addr(iname, 0)) {
         HLOG_ERR("failed to set ip addr for %s to 0.0.0.0: %s\n",
                 iname, strerror(errno));
@@ -548,6 +553,11 @@ int dhcp_request_renew(const char *ifname, const char *ip, const char *server)
     in_addr_t serveraddr = inet_addr(server);
 
     xid = (uint32_t) get_msecs();
+
+    if (ifc_init()) {
+        HLOG_ERR("failed to call ifc_init(): %s\n", strerror(errno));
+        return -1;
+    }
 
     if (ifc_get_hwaddr(ifname, hwaddr)) {
         return fatal("cannot obtain interface address");
@@ -622,7 +632,7 @@ int dhcp_request_renew(const char *ifname, const char *ip, const char *server)
         r = receive_packet(s, &reply);
         if (r < 0) {
             if (errno != 0) {
-                HLOG_DEBUG("receive_packet failed (%d): %s", r, strerror(errno));
+                HLOG_DEBUG("receive_packet failed (%d): %s\n", r, strerror(errno));
                 if (errno == ENETDOWN || errno == ENXIO) {
                     return -1;
                 }
@@ -687,6 +697,11 @@ int dhcp_release_lease(const char *ifname, const char *ip, const char *server)
     in_addr_t serveraddr = inet_addr(server);
 
     xid = (uint32_t)get_msecs();
+
+    if (ifc_init()) {
+        HLOG_ERR("failed to call ifc_init(): %s\n", strerror(errno));
+        return -1;
+    }
 
     if (ifc_get_hwaddr(ifname, hwaddr)) {
         return fatal("cannot obtain interface address");

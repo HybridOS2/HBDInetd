@@ -176,15 +176,15 @@ int receive_packet(int s, struct dhcp_msg *msg)
      */
     is_valid = 0;
     if (nread < (int)(sizeof(struct iphdr) + sizeof(struct udphdr))) {
-        HLOG_DEBUG("Packet is too small (%d) to be a UDP datagram", nread);
+        HLOG_DEBUG("Packet is too small (%d) to be a UDP datagram\n", nread);
     } else if (packet.ip.version != IPVERSION || packet.ip.ihl != (sizeof(packet.ip) >> 2)) {
-        HLOG_DEBUG("Not a valid IP packet");
+        HLOG_DEBUG("Not a valid IP packet\n");
     } else if (nread < ntohs(packet.ip.tot_len)) {
-        HLOG_DEBUG("Packet was truncated (read %d, needed %d)", nread, ntohs(packet.ip.tot_len));
+        HLOG_DEBUG("Packet was truncated (read %d, needed %d)\n", nread, ntohs(packet.ip.tot_len));
     } else if (packet.ip.protocol != IPPROTO_UDP) {
-        HLOG_DEBUG("IP protocol (%d) is not UDP", packet.ip.protocol);
+        HLOG_DEBUG("IP protocol (%d) is not UDP\n", packet.ip.protocol);
     } else if (packet.udp.dest != htons(PORT_BOOTP_CLIENT)) {
-        HLOG_DEBUG("UDP dest port (%d) is not DHCP client", ntohs(packet.udp.dest));
+        HLOG_DEBUG("UDP dest port (%d) is not DHCP client\n", ntohs(packet.udp.dest));
     } else {
         is_valid = 1;
     }

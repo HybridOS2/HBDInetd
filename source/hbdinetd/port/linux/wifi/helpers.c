@@ -575,6 +575,7 @@ void wifi_reset_status(struct netdev_context *ctxt)
         for (size_t i = 0; i < WIFI_STATUS_STRING_FIELDS; i++) {
             if (ctxt->status->fields[i]) {
                 free(ctxt->status->fields[i]);
+                ctxt->status->fields[i] = NULL;
             }
         }
 
@@ -833,14 +834,34 @@ failed:
 }
 
 int wifi_update_network(struct netdev_context *ctxt, int netid,
-        const char *ssid, const char *keymgmt, const char *passphrase)
+        const char *bssid, const char *ssid,
+        const char *keymgmt, const char *passphrase)
 {
     char cmd[256];
+    int n;
+    char *results = ctxt->buf;
+    size_t max_len;
+
+    if (bssid) {
+        n = snprintf(cmd, sizeof(cmd),
+                "SET_NETWORK %d bssid %s", netid, bssid);
+        if (n < 0 || n >= (int)sizeof(cmd)) {
+            HLOG_ERR("Too small buffer for `SET_NETWORK %d bssid %s` command\n",
+                    netid, bssid);
+            return -1;
+        }
+
+        max_len = WIFI_MSG_BUF_SIZE;
+        if (wifi_command(ctxt, cmd, results, &max_len)) {
+            HLOG_ERR("Failed `%s` command\n", cmd);
+            return -1;
+        }
+    }
 
     char hex_ssid[strlen(ssid) * 2 + 1];
     convert_to_hex_string(ssid, hex_ssid);
 
-    int n = snprintf(cmd, sizeof(cmd),
+    n = snprintf(cmd, sizeof(cmd),
             "SET_NETWORK %d ssid %s", netid, hex_ssid);
     if (n < 0 || n >= (int)sizeof(cmd)) {
         HLOG_ERR("Too small buffer for `SET_NETWORK %d ssid %s` command\n",
@@ -848,8 +869,7 @@ int wifi_update_network(struct netdev_context *ctxt, int netid,
         return -1;
     }
 
-    char *results = ctxt->buf;
-    size_t max_len = WIFI_MSG_BUF_SIZE;
+    max_len = WIFI_MSG_BUF_SIZE;
     if (wifi_command(ctxt, cmd, results, &max_len)) {
         HLOG_ERR("Failed `%s` command\n", cmd);
         return -1;
@@ -935,8 +955,8 @@ int wifi_update_network(struct netdev_context *ctxt, int netid,
     return 0;
 }
 
-int wifi_add_network(struct netdev_context *ctxt, const char *ssid,
-        const char *keymgmt, const char *passphrase)
+int wifi_add_network(struct netdev_context *ctxt, const char *bssid,
+        const char *ssid, const char *keymgmt, const char *passphrase)
 {
     char *results = ctxt->buf;
     size_t max_len = WIFI_MSG_BUF_SIZE;
@@ -948,7 +968,7 @@ int wifi_add_network(struct netdev_context *ctxt, const char *ssid,
     int netid = atoi(results);
     assert(netid >= 0);
 
-    if (wifi_update_network(ctxt, netid, ssid, keymgmt, passphrase)) {
+    if (wifi_update_network(ctxt, netid, bssid, ssid, keymgmt, passphrase)) {
         char cmd[128];
         sprintf(cmd, "REMOVE_NETWORK %d", netid);
 

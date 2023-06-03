@@ -49,17 +49,19 @@ static int connect(struct netdev_context *ctxt,
     }
 
     if (ctxt->status) {
-        if (bssid) {
-            if (ctxt->status->bssid &&
-                    strcmp(ctxt->status->bssid, bssid) == 0) {
+        if (keymgmt == NULL) {
+            if (bssid) {
+                if (ctxt->status->bssid &&
+                        strcmp(ctxt->status->bssid, bssid) == 0) {
+                    /* already connected */
+                    return 0;
+                }
+            }
+            else if (ctxt->status->ssid &&
+                    strcmp(ctxt->status->ssid, ssid) == 0) {
                 /* already connected */
                 return 0;
             }
-        }
-        else if (ctxt->status->ssid &&
-                strcmp(ctxt->status->ssid, ssid) == 0) {
-            /* already connected */
-            return 0;
         }
     }
 
@@ -83,24 +85,26 @@ static int connect(struct netdev_context *ctxt,
             return ENOTSUP;
         }
 
-        netid = wifi_add_network(ctxt, ssid, keymgmt, passphrase);
+        netid = wifi_add_network(ctxt, bssid, ssid, keymgmt, passphrase);
         if (netid < 0) {
-            HLOG_ERR("Failed to add new network: %s (key_mgmt: %s)\n",
+            HLOG_ERR("Failed to add a new network: %s (key_mgmt: %s)\n",
                     ssid, keymgmt);
             return ERR_DEVICE_CONTROLLER;
         }
+
+        ctxt->new_netid = netid;
     }
     else if (netid >= 0) {
-        if (wifi_update_network(ctxt, netid, ssid, keymgmt, passphrase)) {
+        if (wifi_update_network(ctxt, netid, bssid, ssid, keymgmt, passphrase)) {
             HLOG_ERR("Failed to update network: %d) %s (key_mgmt: %s)\n",
                     netid, ssid, keymgmt);
             return ERR_DEVICE_CONTROLLER;
         }
     }
     else {
-        netid = wifi_add_network(ctxt, ssid, keymgmt, passphrase);
+        netid = wifi_add_network(ctxt, bssid, ssid, keymgmt, passphrase);
         if (netid < 0) {
-            HLOG_ERR("Failed to add new network: %s (key_mgmt: %s)\n",
+            HLOG_ERR("Failed to add a new network: %s (key_mgmt: %s)\n",
                     ssid, keymgmt);
             return ERR_DEVICE_CONTROLLER;
         }
@@ -163,6 +167,12 @@ select:
 
     if (ctxt->status->wpa_state >= WPA_STATE_SCANNING &&
             ctxt->status->wpa_state < WPA_STATE_COMPLETED) {
+
+        if (ctxt->new_netid >= 0) {
+            wifi_remove_network(ctxt, ctxt->new_netid);
+            ctxt->new_netid = -1;
+            kvlist_remove(&ctxt->saved_networks, ssid);
+        }
         return ERR_WPA_WRONG_PASSPHRASE;
     }
 
@@ -435,6 +445,7 @@ int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev)
                     netdev->ctxt->status->bssid);
             if (netdev->ctxt->status->signal_level != level) {
 
+                netdev->ctxt->status->signal_level = level;
                 struct pcutils_printbuf my_buff, *pb = &my_buff;
                 pcutils_printbuf_init(pb);
                 pcutils_printbuf_format(pb,

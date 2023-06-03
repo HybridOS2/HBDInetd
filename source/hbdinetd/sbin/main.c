@@ -41,14 +41,17 @@
 
 struct run_info run_info;
 
-static void handle_signal_action(int sig_number)
+static void handle_signal_action(int sig_number, siginfo_t *siginfo, void *data)
 {
+    (void)data;
+
     if (sig_number == SIGINT) {
         fprintf(stderr, "SIGINT caught, quit...\n");
         run_info.running = false;
     }
     else if (sig_number == SIGPIPE) {
-        fprintf(stderr, "SIGPIPE caught; the server might have quitted!\n");
+        fprintf(stderr, "SIGPIPE caught; sending PID: %u!\n",
+                (unsigned)siginfo->si_pid);
     }
     else if (sig_number == SIGCHLD) {
         pid_t pid;
@@ -72,21 +75,22 @@ static int setup_signals(void)
 {
     struct sigaction sa;
     memset(&sa, 0, sizeof (sa));
-    sa.sa_handler = handle_signal_action;
+    sa.sa_sigaction = handle_signal_action;
+    sa.sa_flags = SA_SIGINFO;
 
-    if (sigaction(SIGINT, &sa, 0) != 0) {
+    if (sigaction(SIGINT, &sa, NULL) != 0) {
         HLOG_ERR("Failed to call sigaction for SIGINT: %s\n",
                 strerror(errno));
         return -1;
     }
 
-    if (sigaction(SIGPIPE, &sa, 0) != 0) {
+    if (sigaction(SIGPIPE, &sa, NULL) != 0) {
         HLOG_ERR("Failed to call sigaction for SIGPIPE: %s\n",
                 strerror(errno));
         return -1;
     }
 
-    if (sigaction(SIGCHLD, &sa, 0) != 0) {
+    if (sigaction(SIGCHLD, &sa, NULL) != 0) {
         HLOG_ERR("Failed to call sigaction for SIGCHLD: %s\n",
                 strerror (errno));
         return -1;
