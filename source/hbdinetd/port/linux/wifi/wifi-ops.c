@@ -221,8 +221,9 @@ get_hotspot_list(struct netdev_context *ctxt, int *curr_netid)
         goto failed;
     }
 
-    if (curr_netid)
+    if (curr_netid) {
         *curr_netid = ctxt->status->netid;
+    }
 
     return &ctxt->hotspots;
 
@@ -261,6 +262,7 @@ static struct netdev_context *netdev_context_new(void)
     if (ctxt) {
         ctxt->buf = malloc(WIFI_MSG_BUF_SIZE);
         if (ctxt->buf == NULL) {
+            free(ctxt->status);
             free(ctxt);
             ctxt = NULL;
         }
@@ -359,6 +361,11 @@ int wifi_device_on(hbdbus_conn *conn, struct network_device *netdev)
     HLOG_INFO("Loaded saved networks!\n");
     if (register_wifi_interfaces(conn)) {
         ret = ERR_DATA_BUS;
+        goto failed;
+    }
+
+    if (wifi_update_status(netdev->ctxt)) {
+        ret = ERR_DEVICE_CONTROLLER;
         goto failed;
     }
 
