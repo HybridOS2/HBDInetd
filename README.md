@@ -38,7 +38,7 @@ $ cmake <root_of_source_tree> -DPORT=Fake
 
 ## Usage
 
-After building HBDInetd, there will be one executable and two HVML scripts:
+After building HBDInetd, there will be one executable and three HVML scripts:
 
 1. `hbdinetd`, located in the `sbin/` directory in the root of your building tree.
    This is the daemon program of HBDInetd.
@@ -48,6 +48,9 @@ After building HBDInetd, there will be one executable and two HVML scripts:
 1. `connect.hvml`, located in the `hvml/` directory in the root of your building tree.
    This is a HVML program for demonstrating how to use the data bus APIs to connect to a hotspot.
    Note that you can pass the SSID and passphrase on the command line as a query string:
+1. `disconnect.hvml`, located in the `hvml/` directory in the root of your building tree.
+   This is a HVML program for demonstrating how to use the data bus APIs to check the current
+   wireless connection information and disconnect from a hotspot.
 
 ```console
 $ hvml/connect.hvml -a cn.fmsoft.hybridos.settings -r wifi -q 'ssid=YourSSID&key=ThePassphrase'
