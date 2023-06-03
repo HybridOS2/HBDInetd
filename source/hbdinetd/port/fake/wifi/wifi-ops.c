@@ -398,13 +398,19 @@ static void on_wpa_completed(struct netdev_context *ctxt)
             ctxt->trying->bssid);
     assert(ctxt->connected);
 
+    HLOG_INFO("Trying ssid: %s (%d)\n",
+            ctxt->trying_ssid, ctxt->trying->netid);
     int netid = wifi_get_netid_from_ssid(ctxt, ctxt->trying->ssid);
-    assert(netid >= 0);
-    if (ctxt->trying->netid < 0) {
-        ctxt->trying->netid = netid;  /* mark as saved */
+    if (netid < 0 && ctxt->trying->netid >= 0) {
+        kvlist_set(&ctxt->saved_networks, ctxt->trying->ssid,
+                &ctxt->trying->netid);
         HLOG_INFO("Set netid of candidate %s to %d\n",
                 ctxt->trying_ssid, ctxt->trying->netid);
     }
+    else if (netid >= 0) {
+        ctxt->trying->netid = netid;  /* mark as saved */
+    }
+
     ctxt->new_netid = -1;
 
     ctxt->connected->netid = ctxt->trying->netid;
@@ -578,6 +584,7 @@ clone_hotspot_from_candidate(struct wifi_hotspot_candidate *candidate)
 static void release_trying_info(struct netdev_context *ctxt)
 {
     if (ctxt->wpa_state == WPA_STATE_UNKNOWN && ctxt->new_netid >= 0) {
+        HLOG_INFO("A saved network removed: %s\n", ctxt->trying_ssid);
         kvlist_remove(&ctxt->saved_networks, ctxt->trying_ssid);
         ctxt->new_netid = -1;
     }
