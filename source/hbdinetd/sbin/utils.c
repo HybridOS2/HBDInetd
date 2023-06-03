@@ -60,6 +60,7 @@ const char *get_error_message(int errcode)
     return error_messages[errcode];
 }
 
+/* check whether wpa/wpa2 passphrase is valid */
 int check_wpa_passphrase(const char *keymgmt, const char *passphrase)
 {
     if (strcmp(keymgmt, "WPA-PSK") == 0 ||
@@ -170,7 +171,7 @@ int update_network_device_config(struct network_device *netdev,
         }
     }
 #else
-    if (update_network_device_dynamic_info(ifname, netdev))
+    if (update_network_device_dynamic_info(netdev->ifname, netdev))
         goto failed;
 #endif
 
@@ -566,14 +567,16 @@ failed:
 int print_one_hotspot(const struct wifi_hotspot *hotspot, int curr_netid,
         struct pcutils_printbuf *pb)
 {
+#if 0
     char frequency[64];
     print_frequency(hotspot->frequency, frequency, sizeof(frequency));
+#endif
 
     pcutils_printbuf_format(pb,
             "{"
             "\"bssid\":\"%s\","
             "\"ssid\":\"%s\","
-            "\"frequency\":\"%s\","
+            "\"frequency\":%d,"
             "\"capabilities\":\"%s\","
             "\"signalLevel\":%d,"
             "\"isSaved\":%s,"
@@ -581,7 +584,7 @@ int print_one_hotspot(const struct wifi_hotspot *hotspot, int curr_netid,
             "}",
             hotspot->bssid,
             hotspot->escaped_ssid ? hotspot->escaped_ssid : hotspot->ssid,
-            frequency,
+            hotspot->frequency,
             hotspot->capabilities,
             hotspot->signal_level,
             (hotspot->netid >= 0) ? "true":"false",

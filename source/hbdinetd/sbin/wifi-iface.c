@@ -431,17 +431,19 @@ static char *wifiGetNetworkInfo(hbdbus_conn* conn, const char* from_endpoint,
 
     const struct wifi_hotspot *hotspot = status->hotspot;
 
+#if 0
     char frequency[64];
     print_frequency(hotspot->frequency, frequency, sizeof(frequency));
+#endif
     pcutils_printbuf_format(pb,
             "\"bssid\":\"%s\","
             "\"ssid\":\"%s\","
-            "\"frequency\":\"%s\","
+            "\"frequency\":%d,"
             "\"keyMgmt\":\"%s\","
             "\"signalLevel\":%d,",
             hotspot->bssid,
             hotspot->escaped_ssid ? hotspot->escaped_ssid : hotspot->ssid,
-            frequency,
+            hotspot->frequency,
             status->key_mgmt,
             hotspot->signal_level);
 

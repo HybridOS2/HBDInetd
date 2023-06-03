@@ -33,32 +33,6 @@
 
 #define US_100MS    100000
 
-/* check wpa/wpa2 passphrase is right */
-static int check_wpa_passphrase(const char *keymgmt, const char *passphrase)
-{
-    if (strcmp(keymgmt, "WPA-PSK") == 0 ||
-            strcmp(keymgmt, "WPA2-PSK") == 0) {
-        size_t len = strlen(passphrase);
-        if (len < 8 || len > 63)
-            return ERR_WPA_INVALID_PASSPHRASE;
-
-        for (int i = 0; passphrase[i]; i++) {
-            if ((passphrase[i] < 32) || (passphrase[i] > 126)) {
-                return ERR_WPA_INVALID_PASSPHRASE;
-            }
-        }
-    }
-    else if (strcmp(keymgmt, "WEP") == 0) {
-    }
-    else if (strcmp(keymgmt, "NONE") == 0) {
-    }
-    else {
-        return ERR_WPA_INVALID_KEYMGMT;
-    }
-
-    return 0;
-}
-
 static int connect(struct netdev_context *ctxt,
         const char *ssid, const char *bssid,
         const char *keymgmt, const char *passphrase)
