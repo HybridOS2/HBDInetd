@@ -12,7 +12,7 @@ The daemon managing network interfaces for HybridOS.
 
 For the detailed information about the 3rd-party dependencies of HBDInetd, please refer to:
 
-<https://github.com/HybridOS2/Documents/blob/master/ThirdPartySoftwareList.md#hbdinetd>
+<https://github.com/HybridOS2/Documents/blob/master/guides/hybridos-third-party-software-list-en.md#hbdinetd>
 
 ## Building
 
