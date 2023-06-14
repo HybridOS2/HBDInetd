@@ -356,8 +356,12 @@ int wifi_update_status(struct netdev_context *ctxt)
             pcutils_escape_string_for_json(ctxt->status->ssid);
         ctxt->status->wpa_state = ctxt->wpa_state;
 
-        const struct wifi_hotspot_candidate *candidate = ctxt->connected->extra;
-        assert(candidate && candidate->netid >= 0);
+        struct wifi_hotspot_candidate *candidate = ctxt->connected->extra;
+        assert(candidate);
+        if (candidate->netid < 0) {
+            assert(ctxt->trying->netid >= 0);
+            candidate->netid = ctxt->trying->netid;
+        }
         ctxt->status->netid = candidate->netid;
 
         ctxt->status->hotspot = ctxt->connected;

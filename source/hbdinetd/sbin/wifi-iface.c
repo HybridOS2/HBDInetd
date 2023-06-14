@@ -166,7 +166,7 @@ static char *wifiStopScanHotspots(hbdbus_conn* conn,
     int errcode = ERR_OK;
     struct run_info *info = hbdbus_conn_get_user_data(conn);
     assert(info);
-    assert(strcasecmp(to_method, METHOD_WIFI_START_SCAN) == 0);
+    assert(strcasecmp(to_method, METHOD_WIFI_STOP_SCAN) == 0);
 
     struct network_device *netdev;
     netdev = check_network_device(info, method_param,
