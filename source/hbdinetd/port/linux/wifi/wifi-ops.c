@@ -38,6 +38,7 @@ static int connect(struct netdev_context *ctxt,
         const char *keymgmt, const char *passphrase)
 {
     int ret;
+    char cmd[32];
 
     if (ctxt->new_netid >= 0) {
         return ERR_UNRESOLVED_ATTEMPT;
@@ -126,7 +127,6 @@ static int connect(struct netdev_context *ctxt,
     }
 
 select:
-    char cmd[32];
     sprintf(cmd, "SELECT_NETWORK %d", netid);
 
     size_t len = WIFI_MSG_BUF_SIZE;

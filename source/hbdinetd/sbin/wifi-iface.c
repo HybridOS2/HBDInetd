@@ -164,6 +164,7 @@ static char *wifiStopScanHotspots(hbdbus_conn* conn,
     (void)to_method;
 
     int errcode = ERR_OK;
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
     struct run_info *info = hbdbus_conn_get_user_data(conn);
     assert(info);
     assert(strcasecmp(to_method, METHOD_WIFI_STOP_SCAN) == 0);
@@ -188,8 +189,6 @@ static char *wifiStopScanHotspots(hbdbus_conn* conn,
     }
 
 done:
-    struct pcutils_printbuf my_buff, *pb = &my_buff;
-
     pcutils_printbuf_init(pb);
     pcutils_printbuf_format(pb,
             "{\"errCode\":%d, \"errMsg\":\"%s\"}",
@@ -331,6 +330,7 @@ static char *wifiDisconnect(hbdbus_conn* conn, const char* from_endpoint,
     (void)to_method;
 
     int errcode = ERR_OK;
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
     struct run_info *info = hbdbus_conn_get_user_data(conn);
     assert(info);
     assert(strcasecmp(to_method, METHOD_WIFI_DISCONNECT_AP) == 0);
@@ -354,8 +354,6 @@ static char *wifiDisconnect(hbdbus_conn* conn, const char* from_endpoint,
     }
 
 done:
-    struct pcutils_printbuf my_buff, *pb = &my_buff;
-
     pcutils_printbuf_init(pb);
     pcutils_printbuf_format(pb,
             "{\"errCode\":%d, \"errMsg\":\"%s\"}",

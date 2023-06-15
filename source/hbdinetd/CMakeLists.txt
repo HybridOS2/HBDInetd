@@ -38,6 +38,7 @@ set(hbdinetd_LIBRARIES
     PurC::PurC
     HBDBus::HBDBus
     "${GLIB_LIBRARIES}"
+    -lpthread
 )
 
 set_target_properties(hbdinetd PROPERTIES

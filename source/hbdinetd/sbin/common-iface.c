@@ -86,6 +86,7 @@ static char* openDevice(hbdbus_conn* conn, const char* from_endpoint,
     (void)from_endpoint;
     (void)to_method;
     int errcode = ERR_OK;
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
     struct run_info *info = hbdbus_conn_get_user_data(conn);
 
     assert(info);
@@ -114,7 +115,6 @@ static char* openDevice(hbdbus_conn* conn, const char* from_endpoint,
     }
 
 done:
-    struct pcutils_printbuf my_buff, *pb = &my_buff;
     pcutils_printbuf_init(pb);
     pcutils_printbuf_format(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", errcode,
             get_error_message(errcode));
@@ -133,6 +133,7 @@ static char *closeDevice(hbdbus_conn* conn, const char* from_endpoint,
     (void)from_endpoint;
     (void)to_method;
     int errcode = ERR_OK;
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
     struct run_info *info = hbdbus_conn_get_user_data(conn);
 
     assert(info);
@@ -159,7 +160,6 @@ static char *closeDevice(hbdbus_conn* conn, const char* from_endpoint,
     }
 
 done:
-    struct pcutils_printbuf my_buff, *pb = &my_buff;
     pcutils_printbuf_init(pb);
     pcutils_printbuf_format(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", errcode,
             get_error_message(errcode));
@@ -232,7 +232,11 @@ static char *getDeviceStatus(hbdbus_conn* conn,
         struct network_device *netdev;
         netdev = *(struct network_device **)data;
 
+#if GLIB_CHECK_VERSION(2, 70, 0)
         if (g_pattern_spec_match_string(spec, name)) {
+#else
+        if (g_pattern_match_string(spec, name)) {
+#endif
             const char *type;
             const char *status;
 
