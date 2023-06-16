@@ -262,7 +262,7 @@ static int on_bss_added(hbdbus_conn *conn,
 
     if (newone) {
         if (newone->ssid == NULL) {
-            HLOG_ERR("Failed to get hotspot info for `%s`\n", bssid);
+            HLOG_ERR("Failed to get hotspot info for `%s`\n", newone->bssid);
             goto failed;
         }
 
