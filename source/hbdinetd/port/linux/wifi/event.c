@@ -253,6 +253,7 @@ static int on_bss_added(hbdbus_conn *conn,
             HLOG_ERR("Failed to allocate memory for new hotspot\n");
             goto failed;
         }
+        hotspot->bssid = strdup(bssid);
     }
 
     if (wifi_update_hotspot_by_bssid(ctxt, hotspot, bssid)) {
@@ -260,9 +261,8 @@ static int on_bss_added(hbdbus_conn *conn,
     }
 
     if (newone) {
-        if (newone->ssid == NULL || newone->bssid == NULL) {
+        if (newone->ssid == NULL) {
             HLOG_ERR("Failed to get hotspot info for `%s`\n", bssid);
-            wifi_release_one_hotspot(newone);
             goto failed;
         }
 
