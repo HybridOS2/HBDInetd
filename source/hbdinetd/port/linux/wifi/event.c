@@ -333,7 +333,7 @@ bad_data:
     return -1;
 };
 
-/* event data format: id=%d ssid="%s" */
+/* no event data */
 static int on_network_not_found(hbdbus_conn *conn,
         struct netdev_context *ctxt, const char *data, int len)
 {
@@ -353,6 +353,7 @@ static int on_network_not_found(hbdbus_conn *conn,
             escaped_ssid = pcutils_escape_string_for_json(my_ssid);
         }
         else {
+            /* TODO: may be a hex string */
             escaped_ssid = pcutils_escape_string_for_json(ssid);
         }
 
