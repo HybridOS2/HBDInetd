@@ -333,6 +333,73 @@ bad_data:
     return -1;
 };
 
+/* event data format: id=%d ssid="%s" */
+static int on_network_not_found(hbdbus_conn *conn,
+        struct netdev_context *ctxt, const char *data, int len)
+{
+    (void)data;
+    (void)len;
+    int ret;
+
+    const char *ssid = NULL;
+    char *escaped_ssid = NULL;
+    if (ctxt->trying_netid >= 0) {
+        ssid = wifi_get_ssid_by_netid(ctxt, ctxt->trying_netid);
+        if (ssid[0] == '"') {
+            size_t my_len = strlen(ssid);
+            char my_ssid[my_len + 1];
+            if (unescape_literal_text(ssid + 1, my_len - 2, my_ssid) < 0)
+                goto bad_data;
+            escaped_ssid = pcutils_escape_string_for_json(my_ssid);
+        }
+        else {
+            escaped_ssid = pcutils_escape_string_for_json(ssid);
+        }
+
+        HLOG_INFO("netid: %d, ssid: %s\n", ctxt->trying_netid, escaped_ssid);
+    }
+
+    /* 1) Fire WiFiFaileConnAttempt event. */
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
+
+    pcutils_printbuf_init(pb);
+    pcutils_printbuf_format(pb,
+            "{\"ssid\":\"%s\","
+            "\"reason\":\"NOT_FOUND\"}",
+            escaped_ssid ? escaped_ssid : "");
+    if (escaped_ssid) {
+        free(escaped_ssid);
+        escaped_ssid = NULL;
+    }
+
+    if (pb->buf) {
+        ret = hbdbus_fire_event(conn, BUBBLE_WIFIFAILEDCONNATTEMPT, pb->buf);
+        free(pb->buf);
+        if (ret) {
+            HLOG_ERR("Failed when firing event: %s\n",
+                    BUBBLE_WIFIFAILEDCONNATTEMPT);
+            goto failed;
+        }
+    }
+    else {
+        HLOG_ERR("OOM when using buffer\n");
+        goto failed;
+    }
+
+    /* 2) If the network is newly added, remove it. */
+    if (ctxt->new_netid >= 0) {
+        wifi_remove_network(ctxt, ctxt->new_netid);
+        ctxt->new_netid = -1;
+    }
+
+    return 0;
+
+bad_data:
+    HLOG_ERR("Bad SSID\n");
+failed:
+    return -1;
+}
+
 /* event data format:
     id=%d ssid="%s" auth_failures=%u duration=%d reason=%s */
 static int on_ssid_temp_disabled(hbdbus_conn *conn,
@@ -463,6 +530,7 @@ static const struct event_handler {
     { "SCAN-RESULTS", on_scan_results },
     { "BSS-ADDED", on_bss_added },
     { "BSS-REMOVED", on_bss_removed },
+    { "NETWORK-NOT-FOUND", on_network_not_found },
     { "SSID-TEMP-DISABLED", on_ssid_temp_disabled },
     { "TERMINATING", on_terminating },
     { "EAP-FAILURE", on_eap_failure },

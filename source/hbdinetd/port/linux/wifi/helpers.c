@@ -833,6 +833,30 @@ failed:
     return -1;
 }
 
+const char *wifi_get_ssid_by_netid(struct netdev_context *ctxt, int netid)
+{
+    char cmd[256];
+    int n;
+    char *results = ctxt->buf;
+    size_t max_len;
+
+    n = snprintf(cmd, sizeof(cmd),
+            "GET_NETWORK %d ssid", netid);
+    if (n < 0 || n >= (int)sizeof(cmd)) {
+        HLOG_ERR("Too small buffer for `GET_NETWORK %d ssid` command\n",
+                netid);
+        return NULL;
+    }
+
+    max_len = WIFI_MSG_BUF_SIZE;
+    if (wifi_command(ctxt, cmd, results, &max_len)) {
+        HLOG_ERR("Failed `%s` command\n", cmd);
+        return NULL;
+    }
+
+    return results;
+}
+
 int wifi_update_network(struct netdev_context *ctxt, int netid,
         const char *bssid, const char *ssid,
         const char *keymgmt, const char *passphrase)
@@ -858,15 +882,17 @@ int wifi_update_network(struct netdev_context *ctxt, int netid,
         }
     }
 
-    char hex_ssid[strlen(ssid) * 2 + 1];
-    convert_to_hex_string(ssid, hex_ssid);
+    if (ssid) {
+        char hex_ssid[strlen(ssid) * 2 + 1];
+        convert_to_hex_string(ssid, hex_ssid);
 
-    n = snprintf(cmd, sizeof(cmd),
-            "SET_NETWORK %d ssid %s", netid, hex_ssid);
-    if (n < 0 || n >= (int)sizeof(cmd)) {
-        HLOG_ERR("Too small buffer for `SET_NETWORK %d ssid %s` command\n",
-                netid, hex_ssid);
-        return -1;
+        n = snprintf(cmd, sizeof(cmd),
+                "SET_NETWORK %d ssid %s", netid, hex_ssid);
+        if (n < 0 || n >= (int)sizeof(cmd)) {
+            HLOG_ERR("Too small buffer for `SET_NETWORK %d ssid %s` command\n",
+                    netid, hex_ssid);
+            return -1;
+        }
     }
 
     max_len = WIFI_MSG_BUF_SIZE;

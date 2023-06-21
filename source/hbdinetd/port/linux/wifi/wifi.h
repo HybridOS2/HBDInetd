@@ -57,6 +57,7 @@ struct netdev_context {
 
     /* the new network id if >= 0. */
     int new_netid;
+    int trying_netid;
 
     unsigned auth_failure_count;
     unsigned cmd_failure_count;

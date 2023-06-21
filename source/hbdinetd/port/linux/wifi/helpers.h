@@ -45,6 +45,7 @@ int wifi_get_netid_from_ssid(struct netdev_context *ctxt, const char *ssid);
 
 void wifi_reset_status(struct netdev_context *ctxt);
 int wifi_update_status(struct netdev_context *ctxt);
+const char *wifi_get_ssid_by_netid(struct netdev_context *ctxt, int netid);
 
 int wifi_parse_scan_results(struct netdev_context *ctxt,
         const char *results, size_t max_len);

@@ -96,7 +96,7 @@ static int connect(struct netdev_context *ctxt,
         ctxt->new_netid = netid;
     }
     else if (netid >= 0) {
-        if (wifi_update_network(ctxt, netid, bssid, ssid, keymgmt, passphrase)) {
+        if (wifi_update_network(ctxt, netid, bssid, NULL, keymgmt, passphrase)) {
             HLOG_ERR("Failed to update network: %d) %s (key_mgmt: %s)\n",
                     netid, ssid, keymgmt);
             return ERR_DEVICE_CONTROLLER;
@@ -127,6 +127,7 @@ static int connect(struct netdev_context *ctxt,
     }
 
 select:
+    ctxt->trying_netid = netid;
     sprintf(cmd, "SELECT_NETWORK %d", netid);
 
     size_t len = WIFI_MSG_BUF_SIZE;
