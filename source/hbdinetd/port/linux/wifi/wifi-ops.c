@@ -165,6 +165,7 @@ select:
 
     } while (--count);
 
+#if 0   /* always use WiFiFailedConnAttempt event */
     if (ctxt->status->wpa_state >= WPA_STATE_SCANNING &&
             ctxt->status->wpa_state < WPA_STATE_COMPLETED) {
 
@@ -175,6 +176,7 @@ select:
         }
         return ERR_WPA_WRONG_PASSPHRASE;
     }
+#endif
 
     return ERR_UNCERTAIN_RESULT;
 }
