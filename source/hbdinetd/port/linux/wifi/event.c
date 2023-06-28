@@ -77,6 +77,7 @@ static int on_connected(hbdbus_conn *conn,
                   ctxt->status->signal_level);
 
         if (pb->buf) {
+            HLOG_INFO("Firing event: %s: %s\n", BUBBLE_WIFICONNECTED, pb->buf);
             ret = hbdbus_fire_event(conn, BUBBLE_WIFICONNECTED, pb->buf);
             free(pb->buf);
             if (ret)

@@ -203,6 +203,10 @@ static int disconnect(struct netdev_context *ctxt)
 
 static int start_scan(struct netdev_context *ctxt)
 {
+    wifi_update_status(ctxt);
+    if (ctxt->status->wpa_state == WPA_STATE_SCANNING)
+        return 0;
+
     size_t len = WIFI_MSG_BUF_SIZE;
     int ret = wifi_command(ctxt, "SCAN", ctxt->buf, &len);
     if (ret) {
