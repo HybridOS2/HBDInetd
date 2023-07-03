@@ -346,7 +346,10 @@ static int on_network_not_found(hbdbus_conn *conn,
     char *escaped_ssid = NULL;
     if (ctxt->trying_netid >= 0) {
         ssid = wifi_get_ssid_by_netid(ctxt, ctxt->trying_netid);
-        if (ssid[0] == '"') {
+        if (!ssid) {
+            goto bad_data;
+        }
+        else if (ssid[0] == '"') {
             size_t my_len = strlen(ssid);
             char my_ssid[my_len + 1];
             if (unescape_literal_text(ssid + 1, my_len - 2, my_ssid) < 0)
