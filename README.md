@@ -21,7 +21,7 @@ HBDInetd provides two ports:
 - `Linux`: This port uses `wpa_supplicant` and a real implementation of DHCP client to
    scan, connect, and configure a wireless device. We use this port in a real production.
 - `Fake`: This port simulating a virtual wireless device (`wlan0`). We use this port
-   when we developing the app which provides the UIs for WiFi settings.
+   when we develop an HVML app which provides the UIs for WiFi settings.
 
 When you configure this porject by using CMake, please use one of the following commands
 according to your need:
