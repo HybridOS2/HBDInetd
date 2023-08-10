@@ -38,7 +38,7 @@ $ cmake <root_of_source_tree> -DPORT=Fake
 
 ## Usage
 
-After building HBDInetd, there will be one executable and three HVML scripts:
+After building HBDInetd, there will be one executable and the following HVML scripts:
 
 1. `hbdinetd`, located in the `sbin/` directory in the root of your building tree.
    This is the daemon program of HBDInetd.
