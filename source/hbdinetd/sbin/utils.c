@@ -45,6 +45,7 @@ const char *error_messages[] = {
     "Wrong passphrase or key.",                 // ERR_WPA_WRONG_PASSPHRASE
     "Timeout.",                                 // ERR_TIMEOUT
     "There already is an unresolved attempt.",  // ERR_UNRESOLVED_ATTEMPT
+    "The device is not reayd.",                 // ERR_DEVICE_NOT_READY
 };
 
 const char *get_error_message(int errcode)
