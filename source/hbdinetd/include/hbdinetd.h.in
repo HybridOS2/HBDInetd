@@ -36,6 +36,7 @@
 
 // methods for network devices
 #define METHOD_NET_OPEN_DEVICE          "openDevice"
+#define METHOD_NET_CONFIG_DEVICE        "configDevice"
 #define METHOD_NET_CLOSE_DEVICE         "closeDevice"
 #define METHOD_NET_GET_DEVICE_STATUS    "getDeviceStatus"
 
@@ -107,6 +108,7 @@ enum {
 #define ERR_WPA_WRONG_PASSPHRASE        -8
 #define ERR_TIMEOUT                     -9
 #define ERR_UNRESOLVED_ATTEMPT          -10
+#define ERR_DEVICE_NOT_READY            -11
 
 // for network changed
 #define NETWORK_CHANGED_NAME            ((0x01) << 0)

@@ -272,6 +272,8 @@ typedef struct network_device {
 
     /* basic operators for the device engine. */
     int (*on)(hbdbus_conn *conn, struct network_device* netdev);
+    int (*config)(hbdbus_conn *conn, struct network_device* netdev,
+            const char *param);
     int (*off)(hbdbus_conn *conn, struct network_device* netdev);
     int (*check)(hbdbus_conn *conn, struct network_device* netdev);
     void (*terminate)(struct network_device* netdev);
@@ -306,6 +308,8 @@ int netdev_config_iface_down(const char *ifname, struct network_device *netdev);
 
 /* ports/<port>/wifi-device.c */
 int wifi_device_on(hbdbus_conn *conn, struct network_device *netdev);
+int wifi_device_config(hbdbus_conn *conn, struct network_device *netdev,
+        const char *param);
 int wifi_device_off(hbdbus_conn *conn, struct network_device *netdev);
 int wifi_device_check(hbdbus_conn *conn, struct network_device *netdev);
 void wifi_device_terminate(struct network_device *netdev);

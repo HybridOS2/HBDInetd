@@ -127,6 +127,53 @@ done:
     return pb->buf;
 }
 
+static char* configDevice(hbdbus_conn* conn, const char* from_endpoint,
+        const char* to_method, const char* method_param, int *bus_ec)
+{
+    (void)from_endpoint;
+    (void)to_method;
+    int errcode = ERR_OK;
+    struct pcutils_printbuf my_buff, *pb = &my_buff;
+    struct run_info *info = hbdbus_conn_get_user_data(conn);
+
+    assert(info);
+    assert(strcasecmp(to_method, METHOD_NET_CONFIG_DEVICE) == 0);
+
+    struct network_device *netdev;
+    netdev = check_network_device(info, method_param, DEVICE_TYPE_UNKNOWN,
+            &errcode);
+    if (netdev == NULL) {
+        errcode = ENOENT;
+        goto done;
+    }
+
+    if (netdev->status == DEVICE_STATUS_UNCERTAIN) {
+        HLOG_INFO("The device %s is in uncertain state\n", netdev->ifname);
+        errcode = 0;
+        goto done;
+    }
+
+    if (netdev->config == NULL) {
+        errcode = ENOTSUP;
+        goto done;
+    }
+    else {
+        errcode = netdev->config(conn, netdev, method_param);
+    }
+
+done:
+    pcutils_printbuf_init(pb);
+    pcutils_printbuf_format(pb, "{\"errCode\":%d, \"errMsg\":\"%s\"}", errcode,
+            get_error_message(errcode));
+
+    if (pb->buf == NULL) {
+        *bus_ec = HBDBUS_EC_NOMEM;
+        return NULL;
+    }
+    *bus_ec = 0;
+    return pb->buf;
+}
+
 static char *closeDevice(hbdbus_conn* conn, const char* from_endpoint,
         const char* to_method, const char* method_param, int *bus_ec)
 {
@@ -353,7 +400,7 @@ int register_common_interfaces(hbdbus_conn * conn)
     errcode = hbdbus_register_procedure(conn, METHOD_GLOBAL_TERMINATE,
             HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS, terminate);
     if (errcode) {
-        HLOG_ERR("Error for register procedure %s: %s.\n",
+        HLOG_ERR("Failed to register procedure %s: %s.\n",
                 METHOD_GLOBAL_TERMINATE, hbdbus_get_err_message(errcode));
         goto failed;
     }
@@ -361,15 +408,23 @@ int register_common_interfaces(hbdbus_conn * conn)
     errcode = hbdbus_register_procedure(conn, METHOD_NET_OPEN_DEVICE,
             HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS, openDevice);
     if (errcode) {
-        HLOG_ERR("Error for register procedure %s: %s.\n",
+        HLOG_ERR("Failed to register procedure %s: %s.\n",
                 METHOD_NET_OPEN_DEVICE, hbdbus_get_err_message(errcode));
+        goto failed;
+    }
+
+    errcode = hbdbus_register_procedure(conn, METHOD_NET_CONFIG_DEVICE,
+            HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS, configDevice);
+    if (errcode) {
+        HLOG_ERR("Failed to register procedure %s: %s.\n",
+                METHOD_NET_CONFIG_DEVICE, hbdbus_get_err_message(errcode));
         goto failed;
     }
 
     errcode = hbdbus_register_procedure(conn, METHOD_NET_CLOSE_DEVICE,
             HBDINETD_ALLOWED_HOSTS, HBDINETD_PRIVILEGED_APPS, closeDevice);
     if (errcode) {
-        HLOG_ERR("Error for register procedure %s: %s.\n",
+        HLOG_ERR("Failed to register procedure %s: %s.\n",
                 METHOD_NET_CLOSE_DEVICE, hbdbus_get_err_message(errcode));
         goto failed;
     }
@@ -377,7 +432,7 @@ int register_common_interfaces(hbdbus_conn * conn)
     errcode = hbdbus_register_procedure(conn, METHOD_NET_GET_DEVICE_STATUS,
             HBDINETD_ALLOWED_HOSTS, HBDINETD_ANY_APPS, getDeviceStatus);
     if (errcode) {
-        HLOG_ERR("Error for register procedure %s: %s.\n",
+        HLOG_ERR("Failed to register procedure %s: %s.\n",
                 METHOD_NET_GET_DEVICE_STATUS, hbdbus_get_err_message(errcode));
         goto failed;
     }
@@ -385,7 +440,7 @@ int register_common_interfaces(hbdbus_conn * conn)
     errcode = hbdbus_register_event(conn, BUBBLE_DEVICECHANGED,
             HBDINETD_ALLOWED_HOSTS, HBDINETD_ANY_APPS);
     if (errcode) {
-        HLOG_ERR("Error for register event %s: %s.\n",
+        HLOG_ERR("Failed to register event %s: %s.\n",
                 BUBBLE_DEVICECHANGED, hbdbus_get_err_message(errcode));
         goto failed;
     }
@@ -393,7 +448,7 @@ int register_common_interfaces(hbdbus_conn * conn)
     errcode = hbdbus_register_event(conn, BUBBLE_DEVICECONFIGURED,
             HBDINETD_ALLOWED_HOSTS, HBDINETD_ANY_APPS);
     if (errcode) {
-        HLOG_ERR("Error for register event %s: %s.\n",
+        HLOG_ERR("Failed to register event %s: %s.\n",
                 BUBBLE_DEVICECONFIGURED, hbdbus_get_err_message(errcode));
         goto failed;
     }
@@ -401,7 +456,7 @@ int register_common_interfaces(hbdbus_conn * conn)
     errcode = hbdbus_register_event(conn, BUBBLE_DEVICECONFIGFAILED,
             HBDINETD_ALLOWED_HOSTS, HBDINETD_ANY_APPS);
     if (errcode) {
-        HLOG_ERR("Error for register event %s: %s.\n",
+        HLOG_ERR("Failed to register event %s: %s.\n",
                 BUBBLE_DEVICECONFIGFAILED, hbdbus_get_err_message(errcode));
         goto failed;
     }

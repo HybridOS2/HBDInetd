@@ -41,6 +41,161 @@ bool is_valid_interface_name(const char *ifname)
     return purc_is_valid_token(ifname, IFNAMSIZ - 1);
 }
 
+static int wired_device_on(hbdbus_conn *conn, struct network_device *netdev)
+{
+    (void)conn;
+    int ret = 0;
+
+    if (netdev_config_iface_up(netdev->ifname, netdev)) {
+        HLOG_ERR("Failed to make wired device up: %s!\n", netdev->ifname);
+        ret = errno;
+    }
+
+    return ret;
+}
+
+static int wired_device_config(hbdbus_conn *conn, struct network_device *netdev,
+        const char *param)
+{
+    (void)conn;
+
+    if (netdev->status != DEVICE_STATUS_UP &&
+            netdev->status != DEVICE_STATUS_RUNNING) {
+        return ERR_DEVICE_NOT_READY;
+    }
+
+    int errcode = ERR_OK;
+    purc_variant_t jo = NULL;
+    purc_variant_t jo_tmp = NULL;
+
+    jo = purc_variant_make_from_json_string(param, strlen(param));
+    if (jo == NULL || !purc_variant_is_object(jo)) {
+        errcode = EINVAL;
+        goto done;
+    }
+
+    if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "method")) == NULL) {
+        HLOG_ERR("No `method` key\n");
+        errcode = ENOKEY;
+        goto done;
+    }
+
+    const char *method = purc_variant_get_string_const(jo_tmp);
+    if (method == NULL) {
+        HLOG_ERR("No configuring method specified.\n");
+        errcode = EINVAL;
+    }
+    else if (strcasecmp(method, "dhcp") == 0) {
+        issue_dhcp_request(conn, netdev->ifname);
+    }
+    else if (strcasecmp(method, "static") == 0) {
+        /* TODO */
+        HLOG_ERR("Not supported configuring method: %s\n", method);
+        errcode = ENOTSUP;
+    }
+    else {
+        HLOG_ERR("Bad configuring method: %s\n", method);
+        errcode = EINVAL;
+    }
+
+done:
+    if (jo)
+        purc_variant_unref(jo);
+    return errcode;
+}
+
+static int wired_device_off(hbdbus_conn *conn, struct network_device *netdev)
+{
+    (void)conn;
+    int ret = 0;
+
+    if (netdev_config_iface_down(netdev->ifname, netdev)) {
+        HLOG_ERR("Failed to make wired device down: %s!\n", netdev->ifname);
+        ret = errno;
+    }
+
+    return ret;
+}
+
+static const char *get_type_name(const struct network_device *netdev)
+{
+    switch (netdev->type) {
+    case DEVICE_TYPE_UNKNOWN:
+        return DEVICE_TYPE_NAME_UNKNOWN;
+    case DEVICE_TYPE_LOOPBACK:
+        return DEVICE_TYPE_NAME_LOOPBACK;
+    case DEVICE_TYPE_MOBILE:
+        return DEVICE_TYPE_NAME_MOBILE;
+    case DEVICE_TYPE_ETHER_WIRED:
+        return DEVICE_TYPE_NAME_ETHER_WIRED;
+    case DEVICE_TYPE_ETHER_WIRELESS:
+        return DEVICE_TYPE_NAME_ETHER_WIRELESS;
+    }
+
+    return NULL;
+};
+
+static const char *get_status_name(const struct network_device *netdev)
+{
+    switch (netdev->status) {
+    case DEVICE_STATUS_UNCERTAIN:
+        return DEVICE_STATUS_NAME_UNCERTAIN;
+    case DEVICE_STATUS_DOWN:
+        return DEVICE_STATUS_NAME_DOWN;
+    case DEVICE_STATUS_UP:
+        return DEVICE_STATUS_NAME_UP;
+    case DEVICE_STATUS_RUNNING:
+        return DEVICE_STATUS_NAME_RUNNING;
+    }
+
+    return NULL;
+}
+
+static int wired_device_check(hbdbus_conn *conn, struct network_device *netdev)
+{
+    unsigned old_status = netdev->status;
+    int ret = 0;
+    if (update_network_device_dynamic_info(netdev->ifname, netdev)) {
+        HLOG_ERR("Failed to update status of wired device: %s!\n",
+                netdev->ifname);
+        ret = errno;
+    }
+    else if (netdev->status != old_status) {
+        struct pcutils_printbuf my_buff, *pb = &my_buff;
+
+        pcutils_printbuf_init(pb);
+        pcutils_printbuf_format(pb,
+                "{\"device\":\"%s\","
+                "\"type\":\"%s\","
+                "\"status\":\"%s\"}",
+                netdev->ifname,
+                get_type_name(netdev),
+                get_status_name(netdev));
+
+        if (pb->buf) {
+            HLOG_INFO("Firing event: %s: %s\n", BUBBLE_DEVICECHANGED, pb->buf);
+            ret = hbdbus_fire_event(conn, BUBBLE_DEVICECHANGED, pb->buf);
+            free(pb->buf);
+            if (ret)
+                goto fatal;
+        }
+        else {
+            HLOG_ERR("OOM when using printbuf\n");
+            goto fatal;
+        }
+    }
+
+    return 0;
+
+fatal:
+    return ret;
+}
+
+static void wired_device_terminate(struct network_device *netdev)
+{
+    (void)netdev;
+}
+
 static int get_device_type(struct network_device * netdev,
         const char *ifname, int fd)
 {
@@ -62,6 +217,7 @@ static int get_device_type(struct network_device * netdev,
     if (ret == 0) {
         netdev->type = DEVICE_TYPE_ETHER_WIRELESS;
         netdev->on = wifi_device_on;
+        netdev->config = wifi_device_config;
         netdev->off = wifi_device_off;
         netdev->check = wifi_device_check;
         netdev->terminate = wifi_device_terminate;
@@ -74,6 +230,11 @@ static int get_device_type(struct network_device * netdev,
         ret = ioctl(fd, SIOCGIFHWADDR, &ifr);
         if (ret == 0) {
             netdev->type = DEVICE_TYPE_ETHER_WIRED;
+            netdev->on = wired_device_on;
+            netdev->config = wired_device_config;
+            netdev->off = wired_device_off;
+            netdev->check = wired_device_check;
+            netdev->terminate = wired_device_terminate;
             goto done;
         }
 

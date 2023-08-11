@@ -774,6 +774,57 @@ failed:
     return ret;
 }
 
+int wifi_device_config(hbdbus_conn *conn, struct network_device *netdev,
+        const char *param)
+{
+    if (netdev->ctxt == NULL)
+        return ENOENT;
+
+    wifi_update_status(netdev->ctxt);
+    if (netdev->ctxt->status->wpa_state != WPA_STATE_COMPLETED) {
+        return ERR_DEVICE_NOT_READY;
+    }
+
+    int errcode = ERR_OK;
+    purc_variant_t jo = NULL;
+    purc_variant_t jo_tmp = NULL;
+
+    jo = purc_variant_make_from_json_string(param, strlen(param));
+    if (jo == NULL || !purc_variant_is_object(jo)) {
+        errcode = EINVAL;
+        goto done;
+    }
+
+    if ((jo_tmp = purc_variant_object_get_by_ckey(jo, "method")) == NULL) {
+        HLOG_ERR("No `method` key\n");
+        errcode = ENOKEY;
+        goto done;
+    }
+
+    const char *method = purc_variant_get_string_const(jo_tmp);
+    if (method == NULL) {
+        HLOG_ERR("No configuring method specified.\n");
+        errcode = EINVAL;
+    }
+    else if (strcasecmp(method, "dhcp") == 0) {
+        issue_dhcp_request(conn, netdev->ifname);
+    }
+    else if (strcasecmp(method, "static") == 0) {
+        /* TODO */
+        HLOG_ERR("Not supported configuring method: %s\n", method);
+        errcode = ENOTSUP;
+    }
+    else {
+        HLOG_ERR("Bad configuring method: %s\n", method);
+        errcode = EINVAL;
+    }
+
+done:
+    if (jo)
+        purc_variant_unref(jo);
+    return errcode;
+}
+
 int wifi_device_off(hbdbus_conn *conn, struct network_device *netdev)
 {
     if (netdev->ctxt == NULL)
