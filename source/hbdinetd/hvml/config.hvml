@@ -1,0 +1,267 @@
+#!/usr/bin/env purc
+#purc -a cn.fmsoft.hybridos.settings -r test -q 'type=wired'
+
+<!DOCTYPE hvml>
+<hvml target="void">
+    <head>
+        $STREAM.stdout.writelines("# Test APIs of HBDInetd")
+    </head>
+
+    <body>
+        <test with $REQ.type silently >
+            <differ>
+                <update on $REQ at '.type' with 'wired' />
+            </differ>
+        </test>
+
+        <init as 'globalState' with { device: null } />
+        <init as 'hbdinetdMain' with 'edpt://localhost/cn.fmsoft.hybridos.inetd/main' />
+
+        <define as 'showResult'>
+            <test with $L.eq($?.result.retCode, 200) >
+                $STREAM.stdout.writelines("Got normal result from $?.edpt/method/$?.method: ")
+                $STREAM.stdout.writelines($DATA.serialize($DATA.parse($?.result.retValue), 'pretty'))
+
+                <return with $DATA.parse($2?.result.retValue) />
+
+                <differ>
+                    $STREAM.stdout.writelines("Got failed result from $2?.edpt/method/$2?.method: $2?.result.retMsg")
+
+                    <return with false />
+                </differ>
+
+            </test>
+        </define>
+
+        <define as 'getInetdResult'>
+            <test with $L.eq($?.result.retCode, 200) >
+                $STREAM.stdout.writelines("Got successfull result from $?.edpt/method/$?.method: ")
+                $STREAM.stdout.writelines($DATA.serialize($DATA.parse($?.result.retValue), 'pretty'))
+
+                <init as 'retValue' with $DATA.parse($2?.result.retValue) temp />
+
+                <test with $L.eq($retValue.errCode, 0) >
+                    <return with {{ $retValue.data || null }} silently />
+
+                    <differ>
+                        $STREAM.stdout.writelines("Got failed result from $2?.edpt/method/$2?.method: $retValue.errMsg")
+
+                        <return with undefined />
+                    </differ>
+                </test>
+
+                <differ>
+                    $STREAM.stdout.writelines("Got failed result from $2?.edpt/method/$2?.method: $2?.result.retMsg")
+
+                    <return with false />
+                </differ>
+
+            </test>
+        </define>
+
+        <define as 'showBubbleData'>
+            <init as 'bubbleData' with $DATA.parse($?.bubbleData) temp />
+
+            <inherit>
+                $STREAM.stdout.writelines("Got an event from $?.fromEndpoint/bubble/$?.fromBubble: $?.bubbleData")
+                $STREAM.stdout.writelines($DATA.serialize($DATA.parse($?.bubbleData), 'pretty'))
+            </inherit>
+
+            <return with $bubbleData />
+        </define>
+
+        <define as 'showDeviceStatus'>
+            <test with $databus.call($hbdinetdMain, 'getDeviceStatus', "{device: '$globalState.device'}") >
+                $STREAM.stdout.writelines("Calling $hbdinetdMain/method/getDeviceStatus...")
+
+                <forget on $databus for 'result:getDeviceStatus' />
+                <observe on $databus for 'result:getDeviceStatus'>
+                    <call on $showResult with { edpt: $hbdinetdMain, method: 'getDeviceStatus', result: $? } >
+                        <test with $L.eq($?.errCode, 0) >
+
+                            <differ>
+                                $STREAM.stdout.writelines("Failed $hbdinetdMain/method/getDeviceStatus $2?.errCode ($2?.errMsg)")
+                                <exit with 'Failed' />
+                            </differ>
+                        </test>
+                    </call>
+                </observe>
+
+                <differ>
+                    $STREAM.stdout.writelines("Failed to call $hbdinetdMain/method/getDeviceStatus")
+                </differ>
+            </test>
+        </define>
+
+        <observe on $globalState for 'configdDeviceWithDHCP' >
+            <test with $databus.call($hbdinetdMain, 'configDevice', "{device: '$globalState.device', method: 'dhcp' }") >
+                $STREAM.stdout.writelines("Calling $hbdinetdMain/method/configDevice...")
+
+                <observe on $databus for 'result:configDevice'>
+                    <call on $showResult with { edpt: $hbdinetdMain, method: 'configDevice', result: $? } >
+
+                        <test on $?.errCode >
+                            <match on $L.eq($?, 0) exclusively>
+                                $STREAM.stdout.writelines("Correctly issued configDevice call")
+                            </match>
+
+                            <match>
+                                $STREAM.stdout.writelines("Failed $hbdinetdMain/method/configDevice $2?.errCode ($2?.errMsg)")
+                                <exit with 'Failed' />
+                            </match>
+                        </test>
+                    </call>
+                </observe>
+
+                <observe on $databus for 'event:DeviceConfigured'>
+                    <call on $showBubbleData with $? />
+                    <exit with 'Configured' />
+                </observe>
+
+                <differ>
+                    $STREAM.stdout.writelines("Failed to call configDevice")
+
+                    <exit with 'Failed' />
+                </differ>
+            </test>
+        </observe>
+
+        <observe on $globalState for 'desiredDeviceReady' >
+            <call on $configDeviceWithDHCP />
+        </observe>
+
+        <observe on $globalState for 'GotDesiredDevice' >
+            <inherit>
+                $STREAM.stdout.writelines("Found the desired Device: $globalState.device ($?)")
+            </inherit>
+
+            <test with $databus.call($hbdinetdMain, 'openDevice', "{device: '$globalState.device'}") >
+                $STREAM.stdout.writelines("Calling $hbdinetdMain/method/openDevice...")
+
+                <observe on $databus for 'result:openDevice'>
+                    <call on $getInetdResult with { edpt: $hbdinetdMain, method: 'openDevice', result: $? } >
+                        <test with $L.strne('case', $DATA.type($?), 'undefined') >
+
+                            <iterate on ['DeviceConfigFailed', 'DeviceChanged'] >
+
+                                <test with $databus.subscribe($hbdinetdMain, $?) silently >
+                                    $STREAM.stdout.writelines("Subscribing $hbdinetdMain/bubble/$?...")
+
+                                    <differ>
+                                        $STREAM.stdout.writelines("Failed to subscribe $hbdinetdMain/bubble/$2?...")
+                                    </differ>
+                                </test>
+                            </iterate>
+
+                            <fire on $globalState for 'desiredDeviceReady' />
+
+                        </test>
+
+                    </call>
+
+                </observe>
+            </test>
+
+        </observe>
+
+        <define as 'onHBDBusReady'>
+            <init as 'hbdbusBuiltin' with 'edpt://localhost/cn.fmsoft.hybridos.databus/builtin' />
+
+            <test with $databus.call($hbdbusBuiltin, 'listEndpoints') >
+                $STREAM.stdout.writelines("Calling $hbdbusBuiltin/method/listEndpoints...")
+
+                <observe on $databus for 'result:listEndpoints'>
+                    <call on $showResult with { edpt: $hbdbusBuiltin, method: 'listEndpoints', result: $? } />
+                </observe>
+
+                <differ>
+                    $STREAM.stdout.writelines("Failed to call $hbdbusBuiltin/method/listEndpoints")
+                </differ>
+            </test>
+
+            <test with $databus.call($hbdinetdMain, 'getDeviceStatus', '{device: "*"}') >
+                $STREAM.stdout.writelines("Calling $hbdinetdMain/method/getDeviceStatus...")
+
+                <forget on $databus for 'result:getDeviceStatus' />
+                <observe on $databus for 'result:getDeviceStatus'>
+                    <call on $showResult with { edpt: $hbdinetdMain, method: 'getDeviceStatus', result: $? } >
+                        <test with $?>
+                            <iterate on $2?.data >
+                                <test with $L.streq('caseless', $?.type, $REQ.type) >
+                                    $STREAM.stdout.writelines("Testing device type: $REQ.type")
+
+                                    <update on $globalState at '.device' with $2?.device />
+                                    <fire on $globalState for 'GotDesiredDevice' with $2?.device />
+                                    <back to '_nexttolast' />
+                                </test>
+                            </iterate>
+
+                        </test>
+                    </call>
+
+                </observe>
+
+                <differ>
+                    $STREAM.stdout.writelines("Failed to call $hbdinetdMain/method/getDeviceStatus")
+                </differ>
+            </test>
+
+            <test with $databus.register_proc('terminate') >
+                <observe on $databus for 'call:terminate'>
+
+                    <inherit>
+                        $STREAM.stdout.writelines("Got a call to `terminate` from $?.fromEndpoint")
+                    </inherit>
+
+                    <test with $databus.send_result($?.resultId, 'Ok') >
+                        <exit with "Terminated by $2?.fromEndpoint">
+                            $databus.revoke_proc('terminate')
+                        </exit>
+                    </test>
+
+                </observe>
+
+                <differ>
+                    $STREAM.stdout.writelines("Failed to register `terminate` method")
+                </differ>
+            </test>
+
+        </define>
+
+        <init as 'databus' with $STREAM.open('unix:///var/tmp/hbdbus.sock', 'default', 'hbdbus') >
+            <observe on $databus for 'state:ready' >
+
+                <inherit>
+                    $STREAM.stdout.writelines("Connection to HBDBus is now ready.")
+                </inherit>
+
+                <call on $onHBDBusReady />
+
+            </observe>
+
+            <observe on $databus for 'close' >
+
+                <inherit>
+                    <exit with 'closed' />
+                </inherit>
+            </observe>
+
+            <observe on $databus for 'error:hbdbus' >
+
+                <inherit>
+                    $STREAM.stdout.writelines("Error when using HBDBus: $?.retMsg ($?.retCode)")
+                </inherit>
+            </observe>
+
+            <catch for `ANY`>
+                <inherit>
+                    $STREAM.stdout.writelines("Failed to connected to HBDBus")
+                </inherit>
+
+                <exit with 'failed' />
+            </catch>
+        </init>
+
+    </body>
+</hvml>
+
