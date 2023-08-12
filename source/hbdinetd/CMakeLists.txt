@@ -54,6 +54,7 @@ set(HVML_FILES
     "hvml/scan.hvml"
     "hvml/connect.hvml"
     "hvml/disconnect.hvml"
+    "hvml/config.hvml"
 )
 
 HBDINETD_COPY_FILES(HVMLFiles

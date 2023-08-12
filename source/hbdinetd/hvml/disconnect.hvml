@@ -80,7 +80,7 @@
                     <call on $showResult with { edpt: $hbdinetdMain, method: 'wifiDisconnect', result: $? } >
 
                         <test on $?.errCode >
-                            <match on $L.eq($?, 0) exclusively>
+                            <match with $L.eq($?, 0) exclusively>
                                 $STREAM.stdout.writelines("Correctly disconnected from $REQ.ssid")
                             </match>
 

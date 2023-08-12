@@ -93,7 +93,7 @@
             </test>
         </define>
 
-        <observe on $globalState for 'configdDeviceWithDHCP' >
+        <define as 'configDeviceWithDHCP' >
             <test with $databus.call($hbdinetdMain, 'configDevice', "{device: '$globalState.device', method: 'dhcp' }") >
                 $STREAM.stdout.writelines("Calling $hbdinetdMain/method/configDevice...")
 
@@ -101,21 +101,26 @@
                     <call on $showResult with { edpt: $hbdinetdMain, method: 'configDevice', result: $? } >
 
                         <test on $?.errCode >
-                            <match on $L.eq($?, 0) exclusively>
-                                $STREAM.stdout.writelines("Correctly issued configDevice call")
+                            <match with $L.eq($?, 0) exclusively>
+                                <inherit>
+                                    $STREAM.stdout.writelines("Correctly issued configDevice call")
+                                </inherit>
+
+                                <observe on $databus for 'event:DeviceConfigured'>
+                                    <call on $showBubbleData with $? />
+                                    <exit with 'Configured' />
+                                </observe>
+
                             </match>
 
                             <match>
-                                $STREAM.stdout.writelines("Failed $hbdinetdMain/method/configDevice $2?.errCode ($2?.errMsg)")
+                                <inherit>
+                                    $STREAM.stdout.writelines("Failed $hbdinetdMain/method/configDevice $2?.errCode ($2?.errMsg)")
+                                </inherit>
                                 <exit with 'Failed' />
                             </match>
                         </test>
                     </call>
-                </observe>
-
-                <observe on $databus for 'event:DeviceConfigured'>
-                    <call on $showBubbleData with $? />
-                    <exit with 'Configured' />
                 </observe>
 
                 <differ>
@@ -124,7 +129,7 @@
                     <exit with 'Failed' />
                 </differ>
             </test>
-        </observe>
+        </define>
 
         <observe on $globalState for 'desiredDeviceReady' >
             <call on $configDeviceWithDHCP />
@@ -142,7 +147,7 @@
                     <call on $getInetdResult with { edpt: $hbdinetdMain, method: 'openDevice', result: $? } >
                         <test with $L.strne('case', $DATA.type($?), 'undefined') >
 
-                            <iterate on ['DeviceConfigFailed', 'DeviceChanged'] >
+                            <iterate on ['DeviceConfigured', 'DeviceConfigFailed', 'DeviceChanged'] >
 
                                 <test with $databus.subscribe($hbdinetdMain, $?) silently >
                                     $STREAM.stdout.writelines("Subscribing $hbdinetdMain/bubble/$?...")

@@ -97,11 +97,11 @@
                     <call on $showResult with { edpt: $hbdinetdMain, method: 'wifiConnect', result: $? } >
 
                         <test on $?.errCode >
-                            <match on $L.eq($?, -4) exclusively>
+                            <match with $L.eq($?, -4) exclusively>
                                 $STREAM.stdout.writelines("Waiting for result event...")
                             </match>
 
-                            <match on $L.eq($?, 0) exclusively>
+                            <match with $L.eq($?, 0) exclusively>
                                 $STREAM.stdout.writelines("Correctly connected to $REQ.ssid")
                                 <update on $globalState at '.ssid' with $REQ.ssid />
                             </match>

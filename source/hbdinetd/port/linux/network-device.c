@@ -41,6 +41,45 @@ bool is_valid_interface_name(const char *ifname)
     return purc_is_valid_token(ifname, IFNAMSIZ - 1);
 }
 
+static const char *get_type_name(const struct network_device *netdev)
+{
+    switch (netdev->type) {
+    case DEVICE_TYPE_UNKNOWN:
+        return DEVICE_TYPE_NAME_UNKNOWN;
+    case DEVICE_TYPE_LOOPBACK:
+        return DEVICE_TYPE_NAME_LOOPBACK;
+    case DEVICE_TYPE_MOBILE:
+        return DEVICE_TYPE_NAME_MOBILE;
+    case DEVICE_TYPE_ETHER_WIRED:
+        return DEVICE_TYPE_NAME_ETHER_WIRED;
+    case DEVICE_TYPE_ETHER_WIRELESS:
+        return DEVICE_TYPE_NAME_ETHER_WIRELESS;
+    }
+
+    return NULL;
+};
+
+static const char *get_status_name(const struct network_device *netdev)
+{
+    switch (netdev->status) {
+    case DEVICE_STATUS_UNCERTAIN:
+        return DEVICE_STATUS_NAME_UNCERTAIN;
+    case DEVICE_STATUS_DOWN:
+        return DEVICE_STATUS_NAME_DOWN;
+    case DEVICE_STATUS_UP:
+        return DEVICE_STATUS_NAME_UP;
+    case DEVICE_STATUS_RUNNING:
+        return DEVICE_STATUS_NAME_RUNNING;
+    }
+
+    return NULL;
+}
+
+static int wired_device_config(hbdbus_conn *conn,
+        struct network_device *netdev, const char *param);
+static int wired_device_check(hbdbus_conn *conn,
+        struct network_device *netdev);
+
 static int wired_device_on(hbdbus_conn *conn, struct network_device *netdev)
 {
     (void)conn;
@@ -51,6 +90,14 @@ static int wired_device_on(hbdbus_conn *conn, struct network_device *netdev)
         ret = errno;
     }
 
+    if (update_network_device_dynamic_info(netdev->ifname, netdev)) {
+        HLOG_ERR("Failed to update status of wired device: %s!\n",
+                netdev->ifname);
+        ret = errno;
+    }
+
+    netdev->config = wired_device_config;
+    netdev->check = wired_device_check;
     return ret;
 }
 
@@ -114,47 +161,15 @@ static int wired_device_off(hbdbus_conn *conn, struct network_device *netdev)
         ret = errno;
     }
 
+    netdev->check = NULL;
     return ret;
-}
-
-static const char *get_type_name(const struct network_device *netdev)
-{
-    switch (netdev->type) {
-    case DEVICE_TYPE_UNKNOWN:
-        return DEVICE_TYPE_NAME_UNKNOWN;
-    case DEVICE_TYPE_LOOPBACK:
-        return DEVICE_TYPE_NAME_LOOPBACK;
-    case DEVICE_TYPE_MOBILE:
-        return DEVICE_TYPE_NAME_MOBILE;
-    case DEVICE_TYPE_ETHER_WIRED:
-        return DEVICE_TYPE_NAME_ETHER_WIRED;
-    case DEVICE_TYPE_ETHER_WIRELESS:
-        return DEVICE_TYPE_NAME_ETHER_WIRELESS;
-    }
-
-    return NULL;
-};
-
-static const char *get_status_name(const struct network_device *netdev)
-{
-    switch (netdev->status) {
-    case DEVICE_STATUS_UNCERTAIN:
-        return DEVICE_STATUS_NAME_UNCERTAIN;
-    case DEVICE_STATUS_DOWN:
-        return DEVICE_STATUS_NAME_DOWN;
-    case DEVICE_STATUS_UP:
-        return DEVICE_STATUS_NAME_UP;
-    case DEVICE_STATUS_RUNNING:
-        return DEVICE_STATUS_NAME_RUNNING;
-    }
-
-    return NULL;
 }
 
 static int wired_device_check(hbdbus_conn *conn, struct network_device *netdev)
 {
     unsigned old_status = netdev->status;
     int ret = 0;
+
     if (update_network_device_dynamic_info(netdev->ifname, netdev)) {
         HLOG_ERR("Failed to update status of wired device: %s!\n",
                 netdev->ifname);
@@ -231,9 +246,7 @@ static int get_device_type(struct network_device * netdev,
         if (ret == 0) {
             netdev->type = DEVICE_TYPE_ETHER_WIRED;
             netdev->on = wired_device_on;
-            netdev->config = wired_device_config;
             netdev->off = wired_device_off;
-            netdev->check = wired_device_check;
             netdev->terminate = wired_device_terminate;
             goto done;
         }
