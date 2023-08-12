@@ -51,6 +51,8 @@ After building HBDInetd, there will be one executable and the following HVML scr
 1. `disconnect.hvml`, located in the `hvml/` directory in the root of your building tree.
    This is a HVML program for demonstrating how to use the data bus APIs to check the current
    wireless connection information and disconnect from a hotspot.
+1. `config.hvml`, located in the `hvml/` directory in the root of your building tree.
+   This is a HVML program for demonstrating how to use the data bus APIs to configure a network interface via DHCP.
 
 ```console
 $ hvml/connect.hvml -a cn.fmsoft.hybridos.settings -r wifi -q 'ssid=YourSSID&key=ThePassphrase'
